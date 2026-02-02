@@ -5,41 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $product->product_name }}</title>
     <style>
-        /* CONFIGURAÇÃO GLOBAL DA PÁGINA */
+        /* 1. Reset Total */
         @page {
-            size: 100mm 80mm; /* Tamanho físico exato */
-            margin: 0;        /* Zero margem para o navegador não deslocar nada */
+            size: 100mm 80mm;
+            margin: 0; 
         }
-
-        html, body {
+        
+        body {
             margin: 0;
             padding: 0;
-            background-color: white;
-            /* Importante: permite que o corpo cresça para ter várias páginas */
-            height: auto; 
-            min-height: 100%;
         }
 
-        /* O CONTAINER MÁGICO */
+        /* 2. Container da Etiqueta */
         .label-instance {
-            /* 1. Tamanho Fixo */
             width: 100mm;
-            height: 80mm;
+            /* TRUQUE: Usamos 79mm ou 79.5mm para garantir que cabe na folha sem estourar */
+            /* A impressora vai avançar até o Gap (picote) físico de qualquer forma */
+            height: 79.5mm; 
             
-            /* 2. Comportamento de Caixa */
-            box-sizing: border-box; /* Garante que padding não aumente o tamanho total */
-            overflow: hidden;       /* Corta qualquer excesso acidental */
+            overflow: hidden;
             position: relative;
-            display: block;         /* Garante comportamento de bloco */
-
-            /* 3. A SOLUÇÃO DO PROBLEMA (QUEBRA DE PÁGINA) */
-            /* Aplica a quebra DEPOIS de cada etiqueta */
-            page-break-after: always; 
+            box-sizing: border-box;
+            
+            /* Força a quebra DEPOIS deste elemento */
+            page-break-after: always;
             break-after: page;
         }
 
-        /* 4. EXCEÇÃO PARA A ÚLTIMA ETIQUETA */
-        /* A última etiqueta NÃO deve gerar uma página em branco depois dela */
+        /* 3. Remove a quebra da última para não soltar papel em branco no final */
         .label-instance:last-child {
             page-break-after: auto;
             break-after: auto;
@@ -48,7 +41,6 @@
 </head>
 <body>
 
-    {{-- Loop simples sem elementos estranhos no meio --}}
     @for ($i = 0; $i < $qty; $i++)
         <div class="label-instance">
             @include('components.fda-label-template', [
@@ -61,13 +53,9 @@
 
     <script>
         window.onload = function() {
-            // Delay leve para garantir que o CSS de quebra seja processado
             setTimeout(function() {
                 window.print();
-                
-                // Opcional: Tenta fechar a janela após imprimir (ajuda no fluxo Kiosk)
-                // window.close(); 
-            }, 500);
+            }, 300);
         }
     </script>
 </body>
