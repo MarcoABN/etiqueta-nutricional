@@ -17,11 +17,7 @@
                     :disabled="!$this->product"
                     x-on:click="
                         document.getElementById('printFrame').src = '{{ route('print.label', ['product' => $this->product?->id ?? '0']) }}?qty={{ $this->quantity }}';
-
-                        new FilamentNotification()
-                            .title('Enviado para impressão')
-                            .success()
-                            .send();
+                        new FilamentNotification().title('Enviado para impressão').success().send();
                     "
                 >
                     IMPRIMIR
@@ -36,10 +32,10 @@
             <div class="flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-8 rounded-lg border border-dashed border-gray-400">
                 <div class="flex items-center gap-2 mb-4 text-gray-500">
                     <x-heroicon-o-eye class="w-5 h-5"/>
-                    <span class="text-sm font-medium uppercase tracking-wider">Preview de Impressão (114x80mm)</span>
+                    <span class="text-sm font-medium uppercase tracking-wider">Preview de Impressão (100x80mm)</span>
                 </div>
                 
-                <div class="shadow-2xl border border-gray-300 bg-white">
+                <div class="bg-white shadow-2xl" style="width: 100mm; height: 80mm; flex-shrink: 0;">
                     @include('components.fda-label-template', [
                         'product' => $this->product,
                         'settings' => $settings
@@ -55,7 +51,6 @@
                     </h3>
                     <span class="text-xs text-gray-500">Cód: {{ $this->product->codprod }}</span>
                 </div>
-
                 <div class="p-6 grid grid-cols-1 gap-6">
                     <div>
                         <span class="block text-xs font-bold text-gray-400 uppercase mb-1">Statement of Identity (Nome EN)</span>
@@ -64,32 +59,23 @@
                         </div>
                         <div class="text-sm text-gray-400">{{ $this->product->product_name }} (Ref. PT)</div>
                     </div>
-
                     <div>
                         <span class="block text-xs font-bold text-gray-400 uppercase mb-1">Ingredient List</span>
                         <div class="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 p-3 rounded border">
                             {{ $this->product->ingredients }}
                         </div>
                     </div>
-
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <span class="block text-xs font-bold text-gray-400 uppercase mb-1">Allergens</span>
-                            <div class="text-sm">
-                                <span class="font-bold text-red-600">Contains:</span> {{ $this->product->allergens_contains ?? 'N/A' }}
-                            </div>
+                            <div class="text-sm"><span class="font-bold text-red-600">Contains:</span> {{ $this->product->allergens_contains ?? 'N/A' }}</div>
                             @if($this->product->allergens_may_contain)
-                                <div class="text-sm mt-1">
-                                    <span class="font-bold text-orange-500">May Contain:</span> {{ $this->product->allergens_may_contain }}
-                                </div>
+                                <div class="text-sm mt-1"><span class="font-bold text-orange-500">May Contain:</span> {{ $this->product->allergens_may_contain }}</div>
                             @endif
                         </div>
-
                         <div>
                             <span class="block text-xs font-bold text-gray-400 uppercase mb-1">Distributor / Origin</span>
-                            <div class="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">
-                                {{ $this->product->imported_by }}
-                            </div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">{{ $this->product->imported_by }}</div>
                             <div class="text-sm font-bold mt-1">Product of {{ $this->product->origin_country ?? 'Brazil' }}</div>
                         </div>
                     </div>
@@ -97,10 +83,6 @@
             </div>
 
         </div>
-
-        <script>
-            // Lógica inline movida para o AlpineJS do botão acima
-        </script>
     @else
         <div class="mt-10 flex flex-col items-center justify-center text-gray-400">
             <x-heroicon-o-qr-code class="w-16 h-16 mb-4 opacity-20"/>

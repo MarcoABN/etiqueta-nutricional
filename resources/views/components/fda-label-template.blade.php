@@ -1,7 +1,7 @@
 @props(['product', 'settings'])
 
 @php
-    // Fallback settings
+    // Configurações de Fallback
     $settings = $settings ?? new \App\Models\LabelSetting([
         'padding_top' => 2,
         'padding_left' => 2,
@@ -40,7 +40,7 @@
         ['Chromium', $product->chromium],
         ['Molybdenum', $product->molybdenum],
         ['Chloride', $product->chloride],
-    ])->filter(fn($item) => filled($item[1]))
+    ])->filter(fn($item) => filled($item[1])) 
     ->map(fn($item) => "{$item[0]} {$item[1]}")
     ->implode(', ');
 
@@ -52,22 +52,20 @@
         width: 100%; 
         height: 100%; 
         font-family: Helvetica, Arial, sans-serif; 
-        box-sizing: border-box;
+        box-sizing: border-box; /* Garante que o padding não estoure o tamanho */
         
-        /* Margens Dinâmicas */
+        /* Margens Dinâmicas (Controladas pelo Banco) */
         padding-top: {{ $settings->padding_top }}mm;
         padding-bottom: {{ $settings->padding_bottom }}mm;
         padding-left: {{ $settings->padding_left }}mm;
         padding-right: {{ $settings->padding_right }}mm;
      ">
-     
-    <style>
-        .fda-label-container { border: 1px dashed #ccc; }
-        @media print {
-            .fda-label-container { border: none !important; }
-        }
-    </style>
     
+    <style>
+        .fda-label-container { border: 1px dashed #e5e7eb; }
+        @media print { .fda-label-container { border: none !important; } }
+    </style>
+
     <div style="
         display: grid; 
         grid-template-columns: 1fr 1fr; 
@@ -79,16 +77,13 @@
             
             <div>
                 <div style="font-weight: 900; font-size: 16pt; margin: 0; line-height: 1;">Nutrition Facts</div>
-                
-                <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                <div style="display: flex; justify-content: space-between; margin-top: 1px;">
                     <span>{{ $product->servings_per_container }} servings per container</span>
                 </div>
-                
                 <div style="border-bottom: 6px solid black; padding-bottom: 1px; margin-bottom: 1px; font-weight: 800; display: flex; justify-content: space-between;">
                     <span>Serving size</span>
                     <span style="font-size: 7pt;">{{ $product->serving_size_quantity }} {{ $product->serving_size_unit }} ({{ $product->serving_weight }}g)</span>
                 </div>
-
                 <div style="border-bottom: 4px solid black; padding-bottom: 1px; display: flex; justify-content: space-between; align-items: flex-end;">
                     <div style="line-height: 1.2;">
                         <span style="font-weight: normal; font-size: 6pt; display: block;">Amount per serving</span>
@@ -96,7 +91,6 @@
                     </div>
                     <span style="font-weight: 900; font-size: 22pt; line-height: 0.8;">{{ $product->calories }}</span>
                 </div>
-
                 <div style="text-align: right; border-bottom: 1px solid black; font-size: 6pt; font-weight: bold;">% Daily Value*</div>
             </div>
 
@@ -121,19 +115,11 @@
                 </div>
             @endforeach
             
-            <div style="
-                border-top: 4px solid black; 
-                font-size: 5pt; 
-                line-height: 1.25; 
-                margin-top: 4px; 
-                margin-bottom: 6px; 
-                padding-top: 2px;
-                color: #000;
-            ">
+            <div style="border-top: 4px solid black; font-size: 5pt; line-height: 1.1; margin-top: 2px; margin-bottom: 2px;">
                 * The % Daily Value (DV) tells you how much a nutrient in a serving of food contributes to a daily diet. 2,000 calories a day is used for general nutrition advice.
             </div>
 
-            <div style="margin-top: auto; padding-top: 2px; border-top: 1px solid black; font-size: 5pt; line-height: 1.1; font-weight: bold;">
+            <div style="margin-top: auto; padding-top: 2px; border-top: 1px solid black; font-size: 5pt; line-height: 1.0; font-weight: bold;">
                 @if(filled($product->imported_by))
                     {!! nl2br(e($product->imported_by)) !!}
                 @else
@@ -145,7 +131,6 @@
         </div>
 
         <div style="font-size: 7pt; display: flex; flex-direction: column; overflow: hidden; padding-left: 2px;">
-            
             <div class="auto-fit" style="font-weight: bold; font-size: 9pt; margin-bottom: 4px; text-transform: uppercase; max-height: 32px; overflow: hidden; line-height: 1.1;">
                 {{ $product->product_name_en ?? $product->product_name }}
             </div>
@@ -165,10 +150,10 @@
             @endif
             
             @if($product->allergens_may_contain)
-                <div style="margin-bottom: 6px; flex-shrink: 0;"><strong>MAY CONTAIN:</strong> {{ $product->allergens_may_contain }}</div>
+                <div style="margin-bottom: 4px; flex-shrink: 0;"><strong>MAY CONTAIN:</strong> {{ $product->allergens_may_contain }}</div>
             @endif
 
-            <div style="margin-top: auto; line-height: 1.2; flex-shrink: 0; text-align: right;">
+            <div style="margin-top: auto; line-height: 1.2; flex-shrink: 0; text-align: right; padding-bottom: 1px;">
                 <strong>Product of {{ $product->origin_country ?? 'Brazil' }}</strong>
             </div>
         </div>
@@ -185,6 +170,7 @@
                 let size = parseFloat(window.getComputedStyle(el).fontSize);
                 const localMin = minSize * scaleFactor;
 
+                // Loop de segurança: reduz a fonte até caber
                 while (el.offsetHeight > 0 && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) && size > localMin) {
                     size -= 0.2;
                     el.style.fontSize = size + 'px';
@@ -198,4 +184,4 @@
             fitText('.auto-fit-ingredients', 4.5 * scale);
         }, 100);
     })();
-</script>
+</script>s
