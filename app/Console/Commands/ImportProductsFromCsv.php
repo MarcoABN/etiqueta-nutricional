@@ -5,14 +5,11 @@ namespace App\Console\Commands;
 use App\Models\Product;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class ImportProductsFromCsv extends Command
 {
-    // O nome do comando que você vai rodar no terminal
     protected $signature = 'products:import {file : O caminho para o arquivo CSV}';
-
-    protected $description = 'Importa produtos do CSV do WinThor (Cod;Descricao;EAN)';
+    protected $description = 'Importa produtos do CSV do WinThor (Cod;Descricao;EAN) em lotes';
 
     public function handle()
     {
@@ -25,68 +22,73 @@ class ImportProductsFromCsv extends Command
 
         $this->info("Iniciando importação de: {$filePath}");
 
-        // Abre o arquivo em modo leitura
         $handle = fopen($filePath, 'r');
         
-        // Lê o cabeçalho para ignorá-lo (CODPROD;DESCRICAO;CODAUXILIAR)
+        // Ignora cabeçalho
         fgetcsv($handle, 0, ';');
 
         $count = 0;
         $errors = 0;
+        $batchSize = 1000; // Salva a cada 1000 registros para não estourar a memória
 
-        // Barra de progresso visual
         $this->output->progressStart();
 
-        DB::beginTransaction(); // Faz tudo ou nada (segurança)
+        // Inicia a primeira transação
+        DB::beginTransaction();
 
         try {
             while (($row = fgetcsv($handle, 0, ';')) !== false) {
-                // Estrutura do seu CSV:
-                // [0] => CODPROD (Ex: 6581)
-                // [1] => DESCRICAO (Ex: ABRACADEIRA...)
-                // [2] => CODAUXILIAR (Ex: 789...) ou vazio
+                // Validação básica de colunas
+                if (count($row) < 2) continue;
 
-                // 1. Limpeza e Conversão de Encodificação (WinThor costuma ser Latin1)
                 $codprod = (int) trim($row[0]);
+                // Converte de ISO-8859-1 (WinThor) para UTF-8
                 $nome = mb_convert_encoding(trim($row[1]), 'UTF-8', 'ISO-8859-1');
                 
-                // Trata código de barras vazio como NULL para não violar a regra de Unique
                 $barcode = isset($row[2]) ? trim($row[2]) : null;
-                if ($barcode === '') {
-                    $barcode = null;
-                }
+                if ($barcode === '') $barcode = null;
 
                 try {
-                    // 2. Cria ou Atualiza (Upsert)
-                    // Procura pelo 'codprod'. Se achar, atualiza o nome e barras. Se não, cria novo.
-                    $product = Product::updateOrCreate(
+                    Product::updateOrCreate(
                         ['codprod' => $codprod], 
                         [
                             'product_name' => $nome,
                             'barcode' => $barcode,
-                            // Campos obrigatórios defaults
                             'cholesterol' => '0', 
-                            // O ID (UUID) é gerado automaticamente pelo Model se for criar
                         ]
                     );
 
                     $count++;
                     $this->output->progressAdvance();
 
+                    // --- MÁGICA PARA NÃO ESTOURAR MEMÓRIA ---
+                    // A cada 1000 registros, comita e abre nova transação
+                    if ($count % $batchSize === 0) {
+                        DB::commit();
+                        DB::beginTransaction();
+                    }
+
                 } catch (\Exception $e) {
-                    // Captura erro específico de linha (ex: barcode duplicado em produtos diferentes)
+                    // Se der erro num produto específico, não para tudo, apenas loga
+                    // Mas precisamos garantir que a transação continue válida
                     $this->newLine();
                     $this->warn("Erro no produto Cód {$codprod}: " . $e->getMessage());
                     $errors++;
                 }
             }
 
-            DB::commit(); // Salva tudo no banco
+            // Comita o restante que sobrou no último lote
+            DB::commit(); 
+            
             $this->output->progressFinish();
-            $this->success("Importação concluída! Importados/Atualizados: {$count}. Erros: {$errors}.");
+            
+            // CORREÇÃO: Usar info() em vez de success()
+            $this->info("Importação concluída com sucesso!");
+            $this->info("Total Processado: {$count}");
+            $this->info("Total com Erros: {$errors}");
 
         } catch (\Exception $e) {
-            DB::rollBack(); // Desfaz tudo se der erro grave
+            DB::rollBack();
             $this->error("Erro fatal na importação: " . $e->getMessage());
         } finally {
             fclose($handle);
