@@ -10,7 +10,7 @@ class GeminiFdaTranslator
     protected $apiKey;
     
     // Mantendo o modelo 2.5 Flash que sua conta possui
-    protected $apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+    protected $apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent';
 
     public function __construct()
     {
