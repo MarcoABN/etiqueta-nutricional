@@ -195,20 +195,25 @@ class ProductResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('sku')
+                // CORREÇÃO: 'sku' -> 'codprod'
+                Tables\Columns\TextColumn::make('codprod')
                     ->label('Cód.')
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
 
-                Tables\Columns\TextColumn::make('name')
+                // CORREÇÃO: 'name' -> 'product_name'
+                Tables\Columns\TextColumn::make('product_name')
                     ->label('Nome')
                     ->searchable()
-                    ->limit(50), // Limita texto longo
+                    ->limit(50),
 
-                Tables\Columns\TextColumn::make('price')
-                    ->label('Preço')
-                    ->money('BRL'),
+                // OBSERVAÇÃO: Removi a coluna 'price' pois ela não apareceu no seu INSERT SQL anterior.
+                // Se você tiver esse campo no banco, verifique se o nome é 'price' mesmo. 
+                // Se não tiver, substitui por Calorias para não ficar vazio.
+                Tables\Columns\TextColumn::make('calories')
+                    ->label('Kcal')
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Criado em')
@@ -222,13 +227,13 @@ class ProductResource extends Resource
             ->actions([
                 Tables\Actions\EditAction::make(),
 
-                // --- AQUI ESTÁ A MÁGICA DA IMPRESSÃO ---
                 Action::make('imprimir')
                     ->label('Etiqueta')
                     ->icon('heroicon-o-printer')
-                    ->color('success') // Botão Verde
-                    ->url(fn(Product $record) => route('imprimir.etiqueta', $record))
-                    ->openUrlInNewTab() // Abre nova aba -> Chrome Kiosk imprime -> Fecha
+                    ->color('success')
+                    // Ajuste aqui para usar a rota e parâmetro corretos do seu sistema
+                    ->url(fn(Product $record) => route('print.label', ['product' => $record->id]))
+                    ->openUrlInNewTab()
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
