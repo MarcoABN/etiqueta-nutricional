@@ -2,6 +2,7 @@
 
 use App\Models\LabelSetting;
 use App\Models\Product;
+use App\Services\GeminiFdaTranslator;
 use Illuminate\Support\Facades\Route;
 use App\Models\Produto;
 
