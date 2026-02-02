@@ -13,6 +13,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Tables\Actions\Action;
 
 class ProductResource extends Resource
 {
@@ -194,13 +195,53 @@ class ProductResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('codprod')->label('Cód')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('product_name')->label('Produto')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('calories')->label('Kcal'),
+                Tables\Columns\TextColumn::make('sku')
+                    ->label('Cód.')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Nome')
+                    ->searchable()
+                    ->limit(50), // Limita texto longo
+
+                Tables\Columns\TextColumn::make('price')
+                    ->label('Preço')
+                    ->money('BRL'),
+
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Criado em')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                //
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+
+                // --- AQUI ESTÁ A MÁGICA DA IMPRESSÃO ---
+                Action::make('imprimir')
+                    ->label('Etiqueta')
+                    ->icon('heroicon-o-printer')
+                    ->color('success') // Botão Verde
+                    ->url(fn(Product $record) => route('imprimir.etiqueta', $record))
+                    ->openUrlInNewTab() // Abre nova aba -> Chrome Kiosk imprime -> Fecha
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
             ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            //
+        ];
     }
 
     public static function getPages(): array

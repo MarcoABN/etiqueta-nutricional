@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Models\Produto;
 
 Route::get('/', function () {
     return view('welcome');
@@ -29,3 +30,7 @@ Route::get('/print/label/{product}', function (App\Models\Product $product) {
         'settings' => $settings // <--- Passando a variável
     ]);
 })->name('print.label');
+
+Route::get('/imprimir-etiqueta/{record}', function (Product $record) {
+    return view('etiqueta', ['produto' => $record]);
+})->name('imprimir.etiqueta');
