@@ -1,21 +1,23 @@
-@props(['product', 'settings'])
+@props(['product', 'settings', 'overrideWidth' => '100mm'])
 
 @php
     // 1. Fallback para configurações (caso não venha do controller)
+    // Valores padrão seguros para começar
     $settings = $settings ?? new \App\Models\LabelSetting([
         'padding_top' => 2,
         'padding_left' => 2,
         'padding_right' => 2,
         'padding_bottom' => 2,
-        'gap_width' => 6,
+        'gap_width' => 6, // Espaço do corte no meio
         'font_scale' => 100
     ]);
 
-    // Fator de escala da fonte (ex: 0.9, 1.0, 1.1)
+    // Fator de escala da fonte
     $scale = $settings->font_scale / 100;
 
     // 2. Preparar lista de Micronutrientes (Linear Display)
-    // Formato esperado: "Calcium 270mg (27%)"
+    // Formato: "Calcium 270mg (27%)"
+    // Filtra apenas os que têm valor preenchido
     $micronutrients = collect([
         ['Vitamin D', $product->vitamin_d],
         ['Calcium', $product->calcium],
@@ -42,9 +44,8 @@
         ['Chromium', $product->chromium],
         ['Molybdenum', $product->molybdenum],
         ['Chloride', $product->chloride],
-    ])->filter(fn($item) => filled($item[1])) // Remove vazios
+    ])->filter(fn($item) => filled($item[1])) 
     ->map(function($item) {
-        // Concatena Nome + Valor (ex: "Iron 2mg")
         return "{$item[0]} {$item[1]}";
     })->implode(', ');
 
@@ -53,12 +54,12 @@
 
 <div class="fda-label-container bg-white text-black overflow-hidden relative box-border"
      style="
-        width: 114mm; 
+        width: {{ $overrideWidth }}; 
         height: 80mm; 
         font-family: Helvetica, Arial, sans-serif; 
-        border: 1px dashed #ccc; /* Borda pontilhada para visualização, não sai na térmica se margem for 0 */
+        border: 1px dashed #ccc; /* Borda visual para debug (não sai na térmica se margem for 0) */
         
-        /* Margens Dinâmicas do Banco de Dados */
+        /* Margens Dinâmicas vindas do Banco */
         padding-top: {{ $settings->padding_top }}mm;
         padding-bottom: {{ $settings->padding_bottom }}mm;
         padding-left: {{ $settings->padding_left }}mm;
@@ -178,19 +179,18 @@
         function fitText(selector, minSize = 5) {
             const elements = document.querySelectorAll(selector);
             
-            // Fator de escala vindo do Banco de Dados (PHP)
+            // Fator de escala vindo do Banco de Dados
             const scaleFactor = {{ $scale }};
             
             elements.forEach(el => {
-                // Aplica escala inicial se necessário
-                // (Aqui pegamos o tamanho computado, que já deve estar próximo do CSS)
                 let size = parseFloat(window.getComputedStyle(el).fontSize);
                 
                 // Limite mínimo ajustado pela escala global
                 const localMin = minSize * scaleFactor;
 
-                // Enquanto o conteúdo estourar a altura ou largura...
+                // Enquanto o conteúdo estourar a altura OU largura...
                 // E o tamanho for maior que o mínimo permitido...
+                // O check (el.offsetHeight > 0) garante que o elemento está visível
                 while (el.offsetHeight > 0 && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) && size > localMin) {
                     size -= 0.2; // Reduz 0.2px por passo
                     el.style.fontSize = size + 'px';
@@ -202,10 +202,10 @@
         setTimeout(() => {
             const scale = {{ $scale }};
             
-            // Título: Tenta manter ~6pt * escala
+            // Título: tenta manter próximo de 6pt (ajustado pela escala)
             fitText('.auto-fit', 6 * scale); 
             
-            // Ingredientes: Tenta manter ~4.5pt * escala
+            // Ingredientes: tenta manter próximo de 4.5pt (ajustado pela escala)
             fitText('.auto-fit-ingredients', 4.5 * scale);
         }, 100);
     })();

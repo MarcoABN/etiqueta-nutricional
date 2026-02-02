@@ -5,45 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $product->product_name }} - Print</title>
     <style>
-        /* Reseta margens do navegador para controle total via CSS */
+        /* 1. Define o tamanho exato da página física no navegador */
         @page {
-            size: 114mm 80mm;
-            margin: 0; 
+            size: 100mm 80mm; /* CORRIGIDO PARA 100mm */
+            margin: 0;        /* O navegador não deve por margem, o componente cuida disso */
         }
+
         body {
             margin: 0;
             padding: 0;
             background-color: white;
-        }
-        
-        /* Quebra de página para múltiplas etiquetas */
-        .page-break {
-            page-break-after: always;
+            font-family: Helvetica, Arial, sans-serif;
         }
 
-        /* Oculta elementos de debug na impressão se houver */
-        @media print {
-            .no-print { display: none; }
+        /* 2. O Wrapper que garante a quebra de página */
+        .label-page {
+            width: 100mm;     /* Largura fixa */
+            height: 80mm;     /* Altura fixa */
+            overflow: hidden; /* Impede que conteúdo extra crie uma página branca em branco */
+            position: relative;
+            
+            /* COMANDOS DE QUEBRA DE PÁGINA */
+            page-break-after: always; /* Para navegadores antigos */
+            break-after: page;        /* Para Chrome/Edge modernos */
+        }
+
+        /* A última etiqueta não precisa forçar uma quebra de página depois dela */
+        .label-page:last-child {
+            page-break-after: auto;
+            break-after: auto;
         }
     </style>
 </head>
 <body>
 
     @for ($i = 0; $i < $qty; $i++)
-        @include('components.fda-label-template', [
-            'product' => $product,
-            'settings' => $settings 
-        ])
-
-        @if ($i < $qty - 1)
-            <div class="page-break"></div>
-        @endif
+        <div class="label-page">
+            @include('components.fda-label-template', [
+                'product' => $product,
+                'settings' => $settings,
+                'overrideWidth' => '100mm' // Passamos uma flag nova
+            ])
+        </div>
     @endfor
 
     <script>
-        // Dispara a impressão assim que carregar
+        // Pequeno delay para garantir que o CSS carregou antes de imprimir
         window.onload = function() {
-            window.print();
+            setTimeout(function() {
+                window.print();
+            }, 500);
         }
     </script>
 </body>
