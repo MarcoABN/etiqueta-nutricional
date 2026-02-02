@@ -23,7 +23,7 @@ class ImportProductsFromCsv extends Command
         $this->info("Iniciando importação de: {$filePath}");
 
         $handle = fopen($filePath, 'r');
-        
+
         // Ignora cabeçalho
         fgetcsv($handle, 0, ';');
 
@@ -39,22 +39,27 @@ class ImportProductsFromCsv extends Command
         try {
             while (($row = fgetcsv($handle, 0, ';')) !== false) {
                 // Validação básica de colunas
-                if (count($row) < 2) continue;
+                if (count($row) < 2)
+                    continue;
 
                 $codprod = (int) trim($row[0]);
                 // Converte de ISO-8859-1 (WinThor) para UTF-8
                 $nome = mb_convert_encoding(trim($row[1]), 'UTF-8', 'ISO-8859-1');
-                
+
                 $barcode = isset($row[2]) ? trim($row[2]) : null;
-                if ($barcode === '') $barcode = null;
+
+                // Verifica se é vazio OU se é zero (simples ou múltiplo '000')
+                if (empty($barcode) || $barcode === '0' || $barcode === '00' || $barcode === '000') {
+                    $barcode = null;
+                }
 
                 try {
                     Product::updateOrCreate(
-                        ['codprod' => $codprod], 
+                        ['codprod' => $codprod],
                         [
                             'product_name' => $nome,
                             'barcode' => $barcode,
-                            'cholesterol' => '0', 
+                            'cholesterol' => '0',
                         ]
                     );
 
@@ -78,10 +83,10 @@ class ImportProductsFromCsv extends Command
             }
 
             // Comita o restante que sobrou no último lote
-            DB::commit(); 
-            
+            DB::commit();
+
             $this->output->progressFinish();
-            
+
             // CORREÇÃO: Usar info() em vez de success()
             $this->info("Importação concluída com sucesso!");
             $this->info("Total Processado: {$count}");
