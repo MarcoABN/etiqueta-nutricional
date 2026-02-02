@@ -61,6 +61,7 @@ class PrintLabels extends Page implements HasForms
                     ->minValue(1)
                     ->maxValue(1000)
                     ->required()
+                    ->live()
                     ->columnSpan(1),
             ])->columns(4);
     }
