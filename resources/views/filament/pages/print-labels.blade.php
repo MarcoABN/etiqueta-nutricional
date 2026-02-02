@@ -10,28 +10,23 @@
             </div>
 
             <div class="w-full md:w-auto pb-1">
-    <x-filament::button
-        color="primary"
-        icon="heroicon-o-printer"
-        class="w-full md:w-auto h-11"
-        :disabled="!$this->product"
-        x-on:click="
-            // Pega a URL gerada pelo PHP
-            const url = '{{ route('print.label', ['product' => $this->product->id]) }}?qty={{ $this->quantity }}';
-            
-            // Define o SRC do iframe (dispara a impressão)
-            document.getElementById('printFrame').src = url;
-            
-            // Feedback visual (opcional)
-            new FilamentNotification()
-                .title('Enviado para impressão')
-                .success()
-                .send();
-        "
-    >
-        IMPRIMIR
-    </x-filament::button>
-</div>
+                <x-filament::button
+                    color="primary"
+                    icon="heroicon-o-printer"
+                    class="w-full md:w-auto h-11"
+                    :disabled="!$this->product"
+                    x-on:click="
+                        document.getElementById('printFrame').src = '{{ route('print.label', ['product' => $this->product?->id ?? '0']) }}?qty={{ $this->quantity }}';
+
+                        new FilamentNotification()
+                            .title('Enviado para impressão')
+                            .success()
+                            .send();
+                    "
+                >
+                    IMPRIMIR
+                </x-filament::button>
+            </div>
         </div>
     </div>
 
@@ -46,9 +41,9 @@
                 
                 <div class="shadow-2xl border border-gray-300 bg-white">
                     @include('components.fda-label-template', [
-                    'product' => $this->product,
-                    'settings' => $settings // <--- Passando aqui também
-                ])
+                        'product' => $this->product,
+                        'settings' => $settings
+                    ])
                 </div>
             </div>
 
@@ -103,13 +98,16 @@
 
         </div>
 
-        <iframe id="printFrame" src="" style="width:0;height:0;border:0;border:none;"></iframe>
-
-    
+        <script>
+            // Lógica inline movida para o AlpineJS do botão acima
+        </script>
     @else
         <div class="mt-10 flex flex-col items-center justify-center text-gray-400">
             <x-heroicon-o-qr-code class="w-16 h-16 mb-4 opacity-20"/>
             <p class="text-lg">Aguardando leitura do código...</p>
         </div>
     @endif
+
+    <iframe id="printFrame" src="" style="width:0;height:0;border:0;border:none;"></iframe>
+
 </x-filament-panels::page>
