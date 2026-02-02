@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\LabelSetting;
+use App\Models\Product;
 use Illuminate\Support\Facades\Route;
 use App\Models\Produto;
 
@@ -12,22 +14,27 @@ Route::get('/print/label/{product}', function (Product $product) {
     return view('labels.fda-114x80', ['product' => $product, 'qty' => $qty]);
 })->name('print.label');
 
-Route::get('/print/label/{product}', function (App\Models\Product $product) {
+Route::get('/print/label/{product}', function (Product $product) {
     $qty = request()->query('qty', 1);
+    
+    // CORREÇÃO: Busca configurações no banco ou cria padrão de 0.5mm
+    $settings = LabelSetting::firstOrCreate(
+        ['id' => 1],
+        [
+            'padding_top' => 0.5,
+            'padding_bottom' => 0.5,
+            'padding_left' => 0.5,
+            'padding_right' => 0.5,
+            'gap_width' => 6.0,
+            'font_scale' => 100,
+        ]
+    );
 
-    // Carrega configuração do banco (ou usa default se der erro)
-    $settings = App\Models\LabelSetting::first() ?? new App\Models\LabelSetting([
-        'padding_top' => 2,
-        'padding_left' => 2,
-        'padding_right' => 2,
-        'gap_width' => 6,
-        'font_scale' => 100
-    ]);
-
-    return view('labels.fda-114x80', [
-        'product' => $product,
+    // Chama a nova view 'labels.print'
+    return view('labels.print', [
+        'product' => $product, 
         'qty' => $qty,
-        'settings' => $settings // <--- Passando a variável
+        'settings' => $settings
     ]);
 })->name('print.label');
 
