@@ -42,9 +42,30 @@ class ProductResource extends Resource
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
-                                TextInput::make('codprod')->label('Cód. WinThor')->required()->columnSpan(2),
-                                TextInput::make('product_name')->label('Nome do Produto')->required()->columnSpan(5),
-                                TextInput::make('product_name_en')->label('Nome (Inglês)')->columnSpan(5),
+                                // 1. Código WinThor (Numérico e Único)
+                                TextInput::make('codprod')
+                                    ->label('Cód. WinThor')
+                                    ->required()
+                                    ->numeric()
+                                    ->unique(ignoreRecord: true)
+                                    ->columnSpan(2),
+
+                                // 2. Código de Barras (Novo e Único)
+                                TextInput::make('barcode')
+                                    ->label('Cód. Barras')
+                                    ->unique(ignoreRecord: true)
+                                    ->columnSpan(3),
+
+                                // 3. Nome do Produto (Ocupa o restante da linha)
+                                TextInput::make('product_name')
+                                    ->label('Nome do Produto')
+                                    ->required()
+                                    ->columnSpan(7),
+
+                                // 4. Nome em Inglês (Linha inteira abaixo)
+                                TextInput::make('product_name_en')
+                                    ->label('Nome (Inglês)')
+                                    ->columnSpan(12),
                             ]),
 
                         Forms\Components\Grid::make(6) // 6 colunas para distribuir bem as porções
@@ -92,10 +113,9 @@ class ProductResource extends Resource
                                 Group::make()
                                     ->schema([
                                         // Fieldset para organizar visualmente
-
                                         Forms\Components\Grid::make(4) // Grid de 4 colunas para alinhar Valor | %VD
                                             ->schema([
-                                                // 1. CORREÇÃO: Adicionado o campo %VD de Gorduras Totais
+                                                // Gorduras Totais
                                                 TextInput::make('total_fat')
                                                     ->label('Gorduras Totais (g)')
                                                     ->columnSpan(3),
@@ -119,12 +139,11 @@ class ProductResource extends Resource
                                                 TextInput::make('sodium')->label('Sódio (mg)')->columnSpan(3),
                                                 TextInput::make('sodium_dv')->label('%VD')->columnSpan(1),
 
-                                                // 2. CORREÇÃO DO ERRO SQL (Colesterol)
-                                                // Adicionamos 'dehydrateStateUsing' para garantir que nunca envie NULL
+                                                // Colesterol (Tratamento para não ser NULL)
                                                 TextInput::make('cholesterol')
                                                     ->label('Colesterol (mg)')
                                                     ->default('0')
-                                                    ->dehydrateStateUsing(fn($state) => $state === null || $state === '' ? '0' : $state)
+                                                    ->dehydrateStateUsing(fn ($state) => $state === null || $state === '' ? '0' : $state)
                                                     ->columnSpan(3),
 
                                                 TextInput::make('cholesterol_dv')->label('%VD')->columnSpan(1),
@@ -195,22 +214,28 @@ class ProductResource extends Resource
     {
         return $table
             ->columns([
-                // CORREÇÃO: 'sku' -> 'codprod'
+                // 1. COD WINTHOR (Pesquisável)
                 Tables\Columns\TextColumn::make('codprod')
-                    ->label('Cód.')
+                    ->label('Cód. WinThor')
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
 
-                // CORREÇÃO: 'name' -> 'product_name'
-                Tables\Columns\TextColumn::make('product_name')
-                    ->label('Nome')
+                // 2. COD BARRAS (Pesquisável)
+                Tables\Columns\TextColumn::make('barcode')
+                    ->label('EAN/GTIN')
                     ->searchable()
+                    ->sortable()
+                    ->color('gray')
+                    ->copyable(),
+
+                // 3. NOME (Pesquisável)
+                Tables\Columns\TextColumn::make('product_name')
+                    ->label('Produto')
+                    ->searchable()
+                    ->description(fn (Product $record) => $record->product_name_en) // Nome EN abaixo
                     ->limit(50),
 
-                // OBSERVAÇÃO: Removi a coluna 'price' pois ela não apareceu no seu INSERT SQL anterior.
-                // Se você tiver esse campo no banco, verifique se o nome é 'price' mesmo. 
-                // Se não tiver, substitui por Calorias para não ficar vazio.
                 Tables\Columns\TextColumn::make('calories')
                     ->label('Kcal')
                     ->sortable(),
@@ -221,6 +246,7 @@ class ProductResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->defaultSort('created_at', 'desc') // Ordenação padrão: Mais recentes primeiro
             ->filters([
                 //
             ])
@@ -231,8 +257,7 @@ class ProductResource extends Resource
                     ->label('Etiqueta')
                     ->icon('heroicon-o-printer')
                     ->color('success')
-                    // Ajuste aqui para usar a rota e parâmetro corretos do seu sistema
-                    ->url(fn(Product $record) => route('print.label', ['product' => $record->id]))
+                    ->url(fn (Product $record) => route('print.label', ['product' => $record->id]))
                     ->openUrlInNewTab()
             ])
             ->bulkActions([
