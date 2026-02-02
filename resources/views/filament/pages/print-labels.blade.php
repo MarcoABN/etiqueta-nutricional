@@ -91,15 +91,29 @@
 
         <iframe id="printFrame" src="" style="width:0;height:0;border:0;border:none;"></iframe>
 
-        <script>
-            function printDirectly() {
-                const qty = @js($this->quantity);
-                const productId = @js($this->product->id);
-                const url = `/print/label/${productId}?qty=${qty}`;
-                const iframe = document.getElementById('printFrame');
-                iframe.src = url;
-            }
-        </script>
+        <div class="w-full md:w-auto pb-1">
+    <x-filament::button
+        color="primary"
+        icon="heroicon-o-printer"
+        class="w-full md:w-auto h-11"
+        :disabled="!$this->product"
+        x-on:click="
+            // Pega a URL gerada pelo PHP
+            const url = '{{ route('print.label', ['product' => $this->product->id]) }}?qty={{ $this->quantity }}';
+            
+            // Define o SRC do iframe (dispara a impressão)
+            document.getElementById('printFrame').src = url;
+            
+            // Feedback visual (opcional)
+            new FilamentNotification()
+                .title('Enviado para impressão')
+                .success()
+                .send();
+        "
+    >
+        IMPRIMIR
+    </x-filament::button>
+</div>
     @else
         <div class="mt-10 flex flex-col items-center justify-center text-gray-400">
             <x-heroicon-o-qr-code class="w-16 h-16 mb-4 opacity-20"/>
