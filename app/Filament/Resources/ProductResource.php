@@ -143,7 +143,7 @@ class ProductResource extends Resource
                                                 TextInput::make('cholesterol')
                                                     ->label('Colesterol (mg)')
                                                     ->default('0')
-                                                    ->dehydrateStateUsing(fn ($state) => $state === null || $state === '' ? '0' : $state)
+                                                    ->dehydrateStateUsing(fn($state) => $state === null || $state === '' ? '0' : $state)
                                                     ->columnSpan(3),
 
                                                 TextInput::make('cholesterol_dv')->label('%VD')->columnSpan(1),
@@ -233,7 +233,7 @@ class ProductResource extends Resource
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
                     ->searchable()
-                    ->description(fn (Product $record) => $record->product_name_en) // Nome EN abaixo
+                    ->description(fn(Product $record) => $record->product_name_en) // Nome EN abaixo
                     ->limit(50),
 
                 Tables\Columns\TextColumn::make('calories')
@@ -252,13 +252,14 @@ class ProductResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-
+                /*
                 Action::make('imprimir')
                     ->label('Etiqueta')
                     ->icon('heroicon-o-printer')
                     ->color('success')
                     ->url(fn (Product $record) => route('print.label', ['product' => $record->id]))
                     ->openUrlInNewTab()
+                */
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
