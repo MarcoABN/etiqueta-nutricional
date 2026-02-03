@@ -14,22 +14,21 @@
             background: var(--bg);
         }
 
-        .scanner-layout {
-            display: grid;
-            grid-template-rows: auto 1fr auto;
-            height: 100vh;
+        .scanner-card {
             max-width: 480px;
             margin: 0 auto;
             background: var(--panel);
+            border-radius: 14px;
+            overflow: hidden;
         }
 
         .scanner-header {
             padding: 1rem;
-            border-bottom: 1px solid #020617;
+            border-bottom: 1px solid #1e293b;
         }
 
         .scanner-header h1 {
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 600;
             color: var(--text);
         }
@@ -39,112 +38,93 @@
             color: var(--muted);
         }
 
-        .camera-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .camera-area {
             padding: 0.75rem;
         }
 
         #reader {
             width: 100%;
+            max-height: 55vh;
             aspect-ratio: 3 / 4;
-            border-radius: 16px;
+            border-radius: 14px;
             overflow: hidden;
-            border: 2px solid #020617;
+            background: #000;
         }
 
-        .scanner-footer {
+        .scanner-body {
             padding: 1rem;
-            border-top: 1px solid #020617;
+            border-top: 1px solid #1e293b;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
         }
 
-        .status {
+        .produto {
+            font-size: 0.9rem;
+            color: var(--text);
+        }
+
+        .produto strong {
+            display: block;
             font-size: 0.85rem;
             color: var(--muted);
         }
 
-        .status.active {
-            color: var(--accent);
-            font-weight: 500;
-        }
-
         .action-btn {
-            display: none;
             background: var(--accent);
             color: #052e16;
             font-weight: 600;
-            padding: 0.75rem;
+            padding: 0.7rem;
             border-radius: 10px;
             border: none;
-            cursor: pointer;
         }
 
         .camera-select {
             display: none;
         }
-
-        select {
-            width: 100%;
-            padding: 0.5rem;
-            border-radius: 8px;
-            background: #020617;
-            color: var(--text);
-            border: 1px solid #1e293b;
-        }
     </style>
 
-    <div class="scanner-layout">
+    <div class="scanner-card">
         <div class="scanner-header">
             <h1>Scanner de Produto</h1>
-            <span>Leitura de código de barras</span>
+            <span>Leia o código de barras</span>
         </div>
 
-        <div class="camera-container">
+        <div class="camera-area">
             <div id="reader"></div>
         </div>
 
-        <div class="scanner-footer">
-            <div class="status active" id="status">
-                Aguardando leitura do código...
-            </div>
+        <div class="scanner-body">
+            @if($produto)
+                <div class="produto">
+                    <strong>Produto identificado</strong>
+                    {{ $produto['nome'] }} — {{ $produto['marca'] }}
+                </div>
+
+                <button class="action-btn">
+                    Capturar etiqueta nutricional
+                </button>
+            @else
+                <span style="color: var(--muted); font-size: 0.85rem;">
+                    Aponte a câmera para o código de barras
+                </span>
+            @endif
 
             <div class="camera-select">
                 <select id="cameraSelect"></select>
             </div>
-
-            <button class="action-btn" id="captureBtn">
-                Capturar foto do código
-            </button>
         </div>
     </div>
 
     <script>
         const reader = new Html5Qrcode("reader");
-        const status = document.getElementById('status');
-        const captureBtn = document.getElementById('captureBtn');
-        const cameraSelect = document.getElementById('cameraSelect');
-        const cameraWrapper = document.querySelector('.camera-select');
-
-        function updateStatus(text, active = false) {
-            status.textContent = text;
-            status.classList.toggle('active', active);
-        }
 
         function startScanner(config) {
             reader.start(
                 config,
-                {
-                    fps: 10,
-                    qrbox: { width: 280, height: 160 }
-                },
+                { fps: 10, qrbox: { width: 280, height: 160 } },
                 (code) => {
-                    updateStatus('Código identificado ✔', true);
                     reader.stop();
-                    captureBtn.style.display = 'block';
                     @this.call('barcodeDetected', code);
                 }
             );
@@ -153,33 +133,11 @@
         Html5Qrcode.getCameras().then(devices => {
             if (!devices.length) return;
 
-            // tentativa 1: traseira
             try {
                 startScanner({ facingMode: { exact: "environment" } });
             } catch {
-                // tentativa 2: label
-                const backCam = devices.find(d => /back|rear|environment/i.test(d.label));
-                if (backCam) {
-                    startScanner({ deviceId: { exact: backCam.id } });
-                } else {
-                    // fallback controlado
-                    cameraWrapper.style.display = 'block';
-
-                    devices.forEach(d => {
-                        const o = document.createElement('option');
-                        o.value = d.id;
-                        o.text = d.label || 'Câmera';
-                        cameraSelect.appendChild(o);
-                    });
-
-                    cameraSelect.onchange = () => {
-                        reader.stop().then(() =>
-                            startScanner({ deviceId: { exact: cameraSelect.value } })
-                        );
-                    };
-
-                    startScanner({ deviceId: { exact: devices[0].id } });
-                }
+                const back = devices.find(d => /back|rear|environment/i.test(d.label));
+                startScanner({ deviceId: { exact: (back ?? devices[0]).id } });
             }
         });
     </script>
