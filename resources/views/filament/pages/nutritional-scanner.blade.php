@@ -29,12 +29,21 @@
         #reader { width: 100%; height: 100%; object-fit: cover; }
         #reader video { object-fit: cover; width: 100%; height: 100%; }
 
+        /* Botão Trocar Câmera */
+        .switch-camera-btn {
+            position: absolute; top: 20px; right: 20px; z-index: 50;
+            width: 48px; height: 48px; border-radius: 50%;
+            background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3);
+            color: white; display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px); cursor: pointer;
+        }
+        .switch-camera-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.2); }
+
         .scan-frame {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: min(75vw, 300px); height: 180px; pointer-events: none; z-index: 20;
             box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); border-radius: 12px;
         }
-        /* Cantos da mira */
         .scan-corner { position: absolute; width: 30px; height: 30px; border-color: var(--primary); }
         .scan-corner.tl { top: 0; left: 0; border-top: 4px solid; border-left: 4px solid; border-top-left-radius: 12px; }
         .scan-corner.tr { top: 0; right: 0; border-top: 4px solid; border-right: 4px solid; border-top-right-radius: 12px; }
@@ -115,7 +124,7 @@
 
     <div class="app-container">
 
-        {{-- FORMULÁRIO INVISÍVEL (Fora do wire:ignore para funcionar o upload) --}}
+        {{-- FORMULÁRIO INVISÍVEL --}}
         <div style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; overflow: hidden">
             {{ $this->form }}
         </div>
@@ -123,6 +132,12 @@
         {{-- === VIEW 1: SCANNER === --}}
         <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
             <div id="reader"></div>
+            
+            {{-- Botão Trocar Câmera (Invisível até o JS detectar câmeras) --}}
+            <button id="btn-switch-cam" class="switch-camera-btn" style="display: none;">
+                <x-heroicon-o-arrows-right-left class="w-6 h-6" />
+            </button>
+
             <div class="scan-frame">
                 <div class="scan-corner tl"></div><div class="scan-corner tr"></div>
                 <div class="scan-corner bl"></div><div class="scan-corner br"></div>
@@ -132,7 +147,6 @@
         </div>
 
         {{-- === VIEW 2: FLUXO DE CONFIRMAÇÃO E FOTO === --}}
-        {{-- Usamos x-data para gerenciar o estado visual (Confirmar vs Preview) sem depender do Livewire --}}
         <div id="photo-view" 
              class="{{ $foundProduct ? '' : 'hidden' }}"
              x-data="{ 
@@ -145,20 +159,14 @@
                  }
              }"
              @reset-scanner.window="mode = 'confirm'"
+             @set-preview-mode.window="mode = 'preview'" {{-- Novo Listener Seguro --}}
         >
-            
             <div class="header-info">
                 <h2>{{ $foundProduct?->product_name ?? 'Produto Identificado' }}</h2>
                 <span>EAN: {{ $scannedCode }}</span>
             </div>
 
-            {{-- 
-               wire:ignore aqui é CRUCIAL. 
-               Ele impede que o Livewire 'resete' essa div para o estado inicial 
-               quando você clica em Salvar e ele faz o request pro servidor.
-            --}}
             <div class="viewport-area" wire:ignore>
-                
                 {{-- ESTÁGIO 1: Confirmação --}}
                 <div class="confirm-stage" x-show="mode === 'confirm'">
                     <p class="text-gray-400 text-sm">Confirme o produto para tirar a foto.</p>
@@ -173,29 +181,17 @@
                     <img id="local-preview" class="preview-image" alt="Preview">
                     <button id="btn-retake" class="text-gray-400 text-xs mt-4 underline p-2">Tirar outra foto</button>
                 </div>
-
             </div>
 
             <div class="controls-bar">
-                {{-- Cancelar --}}
                 <button wire:click="resetScanner" class="icon-btn">
                     <x-heroicon-o-x-mark class="w-6 h-6"/>
                 </button>
 
-                {{-- Salvar (Aparece apenas se mode == preview) --}}
                 <div x-show="mode === 'preview'" style="display: none;">
                     <button wire:click="save" wire:loading.attr="disabled" class="icon-btn save-btn">
-                        {{-- Ícone Normal --}}
-                        <span wire:loading.remove>
-                            <x-heroicon-m-check class="w-8 h-8"/>
-                        </span>
-                        {{-- Spinner de Carregamento --}}
-                        <span wire:loading>
-                            <svg class="animate-spin h-6 w-6 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </span>
+                        <span wire:loading.remove><x-heroicon-m-check class="w-8 h-8"/></span>
+                        <span wire:loading><x-heroicon-o-arrow-path class="w-6 h-6 animate-spin"/></span>
                     </button>
                 </div>
             </div>
@@ -205,77 +201,125 @@
     <script>
         document.addEventListener('livewire:initialized', () => {
             let html5QrCode = null;
+            let currentCameraId = null;
+            let availableCameras = [];
+            let currentCameraIndex = 0;
 
-            // Elementos DOM
             const btnConfirm = document.getElementById('btn-confirm-capture');
             const btnRetake = document.getElementById('btn-retake');
             const previewImg = document.getElementById('local-preview');
+            const btnSwitchCam = document.getElementById('btn-switch-cam');
 
-            // Função para abrir câmera
+            // === LÓGICA DE UPLOAD (Correção Mobile) ===
             function openCamera() {
-                // Procura o input file gerado pelo Filament
+                // Seleciona o input no momento do clique (pois o Filament pode ter re-renderizado)
                 const fileInput = document.querySelector('input[type="file"].filepond--browser');
                 
                 if (fileInput) {
+                    // Remove listeners antigos para evitar duplicação
+                    fileInput.onchange = null;
+                    
+                    // Adiciona novo listener
                     fileInput.onchange = (e) => {
                         if (e.target.files && e.target.files[0]) {
                             const file = e.target.files[0];
                             previewImg.src = URL.createObjectURL(file);
                             
-                            // Atualiza o estado do Alpine JS para mostrar o preview
-                            // Isso é persistente graças ao wire:ignore
-                            document.getElementById('photo-view')._x_dataStack[0].mode = 'preview';
+                            // Dispara evento para o AlpineJS atualizar a tela
+                            window.dispatchEvent(new CustomEvent('set-preview-mode'));
                         }
                     };
+                    
+                    // Abre câmera
                     fileInput.click();
                 } else {
-                    alert("Erro no componente de câmera. Atualize a página.");
+                    alert("Erro: Câmera não inicializada. Recarregue a página.");
                 }
             }
 
             if(btnConfirm) btnConfirm.addEventListener('click', openCamera);
             if(btnRetake) btnRetake.addEventListener('click', openCamera);
 
-            // === LÓGICA DO SCANNER ===
+
+            // === LÓGICA DO SCANNER E CÂMERAS ===
             async function startScanner() {
                 if (@json($foundProduct)) return;
 
-                const devices = await Html5Qrcode.getCameras();
-                if (!devices || !devices.length) return;
+                // Se já estiver rodando, não faz nada
+                if (html5QrCode && html5QrCode.isScanning) return;
 
-                let cameraId = devices[0].id;
-                const backCameras = devices.filter(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('traseira'));
-                
-                if (backCameras.length > 0) {
-                    const mainCam = backCameras.find(d => !d.label.toLowerCase().includes('wide'));
-                    cameraId = mainCam ? mainCam.id : backCameras[0].id;
+                try {
+                    // Pega as câmeras apenas uma vez
+                    if (availableCameras.length === 0) {
+                        availableCameras = await Html5Qrcode.getCameras();
+                        
+                        // Ordena para priorizar traseiras
+                        availableCameras.sort((a, b) => {
+                            const labelA = a.label.toLowerCase();
+                            const isBackA = labelA.includes('back') || labelA.includes('traseira');
+                            return isBackA ? -1 : 1;
+                        });
+
+                        // Se tiver mais de 1 câmera, mostra o botão de troca
+                        if (availableCameras.length > 1) {
+                            btnSwitchCam.style.display = 'flex';
+                        }
+                    }
+
+                    if (availableCameras.length === 0) {
+                        alert("Nenhuma câmera encontrada.");
+                        return;
+                    }
+
+                    // Define câmera atual (ou a primeira da lista)
+                    currentCameraId = availableCameras[currentCameraIndex].id;
+
+                    html5QrCode = new Html5Qrcode("reader");
+                    
+                    await html5QrCode.start(
+                        { deviceId: { exact: currentCameraId } }, 
+                        { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 },
+                        (decodedText) => {
+                            stopScanner();
+                            @this.handleBarcodeScan(decodedText);
+                        },
+                        () => {}
+                    );
+
+                } catch (err) {
+                    console.error("Erro ao iniciar scanner:", err);
                 }
-
-                html5QrCode = new Html5Qrcode("reader");
-                
-                html5QrCode.start(
-                    { deviceId: { exact: cameraId } }, 
-                    { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 },
-                    (decodedText) => {
-                        stopScanner();
-                        @this.handleBarcodeScan(decodedText);
-                    },
-                    () => {}
-                ).catch(err => console.log(err));
             }
 
             function stopScanner() {
                 if (html5QrCode) {
-                    html5QrCode.stop().then(() => html5QrCode.clear()).catch(()=>{});
+                    return html5QrCode.stop().then(() => {
+                        html5QrCode.clear();
+                    }).catch(err => console.log("Erro ao parar", err));
                 }
+                return Promise.resolve();
             }
 
+            // Lógica de Troca de Câmera
+            btnSwitchCam.addEventListener('click', async () => {
+                if (availableCameras.length < 2) return;
+
+                await stopScanner();
+
+                // Avança índice circularmente
+                currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+                
+                // Pequeno delay para garantir que o DOM do vídeo limpou
+                setTimeout(startScanner, 200);
+            });
+
+            // Inicia
             startScanner();
 
-            // Listeners
+            // Listeners Livewire
             Livewire.on('reset-scanner', () => {
-                // O evento @reset-scanner.window no HTML cuida do Alpine
                 previewImg.src = '';
+                // Reseta variáveis
                 setTimeout(startScanner, 500);
             });
             
