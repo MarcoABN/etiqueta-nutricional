@@ -9,7 +9,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile; // Importante
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -41,14 +41,12 @@ class NutritionalScanner extends Page implements HasForms
                     ->imageResizeTargetHeight(1080)
                     ->imageResizeUpscale(false)
                     ->directory('uploads/nutritional')
-                    // --- RENOMEAÇÃO PERSONALIZADA ---
+                    ->disk('public') // Força disco público
                     ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file) {
                         $cod = $this->foundProduct->codprod ?? 'SEM_COD';
-                        // Adicionamos timestamp para evitar cache de navegador se atualizar a foto
                         return "{$cod}_nutri_" . time() . '.' . $file->getClientOriginalExtension();
                     })
-                    // -------------------------------
-                    ->required()
+                    ->required() // Validação obrigatória
                     ->extraAttributes(['id' => 'nutritional-upload-component'])
                     ->extraInputAttributes([
                         'capture' => 'environment',
@@ -85,7 +83,18 @@ class NutritionalScanner extends Page implements HasForms
 
     public function save()
     {
-        $data = $this->form->getState();
+        try {
+            // Tenta validar o formulário. Se a imagem ainda estiver subindo, falha aqui.
+            $data = $this->form->getState();
+        } catch (\Exception $e) {
+            // Se der erro (ex: upload incompleto), avisa o usuário
+            Notification::make()
+                ->title('Aguarde o fim do upload')
+                ->body('A imagem está sendo enviada ao servidor. Tente novamente em alguns segundos.')
+                ->warning()
+                ->send();
+            return;
+        }
 
         if ($this->foundProduct && !empty($data['image_nutritional'])) {
             $this->foundProduct->update([
@@ -93,18 +102,15 @@ class NutritionalScanner extends Page implements HasForms
             ]);
 
             Notification::make()
-                ->title('Imagem salva com sucesso!')
+                ->title('Salvo com sucesso!')
                 ->success()
-                ->duration(2000)
+                ->duration(1500) // Rápido para não travar o fluxo
                 ->send();
             
+            // Reinicia o processo imediatamente
             $this->resetScanner();
         } else {
-            Notification::make()
-                ->title('Capture a foto primeiro')
-                ->warning()
-                ->duration(2000)
-                ->send();
+            Notification::make()->title('Erro ao salvar')->danger()->send();
         }
     }
 
@@ -112,7 +118,11 @@ class NutritionalScanner extends Page implements HasForms
     {
         $this->scannedCode = null;
         $this->foundProduct = null;
+        // Limpa o formulário e a variável temporária de imagem
+        $this->data = []; 
         $this->form->fill();
+        
+        // Dispara evento para o Front limpar o preview e reiniciar câmera
         $this->dispatch('reset-scanner'); 
     }
 }
