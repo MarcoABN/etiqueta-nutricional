@@ -1,42 +1,51 @@
 <x-filament-panels::page>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
-    {{-- CSS MÁGICO: Remove o cabeçalho padrão do Filament e ajusta margens mobile --}}
     <style>
+        /* Remove cabeçalhos e paddings excessivos do Filament */
         .fi-header { display: none !important; } 
         .fi-main-ctn { padding-top: 10px !important; }
-        .fi-form-actions { display: none !important; } /* Esconde botões padrão se houver */
+        .fi-form-actions { display: none !important; }
+        
+        /* Ajuste para o FileUpload parecer mais um botão de câmera */
+        .filepond--drop-label { color: #4ade80; font-weight: bold; }
+        .filepond--panel-root { background-color: #f3f4f6; border: 2px dashed #ccc; }
     </style>
 
-    {{-- Cabeçalho Personalizado (Compacto) --}}
-    <div class="flex items-center justify-between pb-3 border-b mb-3">
-        <h2 class="text-xl font-bold text-gray-800 dark:text-white">
+    {{-- Cabeçalho Minimalista --}}
+    <div class="flex items-center justify-between pb-2 border-b mb-2">
+        <h2 class="text-lg font-bold text-gray-800 dark:text-white">
             Scanner
         </h2>
-        <div class="px-2 py-1 text-xs font-bold rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-            {{ $foundProduct ? 'UPLOAD' : 'LEITURA' }}
+        <div class="px-2 py-0.5 text-xs font-bold rounded bg-gray-200 dark:bg-gray-700">
+            {{ $foundProduct ? 'PASSO 2: FOTO' : 'PASSO 1: EAN' }}
         </div>
     </div>
 
-    {{-- ESTADO 1: CÂMERA (LEITURA) --}}
+    {{-- PASSO 1: LEITOR DE CÓDIGO DE BARRAS --}}
+    {{-- Só aparece se NÃO tiver achado produto ainda --}}
     @if(!$foundProduct)
-        <div class="space-y-4">
-            <div class="p-3 bg-white border rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
-                <div id="reader" class="w-full overflow-hidden rounded-lg bg-black"></div>
-                <p class="mt-3 text-center text-sm text-gray-500">
-                    Aponte a câmera para o código de barras
-                </p>
+        <div class="flex flex-col items-center justify-center space-y-4 h-[60vh]">
+            <div class="w-full bg-black rounded-lg overflow-hidden shadow-lg relative">
+                <div id="reader" class="w-full"></div>
+                
+                {{-- Mira visual sobre o scanner --}}
+                <div class="absolute inset-0 pointer-events-none border-2 border-red-500/50 rounded-lg"></div>
             </div>
+            <p class="text-center text-gray-500 animate-pulse">
+                Aponte a câmera para o código de barras
+            </p>
         </div>
     @endif
 
-    {{-- ESTADO 2: PRODUTO ENCONTRADO (UPLOAD) --}}
+    {{-- PASSO 2: FOTO DA TABELA E SALVAR --}}
+    {{-- Só aparece se o produto FOI encontrado --}}
     @if($foundProduct)
         <div class="flex flex-col h-full">
             
-            {{-- Card de Informação do Produto --}}
-            <div class="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded shadow-sm dark:bg-blue-900/20">
-                <h3 class="font-bold text-gray-900 dark:text-white leading-tight">
+            {{-- Resumo do Produto Encontrado --}}
+            <div class="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg shadow-sm dark:bg-green-900/20 dark:border-green-800">
+                <h3 class="font-bold text-gray-900 dark:text-white text-sm leading-tight">
                     {{ $foundProduct->product_name }}
                 </h3>
                 <p class="mt-1 text-xs font-mono text-gray-500 dark:text-gray-400">
@@ -44,36 +53,40 @@
                 </p>
             </div>
 
-            {{-- Formulário --}}
-            <form wire:submit="save">
-                <div class="mb-4">
+            <form wire:submit="save" class="flex flex-col gap-4">
+                
+                {{-- Área de Upload (Já configurada para abrir câmera) --}}
+                <div class="bg-white dark:bg-gray-800 p-2 rounded-lg shadow-sm border">
+                    <p class="mb-2 text-xs font-bold text-gray-500 uppercase text-center">
+                        Toque abaixo para tirar a foto da tabela
+                    </p>
                     {{ $this->form }}
                 </div>
                 
-                {{-- GRID DE BOTÕES OTIMIZADA (30% / 70%) --}}
-                <div class="flex w-full gap-2">
+                {{-- Botões de Ação (30/70) --}}
+                <div class="flex w-full gap-2 mt-2">
                     
-                    {{-- Botão Cancelar (30%) --}}
+                    {{-- CANCELAR (30%) --}}
                     <div style="width: 30%">
                         <x-filament::button 
                             wire:click="resetScanner" 
                             type="button" 
                             color="gray" 
                             size="lg" 
-                            class="w-full h-12 flex justify-center items-center">
-                            Cancelar
+                            class="w-full h-14 flex justify-center items-center">
+                            <span class="text-xs font-bold">CANCELAR</span>
                         </x-filament::button>
                     </div>
 
-                    {{-- Botão Salvar (70%) --}}
+                    {{-- SALVAR (70%) --}}
                     <div style="width: 70%">
                         <x-filament::button 
                             type="submit" 
                             color="success" 
                             size="lg" 
-                            class="w-full h-12 flex justify-center items-center shadow-md">
-                            <x-heroicon-m-camera class="w-5 h-5 mr-2" />
-                            <span class="font-bold">SALVAR FOTO</span>
+                            class="w-full h-14 flex justify-center items-center shadow-lg">
+                            <x-heroicon-m-check-circle class="w-6 h-6 mr-2" />
+                            <span class="font-bold">SALVAR & PRÓXIMO</span>
                         </x-filament::button>
                     </div>
 
@@ -82,55 +95,55 @@
         </div>
     @endif
 
-    {{-- Scripts do Scanner --}}
+    {{-- Lógica JS do Scanner --}}
     <script>
         document.addEventListener('livewire:initialized', () => {
-            let html5QrcodeScanner = null;
+            let scanner = null;
 
-            function startScanner() {
-                // Se já achou produto, não liga câmera
+            function initScanner() {
+                // Se já estamos na etapa 2 (produto achado), não liga câmera
                 if (@json($foundProduct)) return;
-                
-                // Limpa instância anterior se houver
-                if (html5QrcodeScanner) {
-                    try { html5QrcodeScanner.clear(); } catch(e) {}
-                }
 
-                // Configuração Otimizada para Celular
-                html5QrcodeScanner = new Html5QrcodeScanner(
+                // Limpa anterior para evitar conflito
+                if (scanner) { try { scanner.clear(); } catch(e) {} }
+
+                // Configuração para melhor performance no mobile
+                scanner = new Html5QrcodeScanner(
                     "reader", 
                     { 
                         fps: 10, 
                         qrbox: {width: 250, height: 150},
                         aspectRatio: 1.0,
-                        showTorchButtonIfSupported: true 
+                        showTorchButtonIfSupported: true, // Botão de lanterna
+                        rememberLastUsedCamera: true
                     },
                     false
                 );
-                
-                html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+                scanner.render(onScanSuccess, onScanFailure);
             }
 
             function onScanSuccess(decodedText) {
-                if (html5QrcodeScanner) {
-                    html5QrcodeScanner.clear();
-                }
+                // Para o scanner visualmente
+                if (scanner) scanner.clear();
+                
+                // Envia para o PHP processar
                 @this.handleBarcodeScan(decodedText);
             }
 
             function onScanFailure(error) {
-                // Silencioso para erros comuns de leitura frame a frame
+                // Ignora erros de frame vazio
                 if (error?.includes("permission")) {
-                    alert("Erro: Dê permissão para a câmera e use HTTPS.");
+                    alert("Erro: O navegador bloqueou a câmera. Verifique as permissões e o HTTPS.");
                 }
             }
 
-            // Inicia ao carregar
-            startScanner();
+            // Inicia na carga da página
+            initScanner();
 
-            // Ouve evento do PHP para resetar
+            // Reinicia quando o usuário clica em "Cancelar" ou "Salvar e Próximo"
             Livewire.on('reset-scanner', () => {
-                setTimeout(startScanner, 300);
+                setTimeout(initScanner, 300);
             });
         });
     </script>
