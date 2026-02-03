@@ -35,16 +35,13 @@ class NutritionalScanner extends Page implements HasForms
                 FileUpload::make('image_nutritional')
                     ->hiddenLabel()
                     ->image()
-                    // Redimensionamento nativo para otimizar (Full HD)
                     ->imageResizeMode('contain')
-                    ->imageResizeTargetWidth(1080)
-                    ->imageResizeTargetHeight(1920)
+                    ->imageResizeTargetWidth(1920)
+                    ->imageResizeTargetHeight(1080)
                     ->imageResizeUpscale(false)
                     ->directory('uploads/nutritional')
                     ->required()
-                    // ID CSS para o Javascript encontrar este input
                     ->extraAttributes(['id' => 'nutritional-upload-component'])
-                    // Força comportamento de câmera no mobile
                     ->extraInputAttributes([
                         'capture' => 'environment',
                         'accept' => 'image/*'
@@ -62,20 +59,18 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Se já tiver foto, carrega para visualização
             $this->form->fill([
                 'image_nutritional' => $product->image_nutritional,
             ]);
         } else {
             $this->foundProduct = null;
             Notification::make()
-                ->title('EAN não encontrado')
-                ->body($code)
+                ->title('Produto não encontrado')
+                ->body("EAN: {$code}")
                 ->danger()
-                ->duration(3000)
+                ->duration(2500)
                 ->send();
             
-            // Reabre scanner após erro
             $this->dispatch('reset-scanner-error');
         }
     }
@@ -84,16 +79,24 @@ class NutritionalScanner extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        // Validação simples
         if ($this->foundProduct && !empty($data['image_nutritional'])) {
             $this->foundProduct->update([
                 'image_nutritional' => $data['image_nutritional']
             ]);
 
-            Notification::make()->title('Salvo com sucesso!')->success()->send();
+            Notification::make()
+                ->title('Imagem salva com sucesso!')
+                ->success()
+                ->duration(2000)
+                ->send();
+            
             $this->resetScanner();
         } else {
-             Notification::make()->title('É necessário tirar a foto!')->warning()->send();
+            Notification::make()
+                ->title('Capture a foto primeiro')
+                ->warning()
+                ->duration(2000)
+                ->send();
         }
     }
 
