@@ -33,16 +33,18 @@ class NutritionalScanner extends Page implements HasForms
         return $form
             ->schema([
                 FileUpload::make('image_nutritional')
-                    ->hiddenLabel() // Esconde label padrão
+                    ->hiddenLabel()
                     ->image()
+                    // --- OTIMIZAÇÃO (NATIVA) ---
                     ->imageResizeMode('contain')
-                    ->imageResizeTargetWidth(1080) // Otimização Full HD
+                    ->imageResizeTargetWidth(1080) // Redimensiona para Full HD
                     ->imageResizeTargetHeight(1920)
                     ->imageResizeUpscale(false)
-                    ->optimize('webp')
+                    // ->optimize('webp') <--- LINHA REMOVIDA (Causava o erro)
+                    // ---------------------------
                     ->directory('uploads/nutritional')
                     ->required()
-                    ->extraAttributes(['class' => 'camera-upload-zone']) // Classe para nosso CSS customizado
+                    ->extraAttributes(['class' => 'camera-upload-zone'])
                     ->extraInputAttributes([
                         'capture' => 'environment',
                         'accept' => 'image/*'
@@ -63,21 +65,18 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Se já tiver imagem, preenche
             $this->form->fill([
                 'image_nutritional' => $product->image_nutritional,
             ]);
         } else {
-            // Zera e avisa erro
             $this->foundProduct = null;
             Notification::make()
                 ->title('EAN não encontrado')
                 ->body("Código: {$code}")
                 ->danger()
-                ->persistent() // Fica na tela até clicar
+                ->persistent()
                 ->send();
             
-            // Reabre o scanner automaticamente após erro
             $this->dispatch('reset-scanner-error');
         }
     }
