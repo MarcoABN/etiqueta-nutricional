@@ -3,90 +3,92 @@
 namespace App\Filament\Pages;
 
 use App\Models\Product;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Section;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Livewire\Attributes\On; // Importante para ouvir eventos
+use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Livewire\Attributes\On;
 
-class NutritionalScanner extends Page implements HasForms
+class NutritionalScanner extends Page
 {
-    use InteractsWithForms;
-
-    protected static ?string $navigationIcon = 'heroicon-o-qr-code';
-    protected static ?string $navigationLabel = 'Coletor Mobile';
-    protected static ?string $title = 'Scanner';
+    protected static ?string $navigationIcon = 'heroicon-o-camera';
+    protected static ?string $navigationLabel = 'Scanner App';
+    protected static ?string $title = 'Coletor de Rótulos';
     protected static string $view = 'filament.pages.nutritional-scanner';
 
+    // Estados da Tela
+    public $viewState = 'scan'; // 'scan' (código) ou 'capture' (foto)
+    public $scannedProduct = null;
     public $scannedCode = null;
-    public $foundProduct = null;
-    public ?array $data = [];
+    
+    // Imagem capturada (Base64)
+    public $capturedImage = null;
 
-    public function form(Form $form): Form
+    public function mount()
     {
-        return $form
-            ->schema([
-                Section::make('Foto da Tabela')
-                    ->heading('2. Capture a Tabela')
-                    ->schema([
-                        FileUpload::make('image_nutritional')
-                            ->hiddenLabel()
-                            ->image()
-                            ->imageEditor()
-                            ->imageEditorMode(2)
-                            ->directory('uploads/nutritional')
-                            ->required()
-                            ->columnSpanFull()
-                            ->extraAttributes(['class' => 'w-full']), // Força largura total
-                    ])
-            ])
-            ->statePath('data');
+        $this->resetScanner();
     }
 
+    // 1. Recebe o código do JS
     public function handleBarcodeScan($code)
     {
-        // Evita processar se já tiver encontrado (evita loops do scanner)
-        if ($this->foundProduct) return;
+        if ($this->viewState !== 'scan') return;
 
         $this->scannedCode = $code;
         $product = Product::where('barcode', $code)->first();
 
         if ($product) {
-            $this->foundProduct = $product;
-            $this->form->fill([
-                'image_nutritional' => $product->image_nutritional,
-            ]);
+            $this->scannedProduct = $product;
+            $this->viewState = 'capture'; // Muda a tela para o modo FOTO
+            
+            // Avisa o front para ligar a câmera de alta resolução
+            $this->dispatch('start-photo-camera'); 
+            
             Notification::make()->title("Produto: {$product->product_name}")->success()->send();
         } else {
-            // Produto não encontrado: Avisa e reinicia scanner após 2s
             Notification::make()->title("EAN {$code} não encontrado!")->danger()->send();
-            $this->dispatch('resume-camera'); // Manda o JS continuar lendo
+            $this->dispatch('resume-scanner');
         }
     }
 
-    public function save()
+    // 2. Recebe a foto do JS (Base64) e salva
+    public function savePhoto($base64Image)
     {
-        $data = $this->form->getState();
+        if (!$this->scannedProduct) return;
 
-        if ($this->foundProduct) {
-            $this->foundProduct->update([
-                'image_nutritional' => $data['image_nutritional']
-            ]);
+        // Decodifica a imagem Base64
+        // O formato vem como "data:image/jpeg;base64,....."
+        $imageParts = explode(";base64,", $base64Image);
+        $imageTypeAux = explode("image/", $imageParts[0]);
+        $imageType = $imageTypeAux[1] ?? 'jpeg';
+        $imageBase64 = base64_decode($imageParts[1]);
 
-            Notification::make()->title('Salvo! Próximo...')->success()->send();
-            $this->resetScanner();
-        }
+        // Gera nome único
+        $fileName = 'nutritional_' . $this->scannedProduct->id . '_' . time() . '.' . $imageType;
+        $path = 'uploads/nutritional/' . $fileName;
+
+        // Salva no disco (Storage Public)
+        Storage::disk('public')->put($path, $imageBase64);
+
+        // Atualiza o produto
+        $this->scannedProduct->update([
+            'image_nutritional' => $path
+        ]);
+
+        Notification::make()->title('Foto salva com sucesso!')->success()->send();
+        
+        // Reinicia o processo
+        $this->resetScanner();
     }
 
     #[On('reset-action')] 
     public function resetScanner()
     {
+        $this->viewState = 'scan';
+        $this->scannedProduct = null;
         $this->scannedCode = null;
-        $this->foundProduct = null;
-        $this->form->fill();
-        $this->dispatch('start-camera'); // Ordem explícita para o JS
+        $this->capturedImage = null;
+        
+        $this->dispatch('start-scanner'); // Volta para o modo scanner de código
     }
 }

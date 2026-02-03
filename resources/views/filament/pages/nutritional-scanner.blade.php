@@ -1,175 +1,195 @@
 <x-filament-panels::page class="h-full">
+    {{-- Biblioteca de Scanner --}}
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
-        /* Ajustes para parecer App Nativo */
-        .filament-main-content { padding: 0 !important; }
-        #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; }
-        #reader video { object-fit: cover; border-radius: 12px; }
+        .camera-container {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            position: relative;
+            aspect-ratio: 3/4; /* Formato retrato típico de celular */
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
     </style>
 
-    {{-- ESTADO 1: CÂMERA (Leitura) --}}
-    <div x-show="!$wire.foundProduct" class="flex flex-col h-screen-safe space-y-4">
-        
-        {{-- Área da Câmera --}}
-        <div class="relative w-full bg-black rounded-xl overflow-hidden shadow-lg aspect-[3/4]">
-            <div id="reader" class="w-full h-full"></div>
-            
-            {{-- Mira Vermelha (Overlay) --}}
-            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div class="w-64 h-40 border-2 border-red-500/50 rounded-lg"></div>
-            </div>
-            
-            {{-- Status --}}
-            <div class="absolute bottom-4 left-0 right-0 text-center">
-                <span class="bg-black/50 text-white px-3 py-1 rounded-full text-sm">
-                    Aponte para o código de barras
-                </span>
-            </div>
+    {{-- ETAPA 1: SCANNER DE CÓDIGO DE BARRAS --}}
+    <div x-show="$wire.viewState === 'scan'" class="flex flex-col space-y-4">
+        <div class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow mb-2 text-center">
+            <h2 class="text-lg font-bold">1. Ler Código de Barras</h2>
+            <p class="text-xs text-gray-500">Aponte a câmera para o EAN do produto</p>
         </div>
 
-        {{-- Botões de Controle da Câmera --}}
-        <div class="grid grid-cols-1 gap-3 p-2">
+        <div class="camera-container shadow-lg">
+            <div id="reader" class="w-full h-full"></div>
+            {{-- Mira --}}
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="w-64 h-32 border-2 border-red-500/50 rounded-lg"></div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ETAPA 2: CAPTURA DE FOTO (TABELA) --}}
+    <div x-show="$wire.viewState === 'capture'" class="flex flex-col space-y-4" x-cloak>
+        
+        {{-- Card do Produto Encontrado --}}
+        <div class="p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-900/20 dark:border-green-800">
+            <div class="text-xs font-bold text-green-700 uppercase">Produto Identificado</div>
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+                {{ $scannedProduct?->product_name }}
+            </h3>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 p-2 rounded-lg text-center">
+            <h2 class="text-lg font-bold">2. Fotografar Tabela</h2>
+            <p class="text-xs text-gray-500">Certifique-se que os números estão legíveis</p>
+        </div>
+
+        {{-- Câmera de Alta Resolução --}}
+        <div class="camera-container shadow-lg">
+            <video id="photo-video" autoplay playsinline></video>
+            <canvas id="photo-canvas" class="hidden"></canvas> </div>
+
+        {{-- Botões de Ação --}}
+        <div class="grid grid-cols-2 gap-4">
             <x-filament::button 
-                color="gray" 
+                color="danger" 
                 size="xl" 
-                class="w-full py-4"
-                onclick="restartCameraManual()">
-                🔄 Reiniciar Câmera
+                outlined 
+                wire:click="resetScanner">
+                Cancelar
+            </x-filament::button>
+
+            <x-filament::button 
+                color="success" 
+                size="xl" 
+                class="w-full"
+                id="btn-capture">
+                📸 FOTOGRAFAR
             </x-filament::button>
         </div>
     </div>
 
-    {{-- ESTADO 2: PRODUTO ENCONTRADO (Formulário) --}}
-    <div x-show="$wire.foundProduct" class="space-y-4" x-cloak>
-        
-        {{-- Card do Produto --}}
-        @if($foundProduct)
-        <div class="p-4 bg-primary-50 border border-primary-200 rounded-xl shadow-sm dark:bg-gray-800 dark:border-gray-700">
-            <div class="text-xs font-bold text-primary-600 uppercase tracking-wider mb-1">Produto Identificado</div>
-            <h2 class="text-lg font-bold leading-tight text-gray-900 dark:text-white">
-                {{ $foundProduct->product_name }}
-            </h2>
-            <div class="mt-2 text-sm font-mono text-gray-500">
-                EAN: {{ $scannedCode }}
-            </div>
-        </div>
-        @endif
-
-        {{-- Formulário de Upload --}}
-        <form wire:submit="save" class="space-y-6">
-            {{ $this->form }}
-
-            <div class="grid grid-cols-2 gap-3 pt-4">
-                {{-- Botão Voltar/Cancelar --}}
-                <x-filament::button 
-                    type="button" 
-                    color="danger" 
-                    size="xl"
-                    outlined
-                    wire:click="resetScanner">
-                    ❌ Cancelar
-                </x-filament::button>
-
-                {{-- Botão Salvar --}}
-                <x-filament::button 
-                    type="submit" 
-                    color="success" 
-                    size="xl"
-                    class="w-full">
-                    ✅ Salvar
-                </x-filament::button>
-            </div>
-        </form>
-    </div>
-
+    {{-- SCRIPTS DE CONTROLE --}}
     <script>
         document.addEventListener('livewire:initialized', () => {
-            let html5QrCode = null;
-            const cameraId = "reader";
+            // --- VARIÁVEIS DO SCANNER (ETAPA 1) ---
+            let scannerObj = null;
+            
+            // --- VARIÁVEIS DA FOTO (ETAPA 2) ---
+            let photoStream = null;
+            const photoVideo = document.getElementById('photo-video');
+            const photoCanvas = document.getElementById('photo-canvas');
+            const captureBtn = document.getElementById('btn-capture');
 
-            // Função Principal de Início
-            window.startCamera = function() {
-                // Se já existir instância, para antes de recomeçar
-                if (html5QrCode) {
-                    stopCamera().then(() => initCamera());
-                } else {
-                    initCamera();
+            // === FUNÇÕES ETAPA 1: SCANNER ===
+            function startScanner() {
+                // Garante que a câmera de foto está desligada
+                stopPhotoCamera();
+
+                if (!scannerObj) {
+                    scannerObj = new Html5Qrcode("reader");
                 }
-            }
 
-            function initCamera() {
-                html5QrCode = new Html5Qrcode(cameraId);
-                
-                const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-                
-                // FORÇA CÂMERA TRASEIRA (ENVIRONMENT)
-                html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    config, 
-                    onScanSuccess, 
-                    onScanFailure
+                scannerObj.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 150 } },
+                    (decodedText) => {
+                        console.log("Lido:", decodedText);
+                        scannerObj.stop().then(() => {
+                             @this.handleBarcodeScan(decodedText);
+                        });
+                    },
+                    (errorMessage) => { /* ignora erros de frame vazio */ }
                 ).catch(err => {
-                    console.log("Erro ao iniciar câmera: ", err);
-                    if(err?.name === 'NotAllowedError') {
-                        alert('Permissão de câmera negada. Verifique o HTTPS.');
-                    }
+                    console.error("Erro scanner", err);
+                    alert("Erro ao iniciar câmera de leitura. Verifique permissões HTTPS.");
                 });
             }
 
-            window.stopCamera = function() {
-                if (html5QrCode && html5QrCode.isScanning) {
-                    return html5QrCode.stop().then(() => {
-                        html5QrCode.clear();
-                    }).catch(err => console.log("Erro ao parar: ", err));
+            // === FUNÇÕES ETAPA 2: FOTO ALTA RESOLUÇÃO ===
+            function startPhotoCamera() {
+                // Tenta pegar a melhor resolução possível (HD/Full HD)
+                const constraints = {
+                    video: {
+                        facingMode: "environment",
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                };
+
+                navigator.mediaDevices.getUserMedia(constraints)
+                    .then((stream) => {
+                        photoStream = stream;
+                        photoVideo.srcObject = stream;
+                    })
+                    .catch((err) => {
+                        console.error("Erro câmera foto", err);
+                        alert("Não foi possível acessar a câmera para foto.");
+                    });
+            }
+
+            function stopPhotoCamera() {
+                if (photoStream) {
+                    photoStream.getTracks().forEach(track => track.stop());
+                    photoStream = null;
                 }
-                return Promise.resolve();
             }
 
-            // Ação Manual do Botão de Reinício
-            window.restartCameraManual = function() {
-                stopCamera().then(() => {
-                    setTimeout(startCamera, 200);
-                });
-            }
+            function takePhoto() {
+                if (!photoStream) return;
 
-            function onScanSuccess(decodedText, decodedResult) {
-                console.log(`Lido: ${decodedText}`);
+                // Configura o canvas para o tamanho real do vídeo
+                photoCanvas.width = photoVideo.videoWidth;
+                photoCanvas.height = photoVideo.videoHeight;
                 
-                // Pausa a câmera visualmente
-                html5QrCode.pause(); 
+                // Desenha o frame atual no canvas
+                const ctx = photoCanvas.getContext('2d');
+                ctx.drawImage(photoVideo, 0, 0, photoCanvas.width, photoCanvas.height);
                 
+                // Converte para Base64 (JPG qualidade 0.8)
+                const dataUrl = photoCanvas.toDataURL('image/jpeg', 0.85);
+
                 // Envia para o Backend
-                @this.handleBarcodeScan(decodedText);
+                @this.savePhoto(dataUrl);
+                
+                // Desliga câmera
+                stopPhotoCamera();
             }
 
-            function onScanFailure(error) {
-                // Ignora erros de frame vazio
-            }
-
-            // --- EVENTOS DO LIVEWIRE ---
-
-            // 1. Iniciar ao carregar a página
-            startCamera();
-
-            // 2. Quando o PHP manda "start-camera" (após salvar ou cancelar)
-            Livewire.on('start-camera', () => {
-                // Pequeno delay para a DOM mudar (x-show)
-                setTimeout(() => {
-                    if(html5QrCode && html5QrCode.isScanning) {
-                        html5QrCode.resume();
-                    } else {
-                        startCamera();
-                    }
-                }, 300);
+            // === EVENTOS / GATILHOS ===
+            
+            // Botão de Captura (JS puro para evitar delay do Livewire no clique)
+            captureBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                captureBtn.innerText = "Processando...";
+                captureBtn.disabled = true;
+                takePhoto();
             });
 
-            // 3. Quando o produto não é encontrado (retoma leitura)
-            Livewire.on('resume-camera', () => {
-                setTimeout(() => {
-                    if(html5QrCode) html5QrCode.resume();
-                }, 1000); // Espera 1s para o usuário ver o erro
+            // Ganchos do Livewire
+            Livewire.on('start-scanner', () => {
+                setTimeout(startScanner, 500); // Delay para DOM atualizar
+                captureBtn.innerText = "📸 FOTOGRAFAR";
+                captureBtn.disabled = false;
             });
+
+            Livewire.on('start-photo-camera', () => {
+                setTimeout(startPhotoCamera, 500);
+            });
+
+            Livewire.on('resume-scanner', () => {
+                // Se der erro no produto, volta a escanear
+                setTimeout(startScanner, 1000);
+            });
+
+            // Inicia o scanner ao carregar a página
+            startScanner();
         });
     </script>
 </x-filament-panels::page>
