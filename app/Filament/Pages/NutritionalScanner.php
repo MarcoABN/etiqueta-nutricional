@@ -16,10 +16,9 @@ class NutritionalScanner extends Page implements HasForms
 
     protected static ?string $navigationIcon = 'heroicon-o-qr-code';
     protected static ?string $navigationLabel = 'Coletor Nutricional';
-    protected static ?string $title = ''; // Sem título para limpar a tela
+    protected static ?string $title = ''; 
     protected static string $view = 'filament.pages.nutritional-scanner';
 
-    // Variáveis Públicas
     public $scannedCode = null;
     public $foundProduct = null;
     public ?array $data = [];
@@ -36,21 +35,19 @@ class NutritionalScanner extends Page implements HasForms
                 FileUpload::make('image_nutritional')
                     ->hiddenLabel()
                     ->image()
-                    // --- OTIMIZAÇÃO DE IMAGEM (1080p) ---
-                    ->imageResizeMode('contain')
-                    ->imageCropAspectRatio('1:1') // Opcional: força quadrado ou remove para livre
-                    ->imageResizeTargetWidth(1080)
-                    ->imageResizeTargetHeight(1920) // Limite vertical também
-                    ->imageResizeUpscale(false) // Não aumenta imagens pequenas
-                    ->optimize('webp') // Converte para WebP (muito mais leve)
-                    // ------------------------------------
+                    // --- OTIMIZAÇÃO NATIVA (Sem Plugins) ---
+                    ->imageResizeMode('contain') // Redimensiona mantendo proporção
+                    ->imageResizeTargetWidth(1080) // Largura máx Full HD
+                    ->imageResizeTargetHeight(1920) // Altura máx
+                    ->imageResizeUpscale(false) // Não estica fotos pequenas
+                    // ---------------------------------------
                     ->directory('uploads/nutritional')
                     ->required()
                     ->extraInputAttributes([
-                        'capture' => 'environment', // Abre câmera traseira
+                        'capture' => 'environment', 
                         'accept' => 'image/*'
                     ])
-                    ->panelLayout('integrated') // Layout mais limpo
+                    ->panelLayout('integrated')
                     ->removeUploadedFileButtonPosition('right')
                     ->uploadButtonPosition('left')
                     ->uploadProgressIndicatorPosition('left')
@@ -66,7 +63,6 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Preenche imagem se já existir (para visualização)
             $this->form->fill([
                 'image_nutritional' => $product->image_nutritional,
             ]);
