@@ -12,6 +12,7 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\FileUpload; // Importado
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -28,14 +29,13 @@ class ProductResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?string $navigationLabel = 'Produtos';
 
-    protected static ?string $modelLabel = 'Produto'; // Singular (usado em "Editar Produto")
+    protected static ?string $modelLabel = 'Produto';
     protected static ?string $pluralModelLabel = 'Produtos';
 
     public static function form(Form $form): Form
     {
         return $form
             ->extraAttributes([
-                // Script para pular para o próximo campo ao dar Enter
                 'x-on:keydown.enter.prevent' => <<<'JS'
                     let inputs = [...$el.closest('form').querySelectorAll('input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])')];
                     let index = inputs.indexOf($event.target);
@@ -62,7 +62,6 @@ class ProductResource extends Resource
                                     ->unique(ignoreRecord: true)
                                     ->columnSpan(3),
                                 
-                                // --- SELETORES DE CURVA E STATUS ---
                                 Select::make('curve')
                                     ->label('Curva')
                                     ->options([
@@ -79,7 +78,7 @@ class ProductResource extends Resource
                                         'Em Análise' => 'Em Análise',
                                         'Liberado' => 'Liberado',
                                     ])
-                                    ->default('Bloqueado') // Garante valor padrão
+                                    ->default('Bloqueado')
                                     ->required()
                                     ->columnSpan(5)
                                     ->selectablePlaceholder(false),
@@ -161,18 +160,31 @@ class ProductResource extends Resource
                             TextInput::make('potassium')->label('Potássio'),
                         ]),
                     ]),
+
+                // --- NOVA SEÇÃO: IMAGEM / ANEXO ---
+                Section::make('Imagem do Rótulo')
+                    ->collapsed() // Mantém fechado para ser discreto
+                    ->schema([
+                        FileUpload::make('image_nutritional')
+                            ->label('Foto Tabela Nutricional')
+                            ->helperText('Imagem capturada via mobile ou anexada manualmente.')
+                            ->image()
+                            ->imageEditor() // Permite girar/cortar se upar do PC
+                            ->directory('uploads/nutritional') // Mesma pasta do scanner
+                            ->visibility('public')
+                            ->openable() // Permite clicar para ver a imagem original
+                            ->downloadable() // Permite baixar
+                            ->columnSpanFull(),
+                    ]),
+                // ----------------------------------
             ]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
-            // --- FIX DE PAGINAÇÃO ---
-            // Remove a opção 'all' para evitar estouro de memória com 14k itens
             ->paginated([10, 25, 50, 100])
             ->defaultPaginationPageOption(25)
-            // ------------------------
-
             ->columns([
                 Tables\Columns\TextColumn::make('codprod')
                     ->label('Cód. WinThor')
@@ -186,7 +198,6 @@ class ProductResource extends Resource
                     ->color('gray')
                     ->copyable(),
                 
-                // --- FIX DE TIPAGEM: Removido 'string' para aceitar NULL ---
                 Tables\Columns\TextColumn::make('curve')
                     ->label('Curva')
                     ->badge()
@@ -196,7 +207,7 @@ class ProductResource extends Resource
                         'C' => 'danger',
                         default => 'gray',
                     })
-                    ->formatStateUsing(fn ($state) => $state ?? '-') // Trata visualmente o NULL
+                    ->formatStateUsing(fn ($state) => $state ?? '-')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('import_status')
@@ -210,7 +221,6 @@ class ProductResource extends Resource
                     })
                     ->formatStateUsing(fn ($state) => $state ?? 'Indefinido')
                     ->sortable(),
-                // -----------------------------------------------------------
 
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
@@ -279,21 +289,15 @@ class ProductResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    
-
-                    // --- EXPORTAÇÃO CSV ---
                     BulkAction::make('export_csv')
                         ->label('Exportar CSV Selecionados')
                         ->icon('heroicon-o-arrow-down-tray')
                         ->color('success')
                         ->action(function (Collection $records) {
                             return response()->streamDownload(function () use ($records) {
-                                echo "\xEF\xBB\xBF"; // BOM para Excel
+                                echo "\xEF\xBB\xBF"; 
                                 $handle = fopen('php://output', 'w');
-                                
-                                // Cabeçalho do CSV
                                 fputcsv($handle, ['Cod. WinThor', 'Produto', 'Traducao', 'EAN', 'Curva', 'Status Importacao'], ';');
-
                                 foreach ($records as $record) {
                                     fputcsv($handle, [
                                         $record->codprod,
@@ -309,7 +313,6 @@ class ProductResource extends Resource
                         })
                         ->deselectRecordsAfterCompletion(),
 
-                    // --- TRADUÇÃO HÍBRIDA ---
                     BulkAction::make('translate_hybrid')
                         ->label('Traduzir Selecionados (Auto)')
                         ->icon('heroicon-o-language')
@@ -319,7 +322,7 @@ class ProductResource extends Resource
                         ->action(function (Collection $records) {
                             $service = new GeminiFdaTranslator();
                             $processed = 0;
-                            set_time_limit(300); // Aumenta tempo de execução
+                            set_time_limit(300);
 
                             foreach ($records as $record) {
                                 if ($record->product_name_en) continue;
@@ -327,9 +330,7 @@ class ProductResource extends Resource
                                 if ($newName) {
                                     $record->update(['product_name_en' => $newName]);
                                     $processed++;
-                                    
-                                    // Pequeno delay para evitar Rate Limit (429) do Google
-                                    usleep(500000); // 0.5s
+                                    usleep(500000);
                                 }
                             }
                             Notification::make()->title("{$processed} itens traduzidos.")->success()->send();
