@@ -11,17 +11,17 @@ use Filament\Forms\Components\Group;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Select; // Importado
+use Filament\Forms\Components\Select;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Actions\BulkAction;
-use Filament\Tables\Filters\SelectFilter; // Importado
-use Filament\Tables\Filters\Filter; // Importado
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
-use Illuminate\Database\Eloquent\Builder; // Importado
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Symfony\Component\HttpFoundation\StreamedResponse; // Para exportação
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductResource extends Resource
 {
@@ -43,7 +43,7 @@ class ProductResource extends Resource
                 JS,
             ])
             ->schema([
-                Section::make('Identificação e Status') // Renomeado
+                Section::make('Identificação e Status')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(12)
@@ -135,7 +135,6 @@ class ProductResource extends Resource
                         ]),
                     ]),
                 
-                 // Seção de Micronutrientes (mantida oculta para economizar espaço no código, mas pode manter a sua original)
                  Section::make('Micronutrientes')
                     ->collapsed()
                     ->compact()
@@ -145,7 +144,6 @@ class ProductResource extends Resource
                             TextInput::make('calcium')->label('Cálcio'),
                             TextInput::make('iron')->label('Ferro'),
                             TextInput::make('potassium')->label('Potássio'),
-                            // ... adicione os outros campos se necessário
                         ]),
                     ]),
             ]);
@@ -158,28 +156,31 @@ class ProductResource extends Resource
                 Tables\Columns\TextColumn::make('codprod')->label('Cód. WinThor')->searchable()->sortable()->weight('bold'),
                 Tables\Columns\TextColumn::make('barcode')->label('EAN')->searchable()->color('gray')->copyable(),
                 
-                // Colunas Visuais de Status
+                // --- CORREÇÃO AQUI: Aceita NULL sem quebrar (removido 'string') ---
                 Tables\Columns\TextColumn::make('curve')
                     ->label('Curva')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn ($state) => match ($state) {
                         'A' => 'success',
                         'B' => 'warning',
                         'C' => 'danger',
                         default => 'gray',
                     })
+                    ->formatStateUsing(fn ($state) => $state ?? '-') // Mostra '-' se for null
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('import_status')
                     ->label('Status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn ($state) => match ($state) {
                         'Liberado' => 'success',
                         'Em Análise' => 'warning',
                         'Bloqueado' => 'danger',
                         default => 'gray',
                     })
+                    ->formatStateUsing(fn ($state) => $state ?? 'Indefinido') // Mostra 'Indefinido' se for null
                     ->sortable(),
+                // ------------------------------------------------------------------
 
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
@@ -189,7 +190,6 @@ class ProductResource extends Resource
             ])
             ->defaultSort('created_at', 'desc')
             
-            // --- FILTROS AVANÇADOS ---
             ->filters([
                 SelectFilter::make('curve')
                     ->label('Filtrar por Curva')
@@ -207,7 +207,6 @@ class ProductResource extends Resource
                         'Bloqueado' => 'Bloqueado',
                     ]),
 
-                // Filtro Lógico de Completude
                 Filter::make('cadastro_status')
                     ->form([
                         Select::make('status')
@@ -222,7 +221,6 @@ class ProductResource extends Resource
                             $data['status'],
                             function (Builder $query, $status): Builder {
                                 if ($status === 'finalizado') {
-                                    // Consideramos finalizado se tiver tradução, ingredientes, calorias e alergênicos
                                     return $query->whereNotNull('product_name_en')
                                                  ->where('product_name_en', '!=', '')
                                                  ->whereNotNull('ingredients')
@@ -253,17 +251,14 @@ class ProductResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
 
-                    // AÇÃO DE EXPORTAÇÃO CSV (Nativa, sem plugins extras)
                     BulkAction::make('export_csv')
                         ->label('Exportar CSV Selecionados')
                         ->icon('heroicon-o-arrow-down-tray')
                         ->color('success')
                         ->action(function (Collection $records) {
                             return response()->streamDownload(function () use ($records) {
-                                echo "\xEF\xBB\xBF"; // BOM para Excel abrir UTF-8 corretamente
+                                echo "\xEF\xBB\xBF";
                                 $handle = fopen('php://output', 'w');
-                                
-                                // Cabeçalhos
                                 fputcsv($handle, ['Cod. WinThor', 'Produto', 'Traducao', 'EAN', 'Curva', 'Status Importacao'], ';');
 
                                 foreach ($records as $record) {
@@ -276,13 +271,11 @@ class ProductResource extends Resource
                                         $record->import_status,
                                     ], ';');
                                 }
-
                                 fclose($handle);
                             }, 'produtos_exportacao_' . date('Y-m-d_H-i') . '.csv');
                         })
                         ->deselectRecordsAfterCompletion(),
 
-                    // AÇÃO HÍBRIDA MANUAL (Mantida do seu código anterior)
                     BulkAction::make('translate_hybrid')
                         ->label('Traduzir Selecionados (Auto)')
                         ->icon('heroicon-o-language')
