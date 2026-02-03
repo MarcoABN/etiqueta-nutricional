@@ -21,7 +21,6 @@ use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductResource extends Resource
 {
@@ -33,6 +32,7 @@ class ProductResource extends Resource
     {
         return $form
             ->extraAttributes([
+                // Script para pular para o próximo campo ao dar Enter
                 'x-on:keydown.enter.prevent' => <<<'JS'
                     let inputs = [...$el.closest('form').querySelectorAll('input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])')];
                     let index = inputs.indexOf($event.target);
@@ -48,10 +48,18 @@ class ProductResource extends Resource
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
-                                TextInput::make('codprod')->label('Cód. WinThor')->required()->numeric()->unique(ignoreRecord: true)->columnSpan(2),
-                                TextInput::make('barcode')->label('Cód. Barras')->unique(ignoreRecord: true)->columnSpan(3),
+                                TextInput::make('codprod')
+                                    ->label('Cód. WinThor')
+                                    ->required()
+                                    ->numeric()
+                                    ->unique(ignoreRecord: true)
+                                    ->columnSpan(2),
+                                TextInput::make('barcode')
+                                    ->label('Cód. Barras')
+                                    ->unique(ignoreRecord: true)
+                                    ->columnSpan(3),
                                 
-                                // --- NOVOS CAMPOS ---
+                                // --- SELETORES DE CURVA E STATUS ---
                                 Select::make('curve')
                                     ->label('Curva')
                                     ->options([
@@ -68,14 +76,18 @@ class ProductResource extends Resource
                                         'Em Análise' => 'Em Análise',
                                         'Liberado' => 'Liberado',
                                     ])
-                                    ->default('Bloqueado')
+                                    ->default('Bloqueado') // Garante valor padrão
                                     ->required()
                                     ->columnSpan(5)
                                     ->selectablePlaceholder(false),
-                                // ---------------------
 
-                                TextInput::make('product_name')->label('Nome do Produto')->required()->columnSpan(12),
-                                TextInput::make('product_name_en')->label('Nome (Inglês - Tradução)')->columnSpan(12),
+                                TextInput::make('product_name')
+                                    ->label('Nome do Produto')
+                                    ->required()
+                                    ->columnSpan(12),
+                                TextInput::make('product_name_en')
+                                    ->label('Nome (Inglês - Tradução)')
+                                    ->columnSpan(12),
                             ]),
                         
                         Forms\Components\Grid::make(6)
@@ -152,11 +164,26 @@ class ProductResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            // --- FIX DE PAGINAÇÃO ---
+            // Remove a opção 'all' para evitar estouro de memória com 14k itens
+            ->paginated([10, 25, 50, 100])
+            ->defaultPaginationPageOption(25)
+            // ------------------------
+
             ->columns([
-                Tables\Columns\TextColumn::make('codprod')->label('Cód. WinThor')->searchable()->sortable()->weight('bold'),
-                Tables\Columns\TextColumn::make('barcode')->label('EAN')->searchable()->color('gray')->copyable(),
+                Tables\Columns\TextColumn::make('codprod')
+                    ->label('Cód. WinThor')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
                 
-                // --- CORREÇÃO AQUI: Aceita NULL sem quebrar (removido 'string') ---
+                Tables\Columns\TextColumn::make('barcode')
+                    ->label('EAN')
+                    ->searchable()
+                    ->color('gray')
+                    ->copyable(),
+                
+                // --- FIX DE TIPAGEM: Removido 'string' para aceitar NULL ---
                 Tables\Columns\TextColumn::make('curve')
                     ->label('Curva')
                     ->badge()
@@ -166,7 +193,7 @@ class ProductResource extends Resource
                         'C' => 'danger',
                         default => 'gray',
                     })
-                    ->formatStateUsing(fn ($state) => $state ?? '-') // Mostra '-' se for null
+                    ->formatStateUsing(fn ($state) => $state ?? '-') // Trata visualmente o NULL
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('import_status')
@@ -178,9 +205,9 @@ class ProductResource extends Resource
                         'Bloqueado' => 'danger',
                         default => 'gray',
                     })
-                    ->formatStateUsing(fn ($state) => $state ?? 'Indefinido') // Mostra 'Indefinido' se for null
+                    ->formatStateUsing(fn ($state) => $state ?? 'Indefinido')
                     ->sortable(),
-                // ------------------------------------------------------------------
+                // -----------------------------------------------------------
 
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
@@ -251,14 +278,17 @@ class ProductResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
 
+                    // --- EXPORTAÇÃO CSV ---
                     BulkAction::make('export_csv')
                         ->label('Exportar CSV Selecionados')
                         ->icon('heroicon-o-arrow-down-tray')
                         ->color('success')
                         ->action(function (Collection $records) {
                             return response()->streamDownload(function () use ($records) {
-                                echo "\xEF\xBB\xBF";
+                                echo "\xEF\xBB\xBF"; // BOM para Excel
                                 $handle = fopen('php://output', 'w');
+                                
+                                // Cabeçalho do CSV
                                 fputcsv($handle, ['Cod. WinThor', 'Produto', 'Traducao', 'EAN', 'Curva', 'Status Importacao'], ';');
 
                                 foreach ($records as $record) {
@@ -276,6 +306,7 @@ class ProductResource extends Resource
                         })
                         ->deselectRecordsAfterCompletion(),
 
+                    // --- TRADUÇÃO HÍBRIDA ---
                     BulkAction::make('translate_hybrid')
                         ->label('Traduzir Selecionados (Auto)')
                         ->icon('heroicon-o-language')
@@ -285,7 +316,7 @@ class ProductResource extends Resource
                         ->action(function (Collection $records) {
                             $service = new GeminiFdaTranslator();
                             $processed = 0;
-                            set_time_limit(300);
+                            set_time_limit(300); // Aumenta tempo de execução
 
                             foreach ($records as $record) {
                                 if ($record->product_name_en) continue;
@@ -293,6 +324,9 @@ class ProductResource extends Resource
                                 if ($newName) {
                                     $record->update(['product_name_en' => $newName]);
                                     $processed++;
+                                    
+                                    // Pequeno delay para evitar Rate Limit (429) do Google
+                                    usleep(500000); // 0.5s
                                 }
                             }
                             Notification::make()->title("{$processed} itens traduzidos.")->success()->send();
