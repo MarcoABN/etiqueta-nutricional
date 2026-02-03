@@ -10,64 +10,63 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Section;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Livewire\Attributes\On; // Importante para ouvir eventos
 
 class NutritionalScanner extends Page implements HasForms
 {
     use InteractsWithForms;
 
     protected static ?string $navigationIcon = 'heroicon-o-qr-code';
-    protected static ?string $navigationLabel = 'Coletor Nutricional';
-    protected static ?string $title = 'Scanner de Rótulos';
+    protected static ?string $navigationLabel = 'Coletor Mobile';
+    protected static ?string $title = 'Scanner';
     protected static string $view = 'filament.pages.nutritional-scanner';
 
-    // Variáveis de Estado
     public $scannedCode = null;
     public $foundProduct = null;
-    public ?array $data = []; // Para armazenar o form
+    public ?array $data = [];
 
-    // Monta o formulário de upload APENAS se tiver produto
     public function form(Form $form): Form
     {
         return $form
             ->schema([
-                Section::make('Foto da Tabela Nutricional')
-                    ->description('Capture a foto focando bem nos números.')
+                Section::make('Foto da Tabela')
+                    ->heading('2. Capture a Tabela')
                     ->schema([
                         FileUpload::make('image_nutritional')
-                            ->label('Câmera / Arquivo')
+                            ->hiddenLabel()
                             ->image()
                             ->imageEditor()
                             ->imageEditorMode(2)
                             ->directory('uploads/nutritional')
                             ->required()
-                            ->columnSpanFull(),
+                            ->columnSpanFull()
+                            ->extraAttributes(['class' => 'w-full']), // Força largura total
                     ])
             ])
             ->statePath('data');
     }
 
-    // Função chamada pelo Javascript quando lê o código
     public function handleBarcodeScan($code)
     {
+        // Evita processar se já tiver encontrado (evita loops do scanner)
+        if ($this->foundProduct) return;
+
         $this->scannedCode = $code;
-        
-        // Busca o produto pelo EAN
         $product = Product::where('barcode', $code)->first();
 
         if ($product) {
             $this->foundProduct = $product;
-            // Carrega imagem existente se houver
             $this->form->fill([
                 'image_nutritional' => $product->image_nutritional,
             ]);
-            Notification::make()->title('Produto Encontrado: ' . $product->product_name)->success()->send();
+            Notification::make()->title("Produto: {$product->product_name}")->success()->send();
         } else {
-            $this->foundProduct = null;
-            Notification::make()->title('Produto não encontrado!')->warning()->send();
+            // Produto não encontrado: Avisa e reinicia scanner após 2s
+            Notification::make()->title("EAN {$code} não encontrado!")->danger()->send();
+            $this->dispatch('resume-camera'); // Manda o JS continuar lendo
         }
     }
 
-    // Salva a imagem no produto
     public function save()
     {
         $data = $this->form->getState();
@@ -77,19 +76,17 @@ class NutritionalScanner extends Page implements HasForms
                 'image_nutritional' => $data['image_nutritional']
             ]);
 
-            Notification::make()->title('Imagem salva com sucesso!')->success()->send();
-            
-            // Reseta para o próximo
+            Notification::make()->title('Salvo! Próximo...')->success()->send();
             $this->resetScanner();
         }
     }
 
+    #[On('reset-action')] 
     public function resetScanner()
     {
         $this->scannedCode = null;
         $this->foundProduct = null;
         $this->form->fill();
-        // Emite evento para o JS reiniciar a câmera se necessário
-        $this->dispatch('reset-scanner'); 
+        $this->dispatch('start-camera'); // Ordem explícita para o JS
     }
 }
