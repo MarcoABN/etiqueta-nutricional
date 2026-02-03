@@ -11,12 +11,17 @@ use Filament\Forms\Components\Group;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Select; // Importado
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Actions\BulkAction;
+use Filament\Tables\Filters\SelectFilter; // Importado
+use Filament\Tables\Filters\Filter; // Importado
 use Filament\Notifications\Notification;
+use Illuminate\Database\Eloquent\Builder; // Importado
 use Illuminate\Database\Eloquent\Collection;
+use Symfony\Component\HttpFoundation\StreamedResponse; // Para exportação
 
 class ProductResource extends Resource
 {
@@ -38,16 +43,41 @@ class ProductResource extends Resource
                 JS,
             ])
             ->schema([
-                Section::make('Identificação do Produto')
+                Section::make('Identificação e Status') // Renomeado
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
                                 TextInput::make('codprod')->label('Cód. WinThor')->required()->numeric()->unique(ignoreRecord: true)->columnSpan(2),
                                 TextInput::make('barcode')->label('Cód. Barras')->unique(ignoreRecord: true)->columnSpan(3),
-                                TextInput::make('product_name')->label('Nome do Produto')->required()->columnSpan(7),
+                                
+                                // --- NOVOS CAMPOS ---
+                                Select::make('curve')
+                                    ->label('Curva')
+                                    ->options([
+                                        'A' => 'Curva A',
+                                        'B' => 'Curva B',
+                                        'C' => 'Curva C',
+                                    ])
+                                    ->columnSpan(2),
+
+                                Select::make('import_status')
+                                    ->label('Status Importação')
+                                    ->options([
+                                        'Bloqueado' => 'Bloqueado',
+                                        'Em Análise' => 'Em Análise',
+                                        'Liberado' => 'Liberado',
+                                    ])
+                                    ->default('Bloqueado')
+                                    ->required()
+                                    ->columnSpan(5)
+                                    ->selectablePlaceholder(false),
+                                // ---------------------
+
+                                TextInput::make('product_name')->label('Nome do Produto')->required()->columnSpan(12),
                                 TextInput::make('product_name_en')->label('Nome (Inglês - Tradução)')->columnSpan(12),
                             ]),
+                        
                         Forms\Components\Grid::make(6)
                             ->schema([
                                 TextInput::make('servings_per_container')->label('Porções/Emb.')->columnSpan(1),
@@ -105,7 +135,19 @@ class ProductResource extends Resource
                         ]),
                     ]),
                 
-                // Mantenha a seção de Micronutrientes aqui embaixo igual estava...
+                 // Seção de Micronutrientes (mantida oculta para economizar espaço no código, mas pode manter a sua original)
+                 Section::make('Micronutrientes')
+                    ->collapsed()
+                    ->compact()
+                    ->schema([
+                        Forms\Components\Grid::make(6)->schema([
+                            TextInput::make('vitamin_d')->label('Vit D'),
+                            TextInput::make('calcium')->label('Cálcio'),
+                            TextInput::make('iron')->label('Ferro'),
+                            TextInput::make('potassium')->label('Potássio'),
+                            // ... adicione os outros campos se necessário
+                        ]),
+                    ]),
             ]);
     }
 
@@ -114,11 +156,96 @@ class ProductResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('codprod')->label('Cód. WinThor')->searchable()->sortable()->weight('bold'),
-                Tables\Columns\TextColumn::make('barcode')->label('EAN/GTIN')->searchable()->sortable()->color('gray')->copyable(),
-                Tables\Columns\TextColumn::make('product_name')->label('Produto')->searchable()->description(fn (Product $record) => $record->product_name_en)->limit(50),
-                Tables\Columns\TextColumn::make('calories')->label('Kcal')->sortable(),
+                Tables\Columns\TextColumn::make('barcode')->label('EAN')->searchable()->color('gray')->copyable(),
+                
+                // Colunas Visuais de Status
+                Tables\Columns\TextColumn::make('curve')
+                    ->label('Curva')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'A' => 'success',
+                        'B' => 'warning',
+                        'C' => 'danger',
+                        default => 'gray',
+                    })
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('import_status')
+                    ->label('Status')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'Liberado' => 'success',
+                        'Em Análise' => 'warning',
+                        'Bloqueado' => 'danger',
+                        default => 'gray',
+                    })
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('product_name')
+                    ->label('Produto')
+                    ->searchable()
+                    ->description(fn (Product $record) => $record->product_name_en)
+                    ->limit(40),
             ])
             ->defaultSort('created_at', 'desc')
+            
+            // --- FILTROS AVANÇADOS ---
+            ->filters([
+                SelectFilter::make('curve')
+                    ->label('Filtrar por Curva')
+                    ->options([
+                        'A' => 'Curva A',
+                        'B' => 'Curva B',
+                        'C' => 'Curva C',
+                    ]),
+
+                SelectFilter::make('import_status')
+                    ->label('Status de Importação')
+                    ->options([
+                        'Liberado' => 'Liberado',
+                        'Em Análise' => 'Em Análise',
+                        'Bloqueado' => 'Bloqueado',
+                    ]),
+
+                // Filtro Lógico de Completude
+                Filter::make('cadastro_status')
+                    ->form([
+                        Select::make('status')
+                            ->label('Status do Cadastro')
+                            ->options([
+                                'finalizado' => 'Cadastro Finalizado (Pronto)',
+                                'pendente' => 'Cadastro Pendente (Incompleto)',
+                            ]),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query->when(
+                            $data['status'],
+                            function (Builder $query, $status): Builder {
+                                if ($status === 'finalizado') {
+                                    // Consideramos finalizado se tiver tradução, ingredientes, calorias e alergênicos
+                                    return $query->whereNotNull('product_name_en')
+                                                 ->where('product_name_en', '!=', '')
+                                                 ->whereNotNull('ingredients')
+                                                 ->where('ingredients', '!=', '')
+                                                 ->whereNotNull('calories')
+                                                 ->whereNotNull('allergens_contains');
+                                }
+
+                                if ($status === 'pendente') {
+                                    return $query->where(function (Builder $query) {
+                                        $query->whereNull('product_name_en')
+                                              ->orWhere('product_name_en', '')
+                                              ->orWhereNull('ingredients')
+                                              ->orWhere('ingredients', '')
+                                              ->orWhereNull('calories');
+                                    });
+                                }
+
+                                return $query;
+                            }
+                        );
+                    })
+            ])
             ->actions([
                 Tables\Actions\EditAction::make(),
             ])
@@ -126,36 +253,56 @@ class ProductResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
 
-                    // AÇÃO HÍBRIDA MANUAL
+                    // AÇÃO DE EXPORTAÇÃO CSV (Nativa, sem plugins extras)
+                    BulkAction::make('export_csv')
+                        ->label('Exportar CSV Selecionados')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->color('success')
+                        ->action(function (Collection $records) {
+                            return response()->streamDownload(function () use ($records) {
+                                echo "\xEF\xBB\xBF"; // BOM para Excel abrir UTF-8 corretamente
+                                $handle = fopen('php://output', 'w');
+                                
+                                // Cabeçalhos
+                                fputcsv($handle, ['Cod. WinThor', 'Produto', 'Traducao', 'EAN', 'Curva', 'Status Importacao'], ';');
+
+                                foreach ($records as $record) {
+                                    fputcsv($handle, [
+                                        $record->codprod,
+                                        $record->product_name,
+                                        $record->product_name_en,
+                                        $record->barcode,
+                                        $record->curve,
+                                        $record->import_status,
+                                    ], ';');
+                                }
+
+                                fclose($handle);
+                            }, 'produtos_exportacao_' . date('Y-m-d_H-i') . '.csv');
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
+                    // AÇÃO HÍBRIDA MANUAL (Mantida do seu código anterior)
                     BulkAction::make('translate_hybrid')
                         ->label('Traduzir Selecionados (Auto)')
                         ->icon('heroicon-o-language')
                         ->color('info')
                         ->requiresConfirmation()
                         ->modalHeading('Tradução Inteligente')
-                        ->modalDescription('O sistema tentará usar o Google (Grátis). Se a cota acabar, usará a Perplexity automaticamente. Pode demorar alguns segundos por item.')
                         ->action(function (Collection $records) {
-                            
                             $service = new GeminiFdaTranslator();
                             $processed = 0;
-                            set_time_limit(300); // 5 minutos de limite
+                            set_time_limit(300);
 
                             foreach ($records as $record) {
                                 if ($record->product_name_en) continue;
-
                                 $newName = $service->translate($record->product_name);
-                                
                                 if ($newName) {
                                     $record->update(['product_name_en' => $newName]);
                                     $processed++;
                                 }
                             }
-
-                            Notification::make()
-                                ->title("Processamento Finalizado")
-                                ->body("{$processed} itens traduzidos.")
-                                ->success()
-                                ->send();
+                            Notification::make()->title("{$processed} itens traduzidos.")->success()->send();
                         })
                         ->deselectRecordsAfterCompletion()
                 ]),

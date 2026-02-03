@@ -30,4 +30,95 @@ class Product extends Model
             }
         });
     }
+
+    protected $fillable = [
+        // Identificação e Controle
+        'codprod',
+        'barcode',         // EAN/GTIN
+        'curve',           // A, B, C
+        'import_status',   // Bloqueado, Em Análise, Liberado
+        'product_name',
+        'product_name_en',
+        'imported_by',
+
+        // Porções
+        'servings_per_container',
+        'serving_weight',
+        'serving_size_quantity',
+        'serving_size_unit',
+
+        // Macronutrientes Principais
+        'calories',
+        'total_carb',
+        'total_carb_dv',
+        'total_sugars',
+        'added_sugars',
+        'added_sugars_dv',
+        'sugar_alcohol',
+        'protein',
+        'protein_dv',
+
+        // Gorduras
+        'total_fat',
+        'total_fat_dv',
+        'sat_fat',
+        'sat_fat_dv',
+        'trans_fat',
+        'trans_fat_dv',
+        'poly_fat',
+        'mono_fat',
+
+        // Outros
+        'fiber',
+        'fiber_dv',
+        'sodium',
+        'sodium_dv',
+        'cholesterol',
+        'cholesterol_dv',
+
+        // Micronutrientes
+        'vitamin_d',
+        'calcium',
+        'iron',
+        'potassium',
+        'vitamin_a',
+        'vitamin_c',
+        'vitamin_e',
+        'vitamin_k',
+        'thiamin',
+        'riboflavin',
+        'niacin',
+        'vitamin_b6',
+        'folate',
+        'vitamin_b12',
+        'biotin',
+        'pantothenic_acid',
+        'phosphorus',
+        'iodine',
+        'magnesium',
+        'zinc',
+        'selenium',
+        'copper',
+        'manganese',
+        'chromium',
+        'molybdenum',
+        'chloride',
+
+        // Textos Legais
+        'ingredients',
+        'allergens_contains',
+        'allergens_may_contain',
+    ];
+
+    /**
+     * Definição de valores padrão para atributos do modelo.
+     */
+    protected $attributes = [
+        'import_status' => 'Bloqueado',
+        'trans_fat' => '0',
+        'trans_fat_dv' => '0',
+        'cholesterol' => '0',
+        'cholesterol_dv' => '0',
+        'serving_size_unit' => 'Unit',
+    ];
 }
