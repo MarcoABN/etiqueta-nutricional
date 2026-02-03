@@ -13,7 +13,9 @@ class ListProducts extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()
+            ->label('Cadastrar')
+            ->icon('heroicon-o-plus'),
         ];
     }
 }

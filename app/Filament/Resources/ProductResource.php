@@ -28,6 +28,9 @@ class ProductResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?string $navigationLabel = 'Produtos';
 
+    protected static ?string $modelLabel = 'Produto'; // Singular (usado em "Editar Produto")
+    protected static ?string $pluralModelLabel = 'Produtos';
+
     public static function form(Form $form): Form
     {
         return $form
