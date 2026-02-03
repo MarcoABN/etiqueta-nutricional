@@ -12,7 +12,7 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\FileUpload; // Importado
+use Filament\Forms\Components\FileUpload;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -36,6 +36,7 @@ class ProductResource extends Resource
     {
         return $form
             ->extraAttributes([
+                // Script de navegação com Enter
                 'x-on:keydown.enter.prevent' => <<<'JS'
                     let inputs = [...$el.closest('form').querySelectorAll('input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])')];
                     let index = inputs.indexOf($event.target);
@@ -46,6 +47,7 @@ class ProductResource extends Resource
                 JS,
             ])
             ->schema([
+                // --- 1. IDENTIFICAÇÃO ---
                 Section::make('Identificação e Status')
                     ->compact()
                     ->schema([
@@ -90,46 +92,70 @@ class ProductResource extends Resource
                                 TextInput::make('product_name_en')
                                     ->label('Nome (Inglês - Tradução)')
                                     ->columnSpan(12),
+                                
+                                TextInput::make('imported_by')
+                                    ->label('Importado Por')
+                                    ->placeholder('Nome da empresa importadora')
+                                    ->columnSpan(12),
                             ]),
                         
                         Forms\Components\Grid::make(6)
                             ->schema([
-                                TextInput::make('servings_per_container')->label('Porções/Emb.')->columnSpan(1),
+                                TextInput::make('servings_per_container')->label('Porções/Emb.')->numeric()->columnSpan(1),
                                 TextInput::make('serving_weight')->label('Peso Porção')->columnSpan(1),
                                 TextInput::make('serving_size_quantity')->label('Qtd Medida')->columnSpan(2),
                                 TextInput::make('serving_size_unit')->label('Unidade')->columnSpan(2),
                             ]),
                     ]),
 
-                Section::make('Tabela Nutricional')
+                // --- 2. TABELA NUTRICIONAL (MACROS) ---
+                Section::make('Tabela Nutricional (Macronutrientes)')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(2)
                             ->schema([
+                                // Coluna Esquerda
                                 Group::make()->schema([
-                                    TextInput::make('calories')->label('Valor energético (kcal)')->extraInputAttributes(['class' => 'font-bold']),
+                                    TextInput::make('calories')
+                                        ->label('Valor energético (kcal)')
+                                        ->extraInputAttributes(['class' => 'font-bold text-lg']),
+                                    
                                     Forms\Components\Grid::make(4)->schema([
                                         TextInput::make('total_carb')->label('Carbo (g)')->columnSpan(3),
                                         TextInput::make('total_carb_dv')->label('%VD')->columnSpan(1),
+                                        
                                         TextInput::make('total_sugars')->label('Açúcares Tot (g)')->columnSpan(4),
                                         TextInput::make('added_sugars')->label('Açúcares Add (g)')->columnSpan(3),
                                         TextInput::make('added_sugars_dv')->label('%VD')->columnSpan(1),
+                                        
+                                        TextInput::make('sugar_alcohol')->label('Álcool de Açúcar (g)')->columnSpan(4),
+                                        
                                         TextInput::make('protein')->label('Proteínas (g)')->columnSpan(3),
                                         TextInput::make('protein_dv')->label('%VD')->columnSpan(1),
                                     ]),
                                 ]),
+
+                                // Coluna Direita
                                 Group::make()->schema([
                                     Forms\Components\Grid::make(4)->schema([
                                         TextInput::make('total_fat')->label('Gorduras Totais (g)')->columnSpan(3),
                                         TextInput::make('total_fat_dv')->label('%VD')->columnSpan(1),
+                                        
                                         TextInput::make('sat_fat')->label('Gord. Sat (g)')->columnSpan(3),
                                         TextInput::make('sat_fat_dv')->label('%VD')->columnSpan(1),
+                                        
                                         TextInput::make('trans_fat')->label('Gord. Trans (g)')->columnSpan(3),
                                         TextInput::make('trans_fat_dv')->label('%VD')->columnSpan(1),
+                                        
+                                        TextInput::make('poly_fat')->label('Gord. Poli (g)')->columnSpan(4),
+                                        TextInput::make('mono_fat')->label('Gord. Mono (g)')->columnSpan(4),
+                                        
                                         TextInput::make('fiber')->label('Fibras (g)')->columnSpan(3),
                                         TextInput::make('fiber_dv')->label('%VD')->columnSpan(1),
+                                        
                                         TextInput::make('sodium')->label('Sódio (mg)')->columnSpan(3),
                                         TextInput::make('sodium_dv')->label('%VD')->columnSpan(1),
+                                        
                                         TextInput::make('cholesterol')->label('Colesterol (mg)')->columnSpan(3),
                                         TextInput::make('cholesterol_dv')->label('%VD')->columnSpan(1),
                                     ]),
@@ -137,6 +163,7 @@ class ProductResource extends Resource
                             ]),
                     ]),
 
+                // --- 3. ROTULAGEM ---
                 Section::make('Rotulagem e Ingredientes')
                     ->compact()
                     ->schema([
@@ -149,34 +176,64 @@ class ProductResource extends Resource
                         ]),
                     ]),
                 
-                 Section::make('Micronutrientes')
-                    ->collapsed()
+                 // --- 4. MICRONUTRIENTES (COMPLETO) ---
+                 Section::make('Micronutrientes (Vitaminas e Minerais)')
+                    ->collapsible()
+                    ->collapsed() // Pode ficar fechado pois são muitos campos opcionais
                     ->compact()
                     ->schema([
-                        Forms\Components\Grid::make(6)->schema([
+                        Forms\Components\Grid::make(4)->schema([ // Grid de 4 colunas para caber tudo
                             TextInput::make('vitamin_d')->label('Vit D'),
                             TextInput::make('calcium')->label('Cálcio'),
                             TextInput::make('iron')->label('Ferro'),
                             TextInput::make('potassium')->label('Potássio'),
+                            
+                            TextInput::make('vitamin_a')->label('Vit A'),
+                            TextInput::make('vitamin_c')->label('Vit C'),
+                            TextInput::make('vitamin_e')->label('Vit E'),
+                            TextInput::make('vitamin_k')->label('Vit K'),
+                            
+                            TextInput::make('thiamin')->label('Tiamina (B1)'),
+                            TextInput::make('riboflavin')->label('Riboflavina (B2)'),
+                            TextInput::make('niacin')->label('Niacina (B3)'),
+                            TextInput::make('vitamin_b6')->label('Vit B6'),
+                            
+                            TextInput::make('folate')->label('Folato'),
+                            TextInput::make('vitamin_b12')->label('Vit B12'),
+                            TextInput::make('biotin')->label('Biotina'),
+                            TextInput::make('pantothenic_acid')->label('Ác. Pantotênico'),
+                            
+                            TextInput::make('phosphorus')->label('Fósforo'),
+                            TextInput::make('iodine')->label('Iodo'),
+                            TextInput::make('magnesium')->label('Magnésio'),
+                            TextInput::make('zinc')->label('Zinco'),
+                            
+                            TextInput::make('selenium')->label('Selênio'),
+                            TextInput::make('copper')->label('Cobre'),
+                            TextInput::make('manganese')->label('Manganês'),
+                            TextInput::make('chromium')->label('Cromo'),
+                            
+                            TextInput::make('molybdenum')->label('Molibdênio'),
+                            TextInput::make('chloride')->label('Cloreto'),
                         ]),
                     ]),
 
-                // --- NOVA SEÇÃO: IMAGEM / ANEXO ---
+                // --- 5. IMAGEM DO RÓTULO (VISÍVEL) ---
                 Section::make('Imagem do Rótulo')
-                    ->collapsed() // Mantém fechado para ser discreto
+                    ->description('Visualize a imagem capturada pelo scanner ou anexe manualmente.')
+                    ->collapsible() 
+                    ->collapsed(false) // <--- IMPORTANTE: Aberto por padrão para você conferir a foto
                     ->schema([
                         FileUpload::make('image_nutritional')
                             ->label('Foto Tabela Nutricional')
-                            ->helperText('Imagem capturada via mobile ou anexada manualmente.')
                             ->image()
-                            ->imageEditor() // Permite girar/cortar se upar do PC
-                            ->directory('uploads/nutritional') // Mesma pasta do scanner
+                            ->imageEditor()
+                            ->directory('uploads/nutritional') // Deve ser IDÊNTICO ao do Scanner
                             ->visibility('public')
-                            ->openable() // Permite clicar para ver a imagem original
-                            ->downloadable() // Permite baixar
+                            ->openable()
+                            ->downloadable()
                             ->columnSpanFull(),
                     ]),
-                // ----------------------------------
             ]);
     }
 
