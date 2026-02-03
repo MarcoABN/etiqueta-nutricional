@@ -9,8 +9,7 @@
         .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .fi-page { height: 100dvh; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
 
-        /* === FILEPOND OCULTO MAS FUNCIONAL === */
-        /* Essencial para que o clique via JS funcione */
+        /* === FILEPOND OCULTO === */
         .filepond--root {
             position: absolute !important; width: 1px !important; height: 1px !important;
             padding: 0 !important; margin: -1px !important; overflow: hidden !important;
@@ -18,7 +17,7 @@
             opacity: 0 !important; pointer-events: none;
         }
 
-        :root { --primary: #22c55e; --danger: #ef4444; }
+        :root { --primary: #22c55e; }
 
         .app-container {
             height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; background: #000;
@@ -30,12 +29,12 @@
         #reader { width: 100%; height: 100%; object-fit: cover; }
         #reader video { object-fit: cover; width: 100%; height: 100%; }
 
-        /* Elementos Visuais do Scanner */
         .scan-frame {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: min(75vw, 300px); height: 180px; pointer-events: none; z-index: 20;
             box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); border-radius: 12px;
         }
+        /* Cantos da mira */
         .scan-corner { position: absolute; width: 30px; height: 30px; border-color: var(--primary); }
         .scan-corner.tl { top: 0; left: 0; border-top: 4px solid; border-left: 4px solid; border-top-left-radius: 12px; }
         .scan-corner.tr { top: 0; right: 0; border-top: 4px solid; border-right: 4px solid; border-top-right-radius: 12px; }
@@ -59,7 +58,6 @@
             display: flex; flex-direction: column;
         }
 
-        /* Cabeçalho do Produto */
         .header-info {
             background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 100%);
             padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
@@ -71,16 +69,14 @@
             background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; margin-top: 4px;
         }
 
-        /* Área Central (Dinâmica) */
         .viewport-area {
             flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
             background: #000; overflow: hidden; padding: 20px;
         }
 
-        /* Estágio 1: Botão de Confirmação */
         .confirm-stage {
             display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center;
-            animation: fadeIn 0.3s ease-out; width: 100%;
+            width: 100%;
         }
         .confirm-btn {
             background: var(--primary); color: #000; border: none;
@@ -91,9 +87,8 @@
         }
         .confirm-btn:active { transform: scale(0.96); }
 
-        /* Estágio 2: Preview da Foto */
         .preview-stage {
-            width: 100%; height: 100%; display: none; /* Inicialmente oculto */
+            width: 100%; height: 100%; display: flex;
             flex-direction: column; align-items: center; justify-content: center;
         }
         .preview-image { 
@@ -101,7 +96,6 @@
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
-        /* Barra de Ações (Rodapé) */
         .controls-bar {
             height: 100px; background: #000; display: flex; align-items: center; justify-content: space-between;
             padding: 0 30px; border-top: 1px solid rgba(255,255,255,0.1);
@@ -113,14 +107,18 @@
         .save-btn {
             background: var(--primary); color: #000; width: 60px; height: 60px;
             box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); border: none;
-            display: none; /* Só aparece após foto */
         }
-        
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .save-btn:disabled { opacity: 0.5; filter: grayscale(1); }
+
         .hidden { display: none !important; }
     </style>
 
     <div class="app-container">
+
+        {{-- FORMULÁRIO INVISÍVEL (Fora do wire:ignore para funcionar o upload) --}}
+        <div style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; overflow: hidden">
+            {{ $this->form }}
+        </div>
 
         {{-- === VIEW 1: SCANNER === --}}
         <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
@@ -134,48 +132,72 @@
         </div>
 
         {{-- === VIEW 2: FLUXO DE CONFIRMAÇÃO E FOTO === --}}
-        <div id="photo-view" class="{{ $foundProduct ? '' : 'hidden' }}">
+        {{-- Usamos x-data para gerenciar o estado visual (Confirmar vs Preview) sem depender do Livewire --}}
+        <div id="photo-view" 
+             class="{{ $foundProduct ? '' : 'hidden' }}"
+             x-data="{ 
+                 mode: 'confirm',
+                 init() {
+                     // Se já existir imagem salva no produto, mostra preview
+                     if (@js(!empty($foundProduct->image_nutritional))) {
+                        this.mode = 'preview';
+                     }
+                 }
+             }"
+             @reset-scanner.window="mode = 'confirm'"
+        >
             
             <div class="header-info">
                 <h2>{{ $foundProduct?->product_name ?? 'Produto Identificado' }}</h2>
                 <span>EAN: {{ $scannedCode }}</span>
             </div>
 
-            <div class="viewport-area">
+            {{-- 
+               wire:ignore aqui é CRUCIAL. 
+               Ele impede que o Livewire 'resete' essa div para o estado inicial 
+               quando você clica em Salvar e ele faz o request pro servidor.
+            --}}
+            <div class="viewport-area" wire:ignore>
                 
                 {{-- ESTÁGIO 1: Confirmação --}}
-                <div id="stage-confirm" class="confirm-stage">
-                    <p class="text-gray-400 text-sm">Confirme se o produto acima está correto para prosseguir com a foto.</p>
-                    
-                    {{-- O BOTÃO QUE ABRE A CÂMERA --}}
+                <div class="confirm-stage" x-show="mode === 'confirm'">
+                    <p class="text-gray-400 text-sm">Confirme o produto para tirar a foto.</p>
                     <button id="btn-confirm-capture" class="confirm-btn">
                         <x-heroicon-o-camera class="w-6 h-6"/>
-                        CONFIRMAR E FOTOGRAFAR
+                        FOTOGRAFAR
                     </button>
                 </div>
 
-                {{-- ESTÁGIO 2: Preview (Aparece após tirar foto) --}}
-                <div id="stage-preview" class="preview-stage">
+                {{-- ESTÁGIO 2: Preview --}}
+                <div class="preview-stage" x-show="mode === 'preview'" style="display: none;">
                     <img id="local-preview" class="preview-image" alt="Preview">
                     <button id="btn-retake" class="text-gray-400 text-xs mt-4 underline p-2">Tirar outra foto</button>
                 </div>
 
-                {{-- O Componente Livewire REAL (Totalmente Invisível) --}}
-                <div style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;">
-                    {{ $this->form }}
-                </div>
             </div>
 
             <div class="controls-bar">
-                {{-- Cancelar / Voltar --}}
+                {{-- Cancelar --}}
                 <button wire:click="resetScanner" class="icon-btn">
                     <x-heroicon-o-x-mark class="w-6 h-6"/>
                 </button>
 
-                {{-- Salvar (Só aparece no Estágio 2) --}}
-                <button id="btn-save" wire:click="save" class="icon-btn save-btn">
-                    <x-heroicon-m-check class="w-8 h-8"/>
-                </button>
+                {{-- Salvar (Aparece apenas se mode == preview) --}}
+                <div x-show="mode === 'preview'" style="display: none;">
+                    <button wire:click="save" wire:loading.attr="disabled" class="icon-btn save-btn">
+                        {{-- Ícone Normal --}}
+                        <span wire:loading.remove>
+                            <x-heroicon-m-check class="w-8 h-8"/>
+                        </span>
+                        {{-- Spinner de Carregamento --}}
+                        <span wire:loading>
+                            <svg class="animate-spin h-6 w-6 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -187,42 +209,32 @@
             // Elementos DOM
             const btnConfirm = document.getElementById('btn-confirm-capture');
             const btnRetake = document.getElementById('btn-retake');
-            const btnSave = document.getElementById('btn-save');
-            const stageConfirm = document.getElementById('stage-confirm');
-            const stagePreview = document.getElementById('stage-preview');
             const previewImg = document.getElementById('local-preview');
 
-            // === AÇÃO DE CLICK FÍSICO (Resolve o problema de segurança) ===
+            // Função para abrir câmera
             function openCamera() {
-                // Busca o input criado pelo Filament
+                // Procura o input file gerado pelo Filament
                 const fileInput = document.querySelector('input[type="file"].filepond--browser');
                 
                 if (fileInput) {
-                    // Prepara o listener para quando a foto for tirada
                     fileInput.onchange = (e) => {
                         if (e.target.files && e.target.files[0]) {
                             const file = e.target.files[0];
-                            
-                            // Cria preview imediato
                             previewImg.src = URL.createObjectURL(file);
                             
-                            // Troca a UI de "Confirmar" para "Preview"
-                            stageConfirm.style.display = 'none';
-                            stagePreview.style.display = 'flex';
-                            btnSave.style.display = 'flex'; // Mostra botão salvar
+                            // Atualiza o estado do Alpine JS para mostrar o preview
+                            // Isso é persistente graças ao wire:ignore
+                            document.getElementById('photo-view')._x_dataStack[0].mode = 'preview';
                         }
                     };
-                    // Abre câmera nativa
                     fileInput.click();
                 } else {
-                    alert("Erro: Input de câmera não encontrado.");
+                    alert("Erro no componente de câmera. Atualize a página.");
                 }
             }
 
-            // Bind nos botões
             if(btnConfirm) btnConfirm.addEventListener('click', openCamera);
             if(btnRetake) btnRetake.addEventListener('click', openCamera);
-
 
             // === LÓGICA DO SCANNER ===
             async function startScanner() {
@@ -231,7 +243,6 @@
                 const devices = await Html5Qrcode.getCameras();
                 if (!devices || !devices.length) return;
 
-                // Seleção de câmera (Prioriza traseira/não-wide)
                 let cameraId = devices[0].id;
                 const backCameras = devices.filter(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('traseira'));
                 
@@ -244,15 +255,9 @@
                 
                 html5QrCode.start(
                     { deviceId: { exact: cameraId } }, 
-                    { 
-                        fps: 10, 
-                        qrbox: { width: 250, height: 150 },
-                        aspectRatio: 1.77 
-                    },
+                    { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 },
                     (decodedText) => {
                         stopScanner();
-                        // Ao ler, o Livewire atualiza o state e mostra a view #photo-view
-                        // O usuário verá o botão "Confirmar"
                         @this.handleBarcodeScan(decodedText);
                     },
                     () => {}
@@ -265,17 +270,12 @@
                 }
             }
 
-            // Inicia
             startScanner();
 
-            // Listeners Livewire para resetar a interface visual
+            // Listeners
             Livewire.on('reset-scanner', () => {
-                // Reseta UI para estado inicial
-                stagePreview.style.display = 'none';
-                stageConfirm.style.display = 'flex';
-                btnSave.style.display = 'none';
+                // O evento @reset-scanner.window no HTML cuida do Alpine
                 previewImg.src = '';
-                
                 setTimeout(startScanner, 500);
             });
             
