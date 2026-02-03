@@ -22,6 +22,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile; // Importante
 
 class ProductResource extends Resource
 {
@@ -36,7 +37,6 @@ class ProductResource extends Resource
     {
         return $form
             ->extraAttributes([
-                // Script de navegação com Enter
                 'x-on:keydown.enter.prevent' => <<<'JS'
                     let inputs = [...$el.closest('form').querySelectorAll('input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])')];
                     let index = inputs.indexOf($event.target);
@@ -47,7 +47,6 @@ class ProductResource extends Resource
                 JS,
             ])
             ->schema([
-                // --- 1. IDENTIFICAÇÃO ---
                 Section::make('Identificação e Status')
                     ->compact()
                     ->schema([
@@ -108,13 +107,11 @@ class ProductResource extends Resource
                             ]),
                     ]),
 
-                // --- 2. TABELA NUTRICIONAL (MACROS) ---
                 Section::make('Tabela Nutricional (Macronutrientes)')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(2)
                             ->schema([
-                                // Coluna Esquerda
                                 Group::make()->schema([
                                     TextInput::make('calories')
                                         ->label('Valor energético (kcal)')
@@ -135,7 +132,6 @@ class ProductResource extends Resource
                                     ]),
                                 ]),
 
-                                // Coluna Direita
                                 Group::make()->schema([
                                     Forms\Components\Grid::make(4)->schema([
                                         TextInput::make('total_fat')->label('Gorduras Totais (g)')->columnSpan(3),
@@ -163,7 +159,6 @@ class ProductResource extends Resource
                             ]),
                     ]),
 
-                // --- 3. ROTULAGEM ---
                 Section::make('Rotulagem e Ingredientes')
                     ->compact()
                     ->schema([
@@ -176,13 +171,12 @@ class ProductResource extends Resource
                         ]),
                     ]),
                 
-                 // --- 4. MICRONUTRIENTES (COMPLETO) ---
                  Section::make('Micronutrientes (Vitaminas e Minerais)')
                     ->collapsible()
-                    ->collapsed() // Pode ficar fechado pois são muitos campos opcionais
+                    ->collapsed()
                     ->compact()
                     ->schema([
-                        Forms\Components\Grid::make(4)->schema([ // Grid de 4 colunas para caber tudo
+                        Forms\Components\Grid::make(4)->schema([
                             TextInput::make('vitamin_d')->label('Vit D'),
                             TextInput::make('calcium')->label('Cálcio'),
                             TextInput::make('iron')->label('Ferro'),
@@ -218,17 +212,22 @@ class ProductResource extends Resource
                         ]),
                     ]),
 
-                // --- 5. IMAGEM DO RÓTULO (VISÍVEL) ---
                 Section::make('Imagem do Rótulo')
                     ->description('Visualize a imagem capturada pelo scanner ou anexe manualmente.')
                     ->collapsible() 
-                    ->collapsed(false) // <--- IMPORTANTE: Aberto por padrão para você conferir a foto
+                    ->collapsed(false)
                     ->schema([
                         FileUpload::make('image_nutritional')
                             ->label('Foto Tabela Nutricional')
                             ->image()
                             ->imageEditor()
-                            ->directory('uploads/nutritional') // Deve ser IDÊNTICO ao do Scanner
+                            ->directory('uploads/nutritional')
+                            // --- RENOMEAÇÃO PERSONALIZADA (RESOURCE) ---
+                            ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file, $get) {
+                                $cod = $get('codprod') ?? 'SEM_COD';
+                                return "{$cod}_nutri_" . time() . '.' . $file->getClientOriginalExtension();
+                            })
+                            // ------------------------------------------
                             ->visibility('public')
                             ->openable()
                             ->downloadable()

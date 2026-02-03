@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile; // Importante
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -40,6 +41,13 @@ class NutritionalScanner extends Page implements HasForms
                     ->imageResizeTargetHeight(1080)
                     ->imageResizeUpscale(false)
                     ->directory('uploads/nutritional')
+                    // --- RENOMEAÇÃO PERSONALIZADA ---
+                    ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file) {
+                        $cod = $this->foundProduct->codprod ?? 'SEM_COD';
+                        // Adicionamos timestamp para evitar cache de navegador se atualizar a foto
+                        return "{$cod}_nutri_" . time() . '.' . $file->getClientOriginalExtension();
+                    })
+                    // -------------------------------
                     ->required()
                     ->extraAttributes(['id' => 'nutritional-upload-component'])
                     ->extraInputAttributes([
