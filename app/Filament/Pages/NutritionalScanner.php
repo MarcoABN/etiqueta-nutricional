@@ -11,8 +11,9 @@ use Livewire\Attributes\On;
 class NutritionalScanner extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-camera';
-    protected static ?string $navigationLabel = 'Scanner App';
-    protected static ?string $title = 'Coletor de Rótulos';
+    //protected static ?string $navigationLabel = 'Scanner App';
+    protected static ?string $title = '';
+    protected static ?string $navigationLabel = 'Coletor Nutricional';
     protected static string $view = 'filament.pages.nutritional-scanner';
 
     public $viewState = 'scan'; // 'scan' | 'capture'
