@@ -3,79 +3,102 @@
 namespace App\Filament\Pages;
 
 use App\Models\Product;
-use Filament\Pages\Page;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Section;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\Storage;
-use Livewire\Attributes\On;
+use Filament\Pages\Page;
 
-class NutritionalScanner extends Page
+class NutritionalScanner extends Page implements HasForms
 {
-    protected static ?string $navigationIcon = 'heroicon-o-camera';
-    //protected static ?string $navigationLabel = 'Scanner App';
-    protected static ?string $title = '';
+    use InteractsWithForms;
+
+    protected static ?string $navigationIcon = 'heroicon-o-qr-code';
     protected static ?string $navigationLabel = 'Coletor Nutricional';
+    
+    // Deixe vazio para remover o cabeçalho padrão e ganhar espaço no mobile
+    protected static ?string $title = ''; 
+    
     protected static string $view = 'filament.pages.nutritional-scanner';
 
-    public $viewState = 'scan'; // 'scan' | 'capture'
-    public $scannedProduct = null;
+    // --- ESTAS VARIÁVEIS SÃO OBRIGATÓRIAS ---
     public $scannedCode = null;
+    public $foundProduct = null; // <--- O ERRO OCORRE SE ESTA LINHA FALTAR
+    public ?array $data = []; 
+    // ----------------------------------------
 
-    public function mount()
+    public function mount(): void
     {
-        $this->resetScanner();
+        // Garante que o formulário inicie vazio
+        $this->form->fill();
+    }
+
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Section::make('Foto da Tabela Nutricional')
+                    ->schema([
+                        FileUpload::make('image_nutritional')
+                            ->label('Câmera / Arquivo')
+                            ->image()
+                            ->imageEditor()
+                            ->imageEditorMode(2)
+                            ->directory('uploads/nutritional')
+                            ->required()
+                            ->columnSpanFull(),
+                    ])
+            ])
+            ->statePath('data');
     }
 
     public function handleBarcodeScan($code)
     {
-        if ($this->viewState !== 'scan') return;
-
         $this->scannedCode = $code;
+        
+        // Busca o produto pelo EAN
         $product = Product::where('barcode', $code)->first();
 
         if ($product) {
-            $this->scannedProduct = $product;
-            $this->viewState = 'capture'; 
-            $this->dispatch('start-photo-camera'); 
+            $this->foundProduct = $product;
             
-            // Som de sucesso (opcional no front) e notificação curta
-            Notification::make()->title("Encontrado: {$product->product_name}")->success()->duration(2000)->send();
+            // Carrega imagem existente se houver
+            $this->form->fill([
+                'image_nutritional' => $product->image_nutritional,
+            ]);
+            
+            // Toca um som ou notifica (opcional)
+            // Notification::make()->title('Encontrado: ' . $product->product_name)->success()->send();
         } else {
-            Notification::make()->title("EAN {$code} não cadastrado!")->danger()->duration(3000)->send();
-            $this->dispatch('resume-scanner');
+            $this->foundProduct = null;
+            Notification::make()->title('EAN não encontrado: ' . $code)->warning()->send();
         }
     }
 
-    public function savePhoto($base64Image)
+    public function save()
     {
-        if (!$this->scannedProduct) return;
+        $data = $this->form->getState();
 
-        // Processa a imagem Base64
-        $imageParts = explode(";base64,", $base64Image);
-        $imageTypeAux = explode("image/", $imageParts[0]);
-        $imageType = $imageTypeAux[1] ?? 'jpeg';
-        $imageBase64 = base64_decode($imageParts[1]);
+        if ($this->foundProduct) {
+            $this->foundProduct->update([
+                'image_nutritional' => $data['image_nutritional']
+            ]);
 
-        $fileName = 'nutritional_' . $this->scannedProduct->id . '_' . time() . '.' . $imageType;
-        $path = 'uploads/nutritional/' . $fileName;
-
-        Storage::disk('public')->put($path, $imageBase64);
-
-        $this->scannedProduct->update([
-            'image_nutritional' => $path
-        ]);
-
-        Notification::make()->title('Foto Salva!')->success()->duration(1500)->send();
-        
-        // REINÍCIO AUTOMÁTICO IMEDIATO
-        $this->resetScanner();
+            Notification::make()->title('Foto salva!')->success()->send();
+            
+            $this->resetScanner();
+        }
     }
 
-    #[On('reset-action')] 
     public function resetScanner()
     {
-        $this->viewState = 'scan';
-        $this->scannedProduct = null;
         $this->scannedCode = null;
-        $this->dispatch('start-scanner'); 
+        $this->foundProduct = null;
+        $this->form->fill();
+        
+        // Avisa o Front-end para religar a câmera
+        $this->dispatch('reset-scanner'); 
     }
 }
