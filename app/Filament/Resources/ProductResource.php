@@ -276,7 +276,7 @@ class ProductResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    
 
                     // --- EXPORTAÇÃO CSV ---
                     BulkAction::make('export_csv')
