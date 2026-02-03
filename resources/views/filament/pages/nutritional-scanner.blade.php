@@ -207,8 +207,10 @@
             background: rgba(0,0,0,0.85);
             backdrop-filter: blur(10px);
             padding: 0.875rem 1rem;
+            padding-right: 5.5rem; /* Espaço para o badge */
             border-bottom: 1px solid rgba(255,255,255,0.1);
             flex-shrink: 0;
+            position: relative;
         }
 
         .product-name {
@@ -217,6 +219,11 @@
             font-weight: 600;
             line-height: 1.3;
             margin-bottom: 0.25rem;
+            /* Garante que não seja cortado */
+            overflow: visible;
+            text-overflow: clip;
+            white-space: normal;
+            word-wrap: break-word;
         }
 
         .product-ean {
@@ -354,7 +361,7 @@
             transform: scale(0.82);
         }
 
-        /* Badge */
+        /* Badge - reposicionado para não sobrepor */
         .status-badge {
             position: absolute;
             top: 0.875rem;
@@ -370,6 +377,37 @@
             letter-spacing: 0.05em;
             text-transform: uppercase;
             z-index: 5;
+        }
+
+        /* Botão trocar câmera no modo foto */
+        .camera-switch-photo {
+            position: absolute;
+            bottom: 0.875rem;
+            right: 0.875rem;
+            width: 44px;
+            height: 44px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 15;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .camera-switch-photo:active {
+            transform: scale(0.9);
+            background: rgba(0,0,0,0.7);
+        }
+
+        .camera-switch-photo svg {
+            width: 22px;
+            height: 22px;
+            color: #fff;
         }
 
         /* Utilitários */
@@ -445,6 +483,14 @@
                     </svg>
                     <div class="camera-hint">Toque para capturar</div>
                 </div>
+
+                {{-- Botão trocar câmera (modo foto) --}}
+                <button id="switch-camera-photo-btn" class="camera-switch-photo" title="Trocar câmera">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
 
             </div>
 
@@ -677,13 +723,36 @@
 
             // ===== EVENT LISTENERS =====
             
-            // Botão de trocar câmera
+            // Botão de trocar câmera (modo scanner)
             const switchBtn = document.getElementById('switch-camera-btn');
             if (switchBtn) {
                 switchBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     switchCamera();
+                });
+            }
+
+            // Botão de trocar câmera (modo foto)
+            // Este botão serve para indicar ao usuário que ele pode trocar de câmera
+            // quando o input nativo de arquivo abrir
+            const switchPhotoBtn = document.getElementById('switch-camera-photo-btn');
+            if (switchPhotoBtn) {
+                switchPhotoBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Força o input do Filament a abrir
+                    const fileInput = document.querySelector('#nutritional-upload-component input[type="file"]');
+                    if (fileInput) {
+                        fileInput.click();
+                    } else {
+                        // Fallback: tenta encontrar qualquer input file
+                        const anyFileInput = document.querySelector('.camera-trigger input[type="file"]');
+                        if (anyFileInput) {
+                            anyFileInput.click();
+                        }
+                    }
                 });
             }
 
