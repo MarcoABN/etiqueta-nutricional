@@ -6,16 +6,13 @@ use App\Models\Product;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\Storage;
-use Livewire\WithFileUploads;
-use Livewire\Attributes\Validate; // Importante para validação
 
 class NutritionalScanner extends Page implements HasForms
 {
     use InteractsWithForms;
-    use WithFileUploads;
 
     protected static ?string $navigationIcon = 'heroicon-o-qr-code';
     protected static ?string $navigationLabel = 'Coletor Nutricional';
@@ -24,21 +21,39 @@ class NutritionalScanner extends Page implements HasForms
 
     public $scannedCode = null;
     public $foundProduct = null;
-
-    // Validação: Máximo 12MB, tipos de imagem aceitos
-    #[Validate('image|max:12288')] 
-    public $photo; 
-
-    public $step = 'scan'; 
+    public ?array $data = [];
 
     public function mount(): void
     {
-        $this->step = 'scan';
+        $this->form->fill();
     }
 
     public function form(Form $form): Form
     {
-        return $form->schema([])->statePath('data');
+        return $form
+            ->schema([
+                FileUpload::make('image_nutritional')
+                    ->hiddenLabel() // Esconde label padrão
+                    ->image()
+                    ->imageResizeMode('contain')
+                    ->imageResizeTargetWidth(1080) // Otimização Full HD
+                    ->imageResizeTargetHeight(1920)
+                    ->imageResizeUpscale(false)
+                    ->optimize('webp')
+                    ->directory('uploads/nutritional')
+                    ->required()
+                    ->extraAttributes(['class' => 'camera-upload-zone']) // Classe para nosso CSS customizado
+                    ->extraInputAttributes([
+                        'capture' => 'environment',
+                        'accept' => 'image/*'
+                    ])
+                    ->panelLayout('integrated')
+                    ->removeUploadedFileButtonPosition('right')
+                    ->uploadButtonPosition('left')
+                    ->uploadProgressIndicatorPosition('left')
+                    ->columnSpanFull(),
+            ])
+            ->statePath('data');
     }
 
     public function handleBarcodeScan($code)
@@ -48,67 +63,38 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            $this->reset('photo');
-
-            if (!empty($product->image_nutritional)) {
-                $this->step = 'preview';
-            } else {
-                $this->step = 'confirm';
-            }
+            // Se já tiver imagem, preenche
+            $this->form->fill([
+                'image_nutritional' => $product->image_nutritional,
+            ]);
         } else {
+            // Zera e avisa erro
             $this->foundProduct = null;
-            $this->step = 'scan';
-            Notification::make()->title('Produto não encontrado')->body($code)->danger()->send();
+            Notification::make()
+                ->title('EAN não encontrado')
+                ->body("Código: {$code}")
+                ->danger()
+                ->persistent() // Fica na tela até clicar
+                ->send();
+            
+            // Reabre o scanner automaticamente após erro
             $this->dispatch('reset-scanner-error');
-        }
-    }
-
-    // Este método roda assim que o upload termina (com sucesso ou falha)
-    public function updatedPhoto()
-    {
-        // Se houver erros de validação (ex: arquivo grande), o Livewire preenche a ErrorBag
-        $this->validateOnly('photo');
-
-        // Se passou da validação, muda a etapa
-        if ($this->photo) {
-            $this->step = 'preview';
         }
     }
 
     public function save()
     {
-        if (!$this->foundProduct) return;
+        $data = $this->form->getState();
 
-        // Valida novamente antes de salvar
-        $this->validate([
-            'photo' => 'nullable|image|max:12288',
-        ]);
+        if ($this->foundProduct && !empty($data['image_nutritional'])) {
+            $this->foundProduct->update([
+                'image_nutritional' => $data['image_nutritional']
+            ]);
 
-        if (!$this->photo && empty($this->foundProduct->image_nutritional)) {
-            Notification::make()->title('Nenhuma imagem detectada.')->warning()->send();
-            return;
-        }
-
-        try {
-            if ($this->photo) {
-                $cod = preg_replace('/[^A-Za-z0-9\-]/', '', $this->foundProduct->codprod ?? 'SEM_COD');
-                $filename = "{$cod}_nutri_" . time() . '.' . $this->photo->getClientOriginalExtension();
-                
-                $path = $this->photo->storeAs('uploads/nutritional', $filename, 'public');
-
-                $oldImage = $this->foundProduct->image_nutritional;
-                if ($oldImage && $oldImage !== $path && Storage::disk('public')->exists($oldImage)) {
-                    Storage::disk('public')->delete($oldImage);
-                }
-
-                $this->foundProduct->update(['image_nutritional' => $path]);
-            }
-
-            Notification::make()->title('Salvo com sucesso!')->success()->send();
+            Notification::make()->title('Foto Salva!')->success()->duration(1500)->send();
             $this->resetScanner();
-
-        } catch (\Exception $e) {
-            Notification::make()->title('Erro ao salvar')->body($e->getMessage())->danger()->send();
+        } else {
+             Notification::make()->title('Tire a foto primeiro!')->warning()->send();
         }
     }
 
@@ -116,8 +102,7 @@ class NutritionalScanner extends Page implements HasForms
     {
         $this->scannedCode = null;
         $this->foundProduct = null;
-        $this->photo = null;
-        $this->step = 'scan'; 
+        $this->form->fill();
         $this->dispatch('reset-scanner'); 
     }
 }
