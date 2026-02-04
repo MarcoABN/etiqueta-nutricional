@@ -10,7 +10,6 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -25,14 +24,19 @@ class NutritionalScanner extends Page implements HasForms
     public $foundProduct = null;
     public ?array $data = [];
 
-    public function mount(): void { $this->form->fill(); }
+    public function mount(): void 
+    { 
+        $this->form->fill(); 
+    }
 
     public function form(Form $form): Form
     {
         return $form
             ->schema([
+                // Mantemos o componente no DOM mas escondemos via CSS para o JS conseguir acessá-lo
                 FileUpload::make('image_nutritional')
-                    ->hidden() // Fica oculto pois o upload agora é controlado via processCroppedImage
+                    ->extraAttributes(['id' => 'hidden-file-input', 'style' => 'display: none !important'])
+                    ->hiddenLabel()
                     ->image()
                     ->directory('uploads/nutritional')
                     ->disk('public')
@@ -42,7 +46,7 @@ class NutritionalScanner extends Page implements HasForms
     }
 
     /**
-     * Recebe a imagem do Cropper.js (Base64), salva no storage e atualiza o estado.
+     * Recebe a imagem do Cropper.js (Base64), salva e vincula ao produto.
      */
     public function processCroppedImage(string $base64Data)
     {
@@ -56,13 +60,13 @@ class NutritionalScanner extends Page implements HasForms
 
                 Storage::disk('public')->put($path, $image);
 
-                // Sincroniza com o estado do formulário para o método save() funcionar
+                // Atualiza o estado para que o save() funcione
                 $this->data['image_nutritional'] = $path;
                 
                 return true;
             }
         } catch (\Exception $e) {
-            Notification::make()->title('Erro ao processar imagem')->danger()->send();
+            Notification::make()->title('Erro no processamento')->danger()->send();
         }
         return false;
     }
@@ -74,7 +78,7 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            $this->form->fill(['image_nutritional' => null]); 
+            $this->data['image_nutritional'] = null;
         } else {
             $this->foundProduct = null;
             Notification::make()->title('EAN não cadastrado')->danger()->send();
@@ -84,13 +88,12 @@ class NutritionalScanner extends Page implements HasForms
 
     public function save()
     {
-        // Pega o estado atual (que foi preenchido pelo processCroppedImage)
         if ($this->foundProduct && !empty($this->data['image_nutritional'])) {
             $this->foundProduct->update([
                 'image_nutritional' => $this->data['image_nutritional']
             ]);
 
-            Notification::make()->title('Dados salvos com sucesso!')->success()->send();
+            Notification::make()->title('Salvo com sucesso!')->success()->send();
             $this->resetScanner();
         }
     }
