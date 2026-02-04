@@ -37,30 +37,29 @@ class NutritionalScanner extends Page implements HasForms
                     ->label('Foto da Tabela')
                     ->image()
                     
-                    // --- OTIMIZAÇÃO DE EDITOR (CROP) ---
+                    // --- CONFIGURAÇÃO DE CORTE LIVRE (FREE CROP) ---
                     ->imageEditor()
-                    ->imageEditorMode(2) // Modo 2 = Modal (Tela cheia no mobile)
+                    ->imageEditorMode(2) // Modo Modal (Tela Cheia)
                     
-                    // 1. Define que não há proporção inicial forçada
-                    ->imageCropAspectRatio(null) 
+                    // 1. Define que a proporção inicial é livre
+                    ->imageCropAspectRatio(null)
                     
-                    // 2. Define explicitamente as opções disponíveis no rodapé do editor.
-                    // O 'null' é o segredo: ele habilita o botão "Custom/Livre"
+                    // 2. FORÇA O MODO LIVRE:
+                    // Passando apenas [null], removemos as opções pré-definidas (1:1, 16:9).
+                    // Isso obriga o editor a mostrar apenas a opção "Custom/Livre".
                     ->imageEditorAspectRatios([
-                        null,   // Ícone de corte livre (Free)
-                        '16:9',
-                        '4:3',
-                        '1:1',
+                        null, 
                     ])
                     
-                    // --- OTIMIZAÇÃO DE ARQUIVO ---
-                    // Removemos resize na entrada para manter qualidade máxima p/ crop
-                    ->imageResizeTargetWidth('2000') // Resize apenas na saída final
+                    // --- Otimização de Qualidade ---
+                    // Alvo alto (2000px) para garantir leitura do OCR após o crop
+                    ->imageResizeTargetWidth('2000')
                     ->imageResizeTargetHeight('2000')
+                    
                     ->directory('uploads/nutritional')
                     ->disk('public')
                     
-                    // Configuração para abrir câmera traseira (mobile)
+                    // Configurações para mobile (Câmera Traseira)
                     ->extraInputAttributes([
                         'capture' => 'environment',
                         'accept' => 'image/*'
@@ -71,77 +70,77 @@ class NutritionalScanner extends Page implements HasForms
     }
 
     /**
-     * Ação manual disparada pelo botão "Confirmar e Processar IA"
+     * Ação manual disparada pelo botão "Confirmar e Processar IA" na View
      */
     public function processImage()
     {
         $state = $this->form->getState();
 
-        // Validação simples
+        // Validações básicas
         if (!$this->foundProduct) {
-            Notification::make()->title('Nenhum produto selecionado.')->danger()->send();
+            Notification::make()->title('Erro: Nenhum produto selecionado.')->danger()->send();
             return;
         }
 
         if (empty($state['image_nutritional'])) {
-            Notification::make()->title('Por favor, tire a foto da tabela.')->warning()->send();
+            Notification::make()->title('Atenção: Tire a foto da tabela antes de enviar.')->warning()->send();
             return;
         }
 
-        // 1. Salva a imagem recortada no banco
+        // 1. Salva a imagem (já recortada) no banco de dados
         $this->foundProduct->update([
             'image_nutritional' => $state['image_nutritional']
         ]);
 
-        // 2. Dispara o Job para a IA (Ollama)
-        // Isso roda em background para não travar a tela
+        // 2. Dispara o Job de Inteligência Artificial
+        // O Job vai ler a imagem otimizada e traduzir/extrair dados
         ProcessProductImage::dispatch($this->foundProduct);
 
         Notification::make()
-            ->title('Imagem enviada! A IA está lendo a tabela...')
+            ->title('Imagem enviada! A IA está processando...')
             ->success()
             ->send();
 
-        // 3. Limpa tudo para o próximo produto
+        // 3. Reinicia o scanner para o próximo produto
         $this->resetScanner();
     }
 
     /**
-     * Chamado via Javascript quando o QR Code é lido
+     * Chamado via Javascript quando o código de barras é lido pela câmera
      */
     public function handleBarcodeScan($code)
     {
         $this->scannedCode = $code;
         
-        // Busca o produto pelo código de barras
+        // Tenta encontrar o produto
         $product = Product::where('barcode', $code)->first();
 
         if ($product) {
             $this->foundProduct = $product;
-            // Limpa o campo de imagem para evitar sujeira de leitura anterior
+            // Limpa o campo de imagem anterior para não confundir o operador
             $this->form->fill(['image_nutritional' => null]); 
         } else {
             $this->foundProduct = null;
             
             Notification::make()
-                ->title("EAN {$code} não encontrado no cadastro.")
+                ->title("EAN {$code} não encontrado.")
                 ->danger()
                 ->send();
             
-            // Reinicia o scanner para tentar ler outro
+            // Reinicia a câmera imediatamente
             $this->dispatch('reset-scanner');
         }
     }
 
     /**
-     * Reseta o estado da tela
+     * Reseta todo o estado da página
      */
     public function resetScanner()
     {
         $this->scannedCode = null;
         $this->foundProduct = null;
         $this->data = [];
-        $this->form->fill(); // Limpa o formulário visualmente
+        $this->form->fill(); // Esvazia o formulário visualmente
         
         // Emite evento para o Blade reiniciar a câmera JS
         $this->dispatch('reset-scanner'); 
