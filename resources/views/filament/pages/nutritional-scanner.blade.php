@@ -11,7 +11,6 @@
         #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; }
         #reader { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Botão Trocar Câmera - Estilo Floating Action Button */
         .btn-switch-camera {
             position: absolute; top: 25px; right: 25px; z-index: 50;
             width: 48px; height: 48px; border-radius: 50%;
@@ -43,17 +42,15 @@
         @endif
 
         <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
-            <div id="reader"></div>
+            <div id="reader" wire:ignore></div>
             <div class="scan-frame"><div class="scan-line"></div></div>
         </div>
 
         @if($foundProduct)
             <div id="photo-view">
-                <div class="product-info flex justify-between items-center">
-                    <div class="flex-1">
-                        <span class="text-green-500 text-[10px] font-bold tracking-widest uppercase">EAN: {{ $scannedCode }}</span>
-                        <h2 class="text-lg font-bold leading-tight">{{ $foundProduct->product_name }}</h2>
-                    </div>
+                <div class="product-info">
+                    <span class="text-green-500 text-[10px] font-bold tracking-widest uppercase">EAN: {{ $scannedCode }}</span>
+                    <h2 class="text-lg font-bold leading-tight">{{ $foundProduct->product_name }}</h2>
                 </div>
 
                 <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -65,7 +62,7 @@
 
                     <button type="button" onclick="triggerCamera()" class="btn-capture shadow-lg active:scale-95 transition-all">
                         <x-heroicon-s-camera class="w-6 h-6" />
-                        ABRIR CÂMERA
+                        CAPTURAR FOTO
                     </button>
                 </div>
 
@@ -86,27 +83,20 @@
             async function loadCameras() {
                 try {
                     const devices = await Html5Qrcode.getCameras();
-                    // FILTRO: Apenas câmeras traseiras (evita frontal)
-                    // No Android/iOS, câmeras traseiras costumam ter 'back' ou 'traseira' no nome
                     backCameras = devices.filter(d => 
                         !d.label.toLowerCase().includes('front') && 
-                        !d.label.toLowerCase().includes('frontal') &&
                         !d.label.toLowerCase().includes('user')
                     );
-
-                    // Se não achou com filtro, pega tudo (fallback)
                     if (backCameras.length === 0) backCameras = devices;
 
-                    // Prioridade: Tenta achar a lente "0" ou "wide" (geralmente a principal)
                     currentCameraId = backCameras[0].id;
                     const wide = backCameras.find(c => c.label.toLowerCase().includes('0') || c.label.toLowerCase().includes('wide'));
                     if (wide) currentCameraId = wide.id;
-
-                } catch (e) { console.error("Erro câmeras", e); }
+                } catch (e) { console.error(e); }
             }
 
             window.triggerCamera = function() {
-                const fileInput = document.querySelector('.hidden-uploader input[type=\"file\"]');
+                const fileInput = document.querySelector('.hidden-uploader input[type="file"]');
                 if (fileInput) { fileInput.click(); setUIStatus('loading'); }
             };
 
@@ -115,10 +105,8 @@
                 const idle = document.getElementById('icon-idle');
                 const load = document.getElementById('icon-loading');
                 const success = document.getElementById('icon-success');
-
                 if (!btn) return;
                 [idle, load, success].forEach(i => i?.classList.add('hidden'));
-
                 if (status === 'loading') { btn.disabled = true; load.classList.remove('hidden'); }
                 else if (status === 'success') { btn.disabled = false; success.classList.remove('hidden'); }
                 else { btn.disabled = true; idle.classList.remove('hidden'); }
@@ -129,11 +117,18 @@
 
             async function startScanner() {
                 if (@json($foundProduct)) return;
+                
+                // Limpeza rigorosa para evitar erro de "Scanner already running"
+                if (html5QrCode) {
+                    try { await html5QrCode.stop(); } catch(e) {}
+                    html5QrCode = null;
+                }
+                
+                // Recria a div reader internamente se necessário ou limpa conteúdo
+                document.getElementById('reader').innerHTML = '';
+
                 if (backCameras.length === 0) await loadCameras();
                 
-                // Limpa instância anterior se houver
-                if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} }
-
                 html5QrCode = new Html5Qrcode("reader");
                 const config = { fps: 15, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 };
 
@@ -143,26 +138,26 @@
                         @this.handleBarcodeScan(decodedText); 
                     });
                 }).catch(err => {
-                    console.warn("Erro ao iniciar:", err);
-                    // Tenta a próxima se falhar
-                    if(backCameras.length > 1) switchCamera();
+                    console.error("Erro ao iniciar:", err);
                 });
             }
 
-            async function switchCamera() {
+            document.getElementById('btn-switch')?.addEventListener('click', async () => {
                 if (backCameras.length < 2) return;
                 let index = backCameras.findIndex(c => c.id === currentCameraId);
                 currentCameraId = backCameras[(index + 1) % backCameras.length].id;
                 await startScanner();
-            }
-
-            document.getElementById('btn-switch')?.addEventListener('click', switchCamera);
+            });
 
             startScanner();
 
+            // OUVINTE UNIFICADO: Reinicia sempre que solicitado pelo PHP
             Livewire.on('reset-scanner', () => {
                 setUIStatus('idle');
-                setTimeout(startScanner, 500);
+                // Pequeno delay para a notificação do Filament não atrapalhar o foco da câmera
+                setTimeout(() => {
+                    startScanner();
+                }, 600);
             });
         });
     </script>

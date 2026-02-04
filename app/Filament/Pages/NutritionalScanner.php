@@ -25,10 +25,7 @@ class NutritionalScanner extends Page implements HasForms
     public $foundProduct = null;
     public ?array $data = [];
 
-    public function mount(): void
-    {
-        $this->form->fill();
-    }
+    public function mount(): void { $this->form->fill(); }
 
     public function form(Form $form): Form
     {
@@ -42,9 +39,8 @@ class NutritionalScanner extends Page implements HasForms
                     ->imageResizeTargetHeight(1280)
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    ->extraInputAttributes(['capture' => 'environment'])
                     ->live() 
-                    ->afterStateUpdated(fn ($state) => $this->dispatch('file-uploaded-callback'))
+                    ->afterStateUpdated(fn () => $this->dispatch('file-uploaded-callback'))
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
@@ -60,24 +56,18 @@ class NutritionalScanner extends Page implements HasForms
             $this->form->fill(['image_nutritional' => null]); 
         } else {
             $this->foundProduct = null;
-            Notification::make()->title('EAN não encontrado')->danger()->send();
-            $this->dispatch('reset-scanner-error');
+            Notification::make()->title('EAN não cadastrado')->danger()->send();
+            // Garante que o front reinicie o scanner após o erro
+            $this->dispatch('reset-scanner');
         }
     }
 
     public function save()
     {
         $state = $this->form->getState();
-
         if ($this->foundProduct && !empty($state['image_nutritional'])) {
-            $oldImage = $this->foundProduct->image_nutritional;
             $this->foundProduct->update(['image_nutritional' => $state['image_nutritional']]);
-
-            if ($oldImage && $oldImage !== $state['image_nutritional']) {
-                Storage::disk('public')->delete($oldImage);
-            }
-
-            Notification::make()->title('Salvo com sucesso!')->success()->send();
+            Notification::make()->title('Salvo!')->success()->send();
             $this->resetScanner();
         }
     }
