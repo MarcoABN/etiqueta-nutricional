@@ -2,50 +2,25 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
+        /* (MANTENHA SEUS ESTILOS CSS ORIGINAIS AQUI - omiti para economizar espaço) */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        
         .fi-topbar, .fi-header, .fi-breadcrumbs, .fi-logo, .fi-sidebar, .fi-footer { display: none !important; }
         .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .fi-page { height: 100dvh; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
-
         :root { --primary: #22c55e; }
-
-        .app-container {
-            height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; background: #000;
-            display: flex; flex-direction: column;
-        }
-
-        /* Scanner Styles (Mantidos iguais) */
+        .app-container { height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; background: #000; display: flex; flex-direction: column; }
         #scanner-view { position: absolute; inset: 0; z-index: 10; background: #000; }
         #reader { width: 100%; height: 100%; object-fit: cover; }
-        
-        .switch-camera-btn {
-            position: absolute; top: 20px; right: 20px; z-index: 50;
-            width: 48px; height: 48px; border-radius: 50%;
-            background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3);
-            color: white; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); cursor: pointer;
-        }
-
-        .scan-frame {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: min(75vw, 300px); height: 180px; pointer-events: none; z-index: 20;
-            box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); border-radius: 12px;
-        }
+        .switch-camera-btn { position: absolute; top: 20px; right: 20px; z-index: 50; width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3); color: white; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); cursor: pointer; }
+        .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(75vw, 300px); height: 180px; pointer-events: none; z-index: 20; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); border-radius: 12px; }
         .scan-corner { position: absolute; width: 30px; height: 30px; border-color: var(--primary); }
         .scan-corner.tl { top: 0; left: 0; border-top: 4px solid; border-left: 4px solid; border-top-left-radius: 12px; }
         .scan-corner.tr { top: 0; right: 0; border-top: 4px solid; border-right: 4px solid; border-top-right-radius: 12px; }
         .scan-corner.bl { bottom: 0; left: 0; border-bottom: 4px solid; border-left: 4px solid; border-bottom-left-radius: 12px; }
         .scan-corner.br { bottom: 0; right: 0; border-bottom: 4px solid; border-right: 4px solid; border-bottom-right-radius: 12px; }
-        .scan-line {
-            position: absolute; width: 100%; height: 2px; background: var(--primary);
-            box-shadow: 0 0 4px var(--primary); animation: scanning 2s infinite ease-in-out;
-        }
+        .scan-line { position: absolute; width: 100%; height: 2px; background: var(--primary); box-shadow: 0 0 4px var(--primary); animation: scanning 2s infinite ease-in-out; }
         @keyframes scanning { 0% {top: 10%; opacity: 0;} 50% {opacity: 1;} 100% {top: 90%; opacity: 0;} }
-        .scan-text {
-            position: absolute; bottom: 15%; left: 0; right: 0; text-align: center; color: white; font-size: 14px; font-weight: 500; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 21;
-        }
-
-        /* Photo View Styles */
+        .scan-text { position: absolute; bottom: 15%; left: 0; right: 0; text-align: center; color: white; font-size: 14px; font-weight: 500; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 21; }
         #photo-view { position: absolute; inset: 0; z-index: 20; background: #111; display: flex; flex-direction: column; }
         .header-info { background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 100%); padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .header-info h2 { color: white; font-size: 20px; font-weight: 700; margin-bottom: 4px; line-height: 1.2; }
@@ -64,10 +39,9 @@
 
     <div class="app-container">
         
-        {{-- INPUT NATIVO DE UPLOAD (Invisível) --}}
-        {{-- Isso substitui o componente complexo do Filament --}}
+        {{-- INPUT NATIVO (O segredo: wire:model.live ativa o updatedPhoto no PHP) --}}
         <input type="file" 
-               wire:model="photo" 
+               wire:model.live="photo" 
                accept="image/*" 
                capture="environment" 
                id="native-camera-input" 
@@ -75,7 +49,7 @@
         >
 
         {{-- SCANNER --}}
-        <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
+        <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}" wire:ignore>
             <div id="reader"></div>
             <button id="btn-switch-cam" class="switch-camera-btn" style="display: none;">
                 <x-heroicon-o-arrows-right-left class="w-6 h-6" />
@@ -88,38 +62,39 @@
         <div id="photo-view" 
              class="{{ $foundProduct ? '' : 'hidden' }}"
              x-data="{ 
-                 mode: 'confirm',
-                 init() {
-                     if (@js(!empty($foundProduct->image_nutritional))) {
-                        this.mode = 'preview';
-                     }
-                 }
+                 // CORREÇÃO CRÍTICA: Vincula o estado JS ao PHP. 
+                 // Quando o PHP mudar para 'preview' após o upload, o JS obedece.
+                 mode: @entangle('viewMode')
              }"
-             @reset-scanner.window="mode = 'confirm'"
-             @photo-uploaded.window="mode = 'preview'"
         >
             <div class="header-info">
                 <h2>{{ $foundProduct?->product_name ?? 'Produto Identificado' }}</h2>
                 <span>EAN: {{ $scannedCode }}</span>
             </div>
 
-            <div class="viewport-area" wire:ignore.self>
-                {{-- Botão inicial: Clica no input hidden --}}
+            <div class="viewport-area">
+                {{-- MODO 1: CONFIRMAÇÃO (Botão de Câmera) --}}
                 <div class="confirm-stage" x-show="mode === 'confirm'">
                     <p class="text-gray-400 text-sm">Confirme o produto para tirar a foto.</p>
+                    {{-- Ao clicar, apenas abre o input nativo. O resto é com o Livewire --}}
                     <button type="button" onclick="document.getElementById('native-camera-input').click()" class="confirm-btn">
                         <x-heroicon-o-camera class="w-6 h-6"/>
                         FOTOGRAFAR
                     </button>
+                    
+                    {{-- Feedback de carregamento enquanto o celular processa a foto --}}
+                    <div wire:loading wire:target="photo" class="text-green-500 text-sm mt-4 animate-pulse">
+                        Processando imagem...
+                    </div>
                 </div>
 
-                {{-- Preview: Mostra a imagem temporária (recém upload) ou a salva no banco --}}
+                {{-- MODO 2: PREVIEW (Mostra a foto) --}}
                 <div class="preview-stage" x-show="mode === 'preview'" style="display: none;">
                     @if ($photo)
-                        {{-- Preview do Upload Temporário do Livewire --}}
+                        {{-- Preview da imagem temporária (recém tirada) --}}
                         <img src="{{ $photo->temporaryUrl() }}" class="preview-image" alt="New Preview">
                     @elseif ($foundProduct?->image_nutritional)
-                        {{-- Imagem salva no banco --}}
+                        {{-- Imagem já salva no banco --}}
                         <img src="{{ asset('storage/' . $foundProduct->image_nutritional) }}" class="preview-image" alt="Saved Preview">
                     @endif
                     
@@ -140,17 +115,17 @@
                             wire:target="photo, save"
                             class="icon-btn save-btn">
                         
-                        {{-- Estados do Ícone --}}
+                        {{-- Ícone Normal --}}
                         <span wire:loading.remove wire:target="photo, save">
                             <x-heroicon-m-check class="w-8 h-8"/>
                         </span>
                         
-                        {{-- Uploading da foto --}}
+                        {{-- Ícone Uploading (caso a net esteja lenta) --}}
                         <span wire:loading wire:target="photo">
                             <x-heroicon-o-arrow-up-tray class="w-6 h-6 animate-bounce"/>
                         </span>
 
-                        {{-- Salvando no banco --}}
+                        {{-- Ícone Salvando --}}
                         <span wire:loading wire:target="save">
                             <x-heroicon-o-arrow-path class="w-6 h-6 animate-spin"/>
                         </span>
@@ -160,6 +135,7 @@
         </div>
     </div>
 
+    {{-- SCRIPTS DO SCANNER --}}
     <script>
         document.addEventListener('livewire:initialized', () => {
             let html5QrCode = null;
@@ -167,9 +143,10 @@
             let currentCameraIndex = 0;
             const btnSwitchCam = document.getElementById('btn-switch-cam');
 
-            // --- Gerenciamento de Câmera/Scanner ---
             async function startScanner() {
-                if (@json($foundProduct)) return; // Não inicia se já tiver produto
+                // Não inicia scanner se o produto já foi encontrado
+                if (@json($foundProduct)) return;
+                
                 if (html5QrCode && html5QrCode.isScanning) return;
 
                 try {
@@ -195,7 +172,7 @@
                             () => {}
                         );
                     }
-                } catch (err) { console.error("Cam Error", err); }
+                } catch (err) { console.error("Erro Cam:", err); }
             }
 
             function stopScanner() {
@@ -212,13 +189,11 @@
 
             startScanner();
 
-            Livewire.on('reset-scanner', () => setTimeout(startScanner, 500));
-            Livewire.on('reset-scanner-error', () => setTimeout(startScanner, 1500));
-            
-            // Quando o upload nativo termina, muda a UI para preview
-            Livewire.on('photo-uploaded', () => {
-                window.dispatchEvent(new CustomEvent('photo-uploaded'));
+            Livewire.on('reset-scanner', () => {
+                setTimeout(startScanner, 500);
             });
+            
+            Livewire.on('reset-scanner-error', () => setTimeout(startScanner, 1500));
         });
     </script>
 </x-filament-panels::page>
