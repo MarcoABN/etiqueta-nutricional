@@ -39,6 +39,11 @@ class NutritionalScanner extends Page implements HasForms
                     ->imageResizeTargetHeight(1280)
                     ->directory('uploads/nutritional')
                     ->disk('public')
+                    // Força a câmera traseira no nível do componente
+                    ->extraInputAttributes([
+                        'capture' => 'environment',
+                        'accept' => 'image/*'
+                    ])
                     ->live() 
                     ->afterStateUpdated(fn () => $this->dispatch('file-uploaded-callback'))
                     ->statePath('image_nutritional'),
@@ -57,7 +62,6 @@ class NutritionalScanner extends Page implements HasForms
         } else {
             $this->foundProduct = null;
             Notification::make()->title('EAN não cadastrado')->danger()->send();
-            // Garante que o front reinicie o scanner após o erro
             $this->dispatch('reset-scanner');
         }
     }
@@ -67,7 +71,7 @@ class NutritionalScanner extends Page implements HasForms
         $state = $this->form->getState();
         if ($this->foundProduct && !empty($state['image_nutritional'])) {
             $this->foundProduct->update(['image_nutritional' => $state['image_nutritional']]);
-            Notification::make()->title('Salvo!')->success()->send();
+            Notification::make()->title('Salvo com sucesso!')->success()->send();
             $this->resetScanner();
         }
     }

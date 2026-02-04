@@ -62,7 +62,7 @@
 
                     <button type="button" onclick="triggerCamera()" class="btn-capture shadow-lg active:scale-95 transition-all">
                         <x-heroicon-s-camera class="w-6 h-6" />
-                        CAPTURAR FOTO
+                        TIRAR FOTO
                     </button>
                 </div>
 
@@ -83,10 +83,7 @@
             async function loadCameras() {
                 try {
                     const devices = await Html5Qrcode.getCameras();
-                    backCameras = devices.filter(d => 
-                        !d.label.toLowerCase().includes('front') && 
-                        !d.label.toLowerCase().includes('user')
-                    );
+                    backCameras = devices.filter(d => !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('user'));
                     if (backCameras.length === 0) backCameras = devices;
 
                     currentCameraId = backCameras[0].id;
@@ -97,7 +94,13 @@
 
             window.triggerCamera = function() {
                 const fileInput = document.querySelector('.hidden-uploader input[type="file"]');
-                if (fileInput) { fileInput.click(); setUIStatus('loading'); }
+                if (fileInput) { 
+                    // REFORÇO: Injeta os atributos de câmera via JS antes de clicar
+                    fileInput.setAttribute('capture', 'environment');
+                    fileInput.setAttribute('accept', 'image/*');
+                    fileInput.click(); 
+                    setUIStatus('loading'); 
+                }
             };
 
             function setUIStatus(status) {
@@ -117,16 +120,8 @@
 
             async function startScanner() {
                 if (@json($foundProduct)) return;
-                
-                // Limpeza rigorosa para evitar erro de "Scanner already running"
-                if (html5QrCode) {
-                    try { await html5QrCode.stop(); } catch(e) {}
-                    html5QrCode = null;
-                }
-                
-                // Recria a div reader internamente se necessário ou limpa conteúdo
+                if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} html5QrCode = null; }
                 document.getElementById('reader').innerHTML = '';
-
                 if (backCameras.length === 0) await loadCameras();
                 
                 html5QrCode = new Html5Qrcode("reader");
@@ -137,9 +132,7 @@
                         html5QrCode = null; 
                         @this.handleBarcodeScan(decodedText); 
                     });
-                }).catch(err => {
-                    console.error("Erro ao iniciar:", err);
-                });
+                }).catch(() => {});
             }
 
             document.getElementById('btn-switch')?.addEventListener('click', async () => {
@@ -150,15 +143,7 @@
             });
 
             startScanner();
-
-            // OUVINTE UNIFICADO: Reinicia sempre que solicitado pelo PHP
-            Livewire.on('reset-scanner', () => {
-                setUIStatus('idle');
-                // Pequeno delay para a notificação do Filament não atrapalhar o foco da câmera
-                setTimeout(() => {
-                    startScanner();
-                }, 600);
-            });
+            Livewire.on('reset-scanner', () => { setUIStatus('idle'); setTimeout(startScanner, 600); });
         });
     </script>
 </x-filament-panels::page>
