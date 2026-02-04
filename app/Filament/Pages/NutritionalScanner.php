@@ -37,21 +37,16 @@ class NutritionalScanner extends Page implements HasForms
                 FileUpload::make('image_nutritional')
                     ->hiddenLabel()
                     ->image()
-                    // Redimensionamento para 720p (HD) - Redução de custo de storage
                     ->imageResizeMode('contain')
                     ->imageResizeTargetWidth(1280)
                     ->imageResizeTargetHeight(1280)
-                    // Desativamos o editor avançado para evitar que o processo pare no "aguardando crop"
-                    // Mas mantemos a compressão automática
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file) {
-                        $cod = $this->foundProduct->codprod ?? 'EAN_' . $this->scannedCode;
-                        return "{$cod}_" . now()->format('Ymd_His') . '.' . $file->getClientOriginalExtension();
-                    })
+                    // Importante: deleta o arquivo do servidor se o usuário remover no UI
                     ->extraInputAttributes(['capture' => 'environment'])
-                    ->required()
-                    ->live() // Garante que o Livewire saiba imediatamente quando o upload termina
+                    ->live() 
+                    // Força o Livewire a emitir um evento para o JS quando o estado mudar
+                    ->afterStateUpdated(fn ($state) => $this->dispatch('file-uploaded-callback'))
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
@@ -64,7 +59,13 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            $this->form->fill(['image_nutritional' => $product->image_nutritional]);
+            
+            // RESETAMOS o formulário para garantir que o FilePond não se confunda
+            // com a imagem antiga na hora de processar a nova
+            $this->form->fill(['image_nutritional' => null]); 
+            
+            // Se você quiser mostrar a imagem antiga, faremos isso via HTML puro no Blade
+            // para não "sujar" o componente de upload
         } else {
             $this->foundProduct = null;
             Notification::make()->title('Produto não encontrado')->danger()->send();
@@ -84,10 +85,8 @@ class NutritionalScanner extends Page implements HasForms
                 Storage::disk('public')->delete($oldImage);
             }
 
-            Notification::make()->title('Dados salvos!')->success()->send();
+            Notification::make()->title('Salvo com sucesso!')->success()->send();
             $this->resetScanner();
-        } else {
-            Notification::make()->title('Erro: Selecione a foto primeiro')->warning()->send();
         }
     }
 
