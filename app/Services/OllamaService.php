@@ -14,58 +14,82 @@ class OllamaService
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:11434'), '/');
-        
-        // MOTOR 1: VISÃO (Lento, Detalhado, para Imagens)
         $this->visionModel = env('OLLAMA_MODEL', 'qwen3-vl:8b');
-        
-        // MOTOR 2: TEXTO (Rápido, Raciocínio, para Tradução)
         $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma3:4b');
     }
 
     /**
-     * MOTOR DE VISÃO: Extrai dados da tabela nutricional com regras FDA.
+     * MOTOR DE VISÃO: Prompt Enriquecido para Rótulos Brasileiros (PT-BR -> EN)
      */
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 180): ?array
     {
         $prompt = <<<EOT
-Analise a tabela nutricional na imagem. Extraia os dados para JSON.
+You are a Data Extraction Engine reading a Brazilian Nutrition Facts label (Tabela Nutricional).
+Extract all visible data into a strict JSON format.
 
-### REGRAS DE UNIDADE (FDA HOUSEHOLD MEASURES):
-Traduza o campo 'serving_size_unit' do Português para Inglês Padrão:
-- "Xícara", "Xic" -> "cup"
+### 1. TRANSLATION MAPPING (PT-BR -> JSON KEY):
+Look for these Portuguese terms and map them to the English keys:
+- "Porções por embalagem", "Contém X porções" -> serving_per_container (Search HEADER/FOOTER outside the grid)
+- "Porção", "Porção de" -> serving_info
+- "Valor energético", "Calorias" -> calories
+- "Carboidratos" -> total_carb
+- "Açúcares totais" -> total_sugars
+- "Açúcares adicionados" -> added_sugars
+- "Proteínas" -> protein
+- "Gorduras totais" -> total_fat
+- "Gorduras saturadas" -> sat_fat
+- "Gorduras trans" -> trans_fat
+- "Fibra alimentar" -> fiber
+- "Sódio" -> sodium
+- "Cálcio" -> calcium
+- "Ferro" -> iron
+- "Potássio" -> potassium
+- "Vitamina D" -> vitamin_d
+- "Vitamina C" -> vitamin_c
+- "Vitamina A" -> vitamin_a
+
+### 2. UNIT STANDARDIZATION:
+Translate 'serving_size_unit' to English:
+- "Xícara" -> "cup"
 - "Colher de sopa" -> "tbsp"
 - "Colher de chá" -> "tsp"
 - "Unidade", "Biscoito" -> "piece"
 - "Fatia" -> "slice"
 - "Copo" -> "glass"
-- "Pedaço" -> "piece"
-- "Porção" -> "serving"
 
-### JSON OUTPUT KEYS:
-- serving_per_container (texto)
-- serving_weight (numero)
-- serving_size_quantity (numero/fracao)
-- serving_size_unit (TRADUZIDO)
-- calories (numero)
-- total_carb (numero)
-- total_carb_dv (numero)
-- total_sugars (numero)
-- added_sugars (numero)
-- added_sugars_dv (numero)
-- protein (numero)
-- protein_dv (numero)
-- total_fat (numero)
-- total_fat_dv (numero)
-- sat_fat (numero)
-- sat_fat_dv (numero)
-- trans_fat (numero)
-- trans_fat_dv (numero)
-- fiber (numero)
-- fiber_dv (numero)
-- sodium (numero)
-- sodium_dv (numero)
+### 3. JSON OUTPUT KEYS (Fill with NULL if not visible):
+{
+  "serving_per_container": "string (e.g., 'aprox. 8')",
+  "serving_weight": number (e.g., 25),
+  "serving_size_quantity": "string/number",
+  "serving_size_unit": "string",
+  "calories": number,
+  "total_carb": number,
+  "total_carb_dv": number,
+  "total_sugars": number,
+  "added_sugars": number,
+  "added_sugars_dv": number,
+  "protein": number,
+  "protein_dv": number,
+  "total_fat": number,
+  "total_fat_dv": number,
+  "sat_fat": number,
+  "sat_fat_dv": number,
+  "trans_fat": number,
+  "trans_fat_dv": number,
+  "fiber": number,
+  "fiber_dv": number,
+  "sodium": number,
+  "sodium_dv": number,
+  "calcium": number,
+  "iron": number,
+  "potassium": number,
+  "vitamin_d": number,
+  "vitamin_c": number,
+  "vitamin_a": number
+}
 
-Retorne APENAS o JSON. Se ilegível, use null.
+Return ONLY the JSON.
 EOT;
 
         return $this->query($this->visionModel, $prompt, $base64Image, true, $timeoutSeconds);
@@ -92,8 +116,8 @@ EOT;
                     ]
                 ],
                 'options' => [
-                    'temperature' => 0.1,
-                    'num_ctx' => 4096
+                    'temperature' => 0.1, // Baixa criatividade
+                    'num_ctx' => 4096     // Contexto alto para ler a tabela toda
                 ]
             ];
 
