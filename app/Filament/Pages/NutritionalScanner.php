@@ -42,10 +42,8 @@ class NutritionalScanner extends Page implements HasForms
                     ->imageResizeTargetHeight(1280)
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    // Importante: deleta o arquivo do servidor se o usuário remover no UI
                     ->extraInputAttributes(['capture' => 'environment'])
                     ->live() 
-                    // Força o Livewire a emitir um evento para o JS quando o estado mudar
                     ->afterStateUpdated(fn ($state) => $this->dispatch('file-uploaded-callback'))
                     ->statePath('image_nutritional'),
             ])
@@ -59,16 +57,10 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            
-            // RESETAMOS o formulário para garantir que o FilePond não se confunda
-            // com a imagem antiga na hora de processar a nova
             $this->form->fill(['image_nutritional' => null]); 
-            
-            // Se você quiser mostrar a imagem antiga, faremos isso via HTML puro no Blade
-            // para não "sujar" o componente de upload
         } else {
             $this->foundProduct = null;
-            Notification::make()->title('Produto não encontrado')->danger()->send();
+            Notification::make()->title('EAN não encontrado')->danger()->send();
             $this->dispatch('reset-scanner-error');
         }
     }

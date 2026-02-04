@@ -11,6 +11,17 @@
         /* Scanner */
         #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; }
         #reader { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* BOTÃO TROCAR CÂMERA - REDONDO E FLUTUANTE */
+        .btn-switch-camera {
+            position: absolute; top: 20px; right: 20px; z-index: 50;
+            width: 50px; height: 50px; border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px);
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.3); color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+
         .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: 180px; pointer-events: none; z-index: 30; box-shadow: 0 0 0 9999px rgba(0,0,0,0.7); border-radius: 15px; border: 2px solid rgba(255,255,255,0.3); }
         .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; box-shadow: 0 0 15px #22c55e; animation: scanning 2s infinite ease-in-out; }
         @keyframes scanning { 0% {top: 10%;} 50% {top: 90%;} 100% {top: 10%;} }
@@ -23,15 +34,20 @@
         .btn-save { background: #22c55e; flex: 2; height: 55px; border-radius: 12px; color: #000; font-weight: bold; }
         .btn-save:disabled { background: #1a5e32; opacity: 0.5; color: #444; }
         .btn-cancel { background: #374151; flex: 1; height: 55px; border-radius: 12px; color: #fff; }
-        
-        /* Preview da imagem antiga se existir */
-        .old-photo-preview { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 2px solid #374151; }
+        .old-photo-preview { width: 55px; height: 55px; border-radius: 8px; object-fit: cover; border: 2px solid #374151; }
     </style>
 
     <div class="app-container">
         <div class="hidden-uploader" wire:ignore>
             {{ $this->form }}
         </div>
+
+        {{-- BOTÃO SWITCH (Só visível no Passo 1) --}}
+        @if(!$foundProduct)
+        <button id="btn-switch" class="btn-switch-camera active:scale-90 transition-transform">
+            <x-heroicon-o-arrow-path class="w-6 h-6" />
+        </button>
+        @endif
 
         <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
             <div id="reader"></div>
@@ -41,12 +57,12 @@
         @if($foundProduct)
             <div id="photo-view">
                 <div class="product-info flex justify-between items-center">
-                    <div>
+                    <div class="flex-1">
                         <span class="text-green-500 text-[10px] font-bold tracking-widest uppercase">EAN: {{ $scannedCode }}</span>
                         <h2 class="text-lg font-bold leading-tight">{{ $foundProduct->product_name }}</h2>
                     </div>
                     @if($foundProduct->image_nutritional)
-                        <img src="{{ Storage::disk('public')->url($foundProduct->image_nutritional) }}" class="old-photo-preview">
+                        <img src="{{ Storage::disk('public')->url($foundProduct->image_nutritional) }}" class="old-photo-preview ml-3">
                     @endif
                 </div>
 
@@ -57,20 +73,18 @@
                         <x-heroicon-s-check-circle id="icon-success" class="w-10 h-10 text-green-500 hidden" />
                     </div>
 
-                    <h3 id="status-title" class="text-lg font-bold">Atualizar Foto</h3>
-                    <p id="status-text" class="text-gray-400 text-sm mb-8">A foto anterior será substituída</p>
+                    <h3 id="status-title" class="text-lg font-bold">Capturar Tabela</h3>
+                    <p id="status-text" class="text-gray-400 text-sm mb-8">A nova foto substituirá a anterior</p>
 
                     <button type="button" onclick="triggerCamera()" class="btn-capture shadow-lg active:scale-95 transition-all">
                         <x-heroicon-s-camera class="w-6 h-6" />
-                        CAPTURAR NOVA
+                        ABRIR CÂMERA
                     </button>
                 </div>
 
                 <div class="footer-actions">
                     <button wire:click="resetScanner" class="btn-cancel">VOLTAR</button>
-                    <button id="btn-submit" wire:click="save" disabled class="btn-save">
-                        SALVAR ALTERAÇÃO
-                    </button>
+                    <button id="btn-submit" wire:click="save" disabled class="btn-save">SALVAR</button>
                 </div>
             </div>
         @endif
@@ -79,20 +93,28 @@
     <script>
         document.addEventListener('livewire:initialized', () => {
             let html5QrCode = null;
+            let currentCameraId = null;
+            let cameras = [];
+
+            // INICIALIZAÇÃO DE CÂMERAS
+            async function getCameras() {
+                try {
+                    const devices = await Html5Qrcode.getCameras();
+                    if (devices && devices.length) {
+                        cameras = devices;
+                        currentCameraId = devices[0].id;
+                    }
+                } catch (e) { console.error("Erro ao listar câmeras", e); }
+            }
 
             window.triggerCamera = function() {
                 const fileInput = document.querySelector('.hidden-uploader input[type="file"]');
-                if (fileInput) {
-                    fileInput.click();
-                    setUIStatus('loading');
-                }
+                if (fileInput) { fileInput.click(); setUIStatus('loading'); }
             };
 
             function setUIStatus(status) {
                 const btn = document.getElementById('btn-submit');
                 if (!btn) return;
-                const title = document.getElementById('status-title');
-                const text = document.getElementById('status-text');
                 const iconIdle = document.getElementById('icon-idle');
                 const iconLoad = document.getElementById('icon-loading');
                 const iconSuccess = document.getElementById('icon-success');
@@ -102,55 +124,45 @@
                 if (status === 'loading') {
                     btn.disabled = true;
                     iconLoad.classList.remove('hidden');
-                    title.innerText = "Processando...";
                 } else if (status === 'success') {
                     btn.disabled = false;
                     iconSuccess.classList.remove('hidden');
-                    title.innerText = "Pronta para Salvar!";
-                    text.innerText = "A nova imagem foi processada.";
                 } else {
                     btn.disabled = true;
                     iconIdle.classList.remove('hidden');
                 }
             }
 
-            // ESCUTA TRÍPLICE PARA GARANTIR
-            // 1. Evento do FilePond (Nativo)
-            window.addEventListener('FilePond:processfile', (e) => {
-                if (!e.detail.error) setUIStatus('success');
-            });
-
-            // 2. Callback do Livewire (Após o back receber o arquivo)
-            Livewire.on('file-uploaded-callback', () => {
-                setUIStatus('success');
-            });
-
-            // 3. Fallback manual (Verifica se o componente do Filament preencheu o campo)
-            setInterval(() => {
-                const btn = document.getElementById('btn-submit');
-                if (btn && btn.disabled) {
-                    // Se o Livewire já tem o dado mas a UI não habilitou, habilitamos
-                    if (@this.get('data.image_nutritional')) {
-                        setUIStatus('success');
-                    }
-                }
-            }, 1000);
-
-            function startScanner() {
+            // LISTENERS DE UPLOAD
+            window.addEventListener('FilePond:processfile', (e) => { if (!e.detail.error) setUIStatus('success'); });
+            Livewire.on('file-uploaded-callback', () => setUIStatus('success'));
+            
+            // SCANNER LOGIC
+            async function startScanner() {
                 if (@json($foundProduct)) return;
+                if (!cameras.length) await getCameras();
+                
                 html5QrCode = new Html5Qrcode("reader");
-                html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 150 } },
-                    (decodedText) => {
-                        html5QrCode.stop().then(() => { @this.handleBarcodeScan(decodedText); });
-                    }
-                ).catch(() => {});
+                const config = { fps: 15, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 };
+
+                html5QrCode.start(currentCameraId, config, (decodedText) => {
+                    html5QrCode.stop().then(() => { @this.handleBarcodeScan(decodedText); });
+                }).catch(() => {});
             }
 
-            startScanner();
-            Livewire.on('reset-scanner', () => {
-                setTimeout(startScanner, 400);
-                setUIStatus('idle');
+            // EVENTO TROCAR CÂMERA
+            document.getElementById('btn-switch')?.addEventListener('click', async () => {
+                if (cameras.length < 2) return;
+                if (html5QrCode) {
+                    await html5QrCode.stop();
+                    let index = cameras.findIndex(c => c.id === currentCameraId);
+                    currentCameraId = cameras[(index + 1) % cameras.length].id;
+                    startScanner();
+                }
             });
+
+            startScanner();
+            Livewire.on('reset-scanner', () => { setTimeout(startScanner, 400); setUIStatus('idle'); });
         });
     </script>
 </x-filament-panels::page>
