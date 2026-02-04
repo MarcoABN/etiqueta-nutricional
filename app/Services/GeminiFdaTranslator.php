@@ -13,78 +13,86 @@ class GeminiFdaTranslator
         $this->ollama = $ollama;
     }
 
-    /**
-     * Gera o "Statement of Identity" (Nome FDA) para o produto.
-     */
     public function translate(string $productName): ?string
     {
         try {
+            // Aumentado para 60s para garantir o 'cold start' da GPU
             $prompt = $this->getSystemPrompt($productName);
-            
-            // CORREÇÃO CRÍTICA: Aumentado de 10s para 60s.
-            // Isso cobre o tempo de "Cold Start" (carregar modelo na GPU) + Latência da VPN.
             $result = $this->ollama->completion($prompt, 60);
             
             return $this->cleanText($result);
-            
         } catch (\Exception $e) {
-            Log::error("Erro na Tradução Local (FDA): " . $e->getMessage());
+            Log::error("Erro Tradução: " . $e->getMessage());
             return null;
         }
     }
 
     private function cleanText(?string $text): ?string
     {
-        if (empty($text)) {
-            return null;
-        }
-
-        // Remove blocos de código e metadados comuns de LLMs
+        if (empty($text)) return null;
         $text = str_replace(['```json', '```'], '', $text);
-        $text = str_replace(['Output:', 'Translation:', 'Identity Statement:', 'EN:', 'English:', 'Answer:'], '', $text);
-        
+        // Remove prefixos comuns de resposta de IA
+        $text = preg_replace('/^(Output|Translation|Answer|Identity Statement|EN|English):\s*/i', '', $text);
         return trim($text, " \t\n\r\0\x0B\"'");
     }
 
     private function getSystemPrompt(string $productName): string
     {
         return <<<EOT
-You are an expert in FDA Food Labeling Regulations (21 CFR).
-Your task is to convert a Portuguese commercial product name into a compliant **FDA Statement of Identity**.
+You are an expert in **FDA Food Labeling** and **Commercial Product Identity**.
+Your task is to decode Brazilian ERP abbreviations and generate a compliant English Identity Statement.
 
-### CRITICAL RULES (Based on 21 CFR 101.3):
-1. **BRAND NAME**: Keep the brand name exactly as is at the beginning.
-2. **COMMON NAME**: Identify what the food actually IS (e.g., "Biscoito Recheado" is "Sandwich Cookies", "Bebida Láctea" is "Dairy Beverage", "Salgadinho" is "Snack").
-3. **FLAVORS**: 
-   - "Sabor Morango" -> "Strawberry Flavored" (Artificial/Natural flavor).
-   - "Com Morango" -> "Strawberry" (Real fruit).
-   - If unsure, use "Flavored".
-4. **QUANTITY/PACK**: Keep units (g, kg, ml, L) and pack counts (e.g., "12x1L", "Pack of 3") at the very end.
+### 1. DECODE TABLE (ERP -> ENGLISH CONCEPT):
+- "SALG", "SALGADINHO" -> "Snack"
+- "BISC", "BISCOITO" -> "Cookies" (Sweet) or "Crackers" (Savory) or "Wafer"
+- "CHOC", "CHOCOLATE" -> "Chocolate"
+- "PIR", "PIRULITO" -> "Lollipop"
+- "DROPS", "BALA" -> "Hard Candy"
+- "SABAO PO" -> "Powder Laundry Detergent"
+- "SABAO LIQ" -> "Liquid Laundry Detergent"
+- "AMAC", "AMACIANTE" -> "Fabric Softener"
+- "DESINF" -> "Disinfectant"
+- "SACO", "SACOLA" -> "Bag"
+- "PLAST" -> "Plastic"
+- "PRATO" -> "Plate"
+- "DESC", "DESCARTAVEL" -> "Disposable"
+- "BD" -> "Low Density (LDPE)"
+- "PP" -> "Polypropylene"
+- "SANF" -> "Gusseted"
 
-### STRUCTURE TARGET:
-[Brand] + [Flavor/Feature] + [Common Name] + [Net Qty]
+### 2. RULES BY CATEGORY:
+**A) FOOD (FDA Rules):**
+- **Flavor:** Use "Flavored" for artificial flavors (e.g., "Presunto" -> "Ham Flavored", "Morango" -> "Strawberry Flavored").
+- **Real Ingredient:** Use direct name only if it's a main ingredient (e.g., "Amendoim" -> "Peanuts").
 
-### EXAMPLES:
-- IN: "Biscoito Trakinas Morango 140g"
-  OUT: "Trakinas Strawberry Flavored Sandwich Cookies 140g"
+**B) CLEANING/NON-FOOD:**
+- **Scent:** Use "Scent" instead of "Flavor" (e.g., "Lavanda" -> "Lavender Scent").
+- **Material:** List material before the item (e.g., "Prato Isopor" -> "Styrofoam Plate").
 
-- IN: "Leite Integral Itambé 1 Litro"
-  OUT: "Itambé Whole Milk 1L"
+### 3. STRUCTURE:
+[Brand] + [Feature/Flavor/Material] + [Common Name] + [Qty/Pack]
 
-- IN: "Achocolatado Nescau 2.0 400g"
-  OUT: "Nescau 2.0 Chocolate Powder Drink Mix 400g"
+### 4. EXAMPLES FROM YOUR DATABASE:
+- IN: "SALG SKINY PRESUNTO 60G"
+  OUT: "Skiny Ham Flavored Snack 60g"
 
-- IN: "Refrigerante Coca-Cola Sem Açúcar 350ml"
-  OUT: "Coca-Cola Zero Sugar Soda 350ml"
+- IN: "SABAO PO OMO LAVAGEM PERFEITA 800G"
+  OUT: "OMO Perfect Wash Powder Laundry Detergent 800g"
 
-- IN: "Fardo Refrigerante Guaraná Antarctica 6x1,5L"
-  OUT: "Guaraná Antarctica Soda 6x1.5L Pack"
+- IN: "SACO PLAST ZPP BD SANF 50X80CM 12MM KG"
+  OUT: "Zipper Low Density Gusseted Plastic Bag 50x80cm 12mm"
+
+- IN: "CHOC LACTA BIS OREO 100,8G"
+  OUT: "Lacta Bis Oreo Flavored Wafer 100.8g"
+
+- IN: "PRATO ISOPOR COPOBRAS BCO FUND 15CM"
+  OUT: "Copobras White Deep Styrofoam Plate 15cm"
 
 ### INPUT PRODUCT:
 "{$productName}"
 
-### OUTPUT INSTRUCTION:
-Return **ONLY** the final English string. Do not explain. Do not use Markdown.
+### OUTPUT:
+Return ONLY the final string.
 EOT;
     }
 }
