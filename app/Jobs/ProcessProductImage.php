@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Services\OllamaService;
-use App\Services\GeminiFdaTranslator; // CLASSE DE TRADUÇÃO RESTAURADA
+use App\Services\GeminiFdaTranslator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -17,123 +17,125 @@ class ProcessProductImage implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 600; // Aumentado para 10 minutos (Ollama pode ser lento)
+    public $timeout = 900; // 15 minutos (Ollama Vision é pesado)
     public $tries = 1; 
 
     public function __construct(public Product $product) {}
 
-    // INJEÇÃO DE DEPENDÊNCIA: OLLAMA + TRADUTOR
     public function handle(OllamaService $ollama, GeminiFdaTranslator $translator): void
     {
-        Log::info("Job Iniciado: Produto ID {$this->product->id}");
-        $this->product->update(['ai_status' => 'processing']);
+        // 1. Prevenção de Loop: Se já estiver completo ou processando há pouco tempo, para.
+        if ($this->product->ai_status === 'completed' || 
+           ($this->product->ai_status === 'processing' && $this->product->updated_at->diffInMinutes(now()) < 2)) {
+            Log::info("Job ignorado para evitar duplicidade: {$this->product->id}");
+            return;
+        }
 
-        $updates = []; // Array acumulador de atualizações
+        Log::info("Job Iniciado: Produto ID {$this->product->id}");
+        
+        // updateQuietly: Atualiza sem disparar eventos (evita loops de Observer)
+        $this->product->updateQuietly(['ai_status' => 'processing']);
+
+        $updates = [];
         $errors = [];
 
         try {
-            // --- ETAPA 1: OCR / VISÃO (Tabela Nutricional) ---
+            // --- ETAPA 1: OCR / VISÃO ---
             if ($this->product->image_nutritional) {
                 try {
                     $path = Storage::disk('public')->path($this->product->image_nutritional);
                     
                     if (file_exists($path)) {
-                        // Otimização sem perda de qualidade para texto pequeno
+                        // Prepara a imagem preservando a qualidade do Crop
                         $b64 = $this->prepareImage($path);
                         
                         Log::info("Enviando imagem para Ollama...");
-                        $nutritionalData = $ollama->extractNutritionalData($b64, 300);
+                        // Timeout aumentado no service também
+                        $nutritionalData = $ollama->extractNutritionalData($b64, 400);
 
                         if ($nutritionalData) {
                             $updates = array_merge($updates, $nutritionalData);
                             Log::info("Dados nutricionais extraídos com sucesso.");
                         } else {
-                            $errors[] = "Ollama retornou vazio.";
+                            $errors[] = "Ollama retornou vazio ou falhou.";
                         }
                     } else {
-                        $errors[] = "Arquivo de imagem não encontrado no disco.";
+                        $errors[] = "Arquivo não encontrado: $path";
                     }
                 } catch (\Exception $e) {
                     $errors[] = "Erro OCR: " . $e->getMessage();
-                    Log::error("Erro no processamento da imagem: " . $e->getMessage());
+                    Log::error("Erro Imagem: " . $e->getMessage());
                 }
             }
 
-            // --- ETAPA 2: TRADUÇÃO DO NOME (Mantendo funcionalidade existente) ---
+            // --- ETAPA 2: TRADUÇÃO (Mantida Original) ---
             if (empty($this->product->product_name_en)) {
                 try {
-                    Log::info("Iniciando tradução do nome...");
                     $translatedName = $translator->translate($this->product->product_name);
-                    
                     if ($translatedName) {
                         $updates['product_name_en'] = $translatedName;
-                        Log::info("Nome traduzido: $translatedName");
                     }
                 } catch (\Exception $e) {
-                    $errors[] = "Erro Tradução: " . $e->getMessage();
-                    Log::error("Erro na tradução: " . $e->getMessage());
+                    Log::warning("Erro Tradução: " . $e->getMessage());
+                    // Não falha o job inteiro por causa da tradução
                 }
             }
 
-            // --- ETAPA 3: VALORES PADRÃO (Zeros Obrigatórios) ---
-            // Só aplica defaults se tivermos extraído algo OU se já existirem dados parciais
-            // Isso evita zerar tudo se o OCR falhar completamente.
+            // --- ETAPA 3: SALVAR ---
             if (!empty($updates)) {
-                $mandatoryFields = [
-                    'total_fat', 'sat_fat', 'trans_fat', 
-                    'cholesterol', 'sodium', 
-                    'total_carb', 'fiber', 'total_sugars', 
-                    'added_sugars', 'protein'
-                ];
-
-                foreach ($mandatoryFields as $field) {
-                    // Se o campo veio do OCR, mantém. Se não, e não existe no updates, define 0.
-                    if (!isset($updates[$field])) {
-                        $updates[$field] = 0;
+                // Aplica zeros padrão apenas se necessário
+                $mandatory = ['total_fat', 'sat_fat', 'trans_fat', 'sodium', 'total_carb', 'protein'];
+                foreach ($mandatory as $field) {
+                    if (!isset($updates[$field]) && !isset($this->product->$field)) {
+                        $updates[$field] = '0';
                     }
                 }
-            }
 
-            // --- ETAPA 4: SALVAR ---
-            if (!empty($updates)) {
                 $updates['ai_status'] = 'completed';
                 $updates['last_ai_processed_at'] = now();
                 $updates['ai_error_message'] = empty($errors) ? null : implode(" | ", $errors);
                 
-                $this->product->update($updates);
-                Log::info("Produto {$this->product->id} atualizado com sucesso.");
+                $this->product->updateQuietly($updates); // Quietly aqui também
+                Log::info("Produto {$this->product->id} finalizado com sucesso.");
             } else {
-                // Se chegou aqui, nada foi gerado (nem OCR, nem Tradução)
-                $this->product->update([
+                $this->product->updateQuietly([
                     'ai_status' => 'error',
-                    'ai_error_message' => "Nenhum dado gerado. Erros: " . implode(" | ", $errors)
+                    'ai_error_message' => "Nenhum dado gerado. " . implode(" | ", $errors)
                 ]);
             }
 
         } catch (\Exception $e) {
-            // Catch global para falhas catastróficas
-            $this->product->update([
-                'ai_status' => 'error',
+            $this->product->updateQuietly([
+                'ai_status' => 'error', 
                 'ai_error_message' => $e->getMessage()
             ]);
-            Log::error("Falha Crítica Job Produto {$this->product->id}: " . $e->getMessage());
+            Log::error("Falha Fatal Job: " . $e->getMessage());
         }
     }
 
     private function prepareImage($path): string
     {
-        // Se a imagem for pequena (recorte), envia direto para não perder nitidez
-        list($width, $height) = getimagesize($path);
+        // Se a imagem vier do Crop (ex: < 1MB ou dimensões controladas), 
+        // NÃO redimensione. O redimensionamento do PHP (GD) pode borrar letras miúdas.
         
-        if ($width <= 1500 && $height <= 1500) {
+        list($width, $height) = getimagesize($path);
+        $filesize = filesize($path);
+
+        // Limite seguro: 1800px ou 2MB. Se for menor, manda direto.
+        if ($width <= 1800 && $height <= 1800 && $filesize < 2 * 1024 * 1024) {
             return base64_encode(file_get_contents($path));
         }
         
-        // Redimensionamento conservador apenas para fotos gigantescas
-        $newWidth = 1500; 
+        // Se for muito grande (foto crua da câmera), redimensiona
+        $newWidth = 1600; // Aumentei de 1500 para 1600 para melhorar leitura
         $newHeight = ($height / $width) * $newWidth;
+        
         $thumb = imagecreatetruecolor($newWidth, $newHeight);
         
+        // Mantém fundo branco para transparências (ajuda OCR)
+        $white = imagecolorallocate($thumb, 255, 255, 255);
+        imagefill($thumb, 0, 0, $white);
+
         $type = exif_imagetype($path);
         switch ($type) {
             case IMAGETYPE_JPEG: $source = imagecreatefromjpeg($path); break;
@@ -143,9 +145,11 @@ class ProcessProductImage implements ShouldQueue
         }
 
         imagecopyresampled($thumb, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        
         ob_start();
-        imagejpeg($thumb, null, 90); // Alta qualidade
+        imagejpeg($thumb, null, 95); // Qualidade 95 (Alta)
         $data = ob_get_clean();
+        
         imagedestroy($thumb);
         imagedestroy($source);
         

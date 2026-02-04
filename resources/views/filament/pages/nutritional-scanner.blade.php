@@ -80,7 +80,7 @@
                         <div class="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-4">
                             <x-heroicon-o-camera class="w-12 h-12 text-gray-500" />
                         </div>
-                        <p class="text-gray-400 text-sm">Toque abaixo para fotografar</p>
+                        <p class="text-gray-400 text-sm">Toque abaixo para fotografar a tabela</p>
                     </div>
 
                     <div id="preview-container" wire:ignore>
@@ -89,21 +89,21 @@
 
                     <div id="upload-loading" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center hidden z-50" wire:ignore>
                         <svg class="animate-spin h-10 w-10 text-green-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        <span class="text-green-500 font-bold text-sm">ENVIANDO...</span>
+                        <span class="text-green-500 font-bold text-sm">PROCESSANDO IMAGEM...</span>
                     </div>
                 </div>
 
                 <div class="px-6 pb-2">
                     <button type="button" id="btn-take-photo" onclick="triggerCamera()" class="btn-capture shadow-lg active:scale-95 transition-all">
                         <x-heroicon-s-camera class="w-6 h-6" />
-                        <span id="txt-take-photo">TIRAR FOTO</span>
+                        <span id="txt-take-photo">FOTOGRAFAR TABELA</span>
                     </button>
                 </div>
 
                 <div class="footer-actions">
                     <button wire:click="resetScanner" class="btn-cancel">CANCELAR</button>
                     <button id="btn-submit" wire:click="save" wire:loading.attr="disabled" disabled class="btn-save">
-                        SALVAR DADOS
+                        ENVIAR PARA IA
                     </button>
                 </div>
             </div>
@@ -151,7 +151,6 @@
                     btnSave.style.opacity = '0.5';
                 } else {
                     loader.classList.add('hidden');
-                    // AQUI OCORRE O DESBLOQUEIO
                     btnSave.disabled = false;
                     btnSave.style.opacity = '1';
                 }
@@ -174,6 +173,8 @@
                         document.getElementById('crop-modal').classList.add('active');
 
                         if(cropper) cropper.destroy();
+                        
+                        // Inicializa Cropper
                         cropper = new Cropper(img, {
                             viewMode: 1,
                             dragMode: 'move',
@@ -197,40 +198,44 @@
                 if(cropper) { cropper.destroy(); cropper = null; }
             });
 
+            // --- AQUI ESTÁ A CORREÇÃO DE QUALIDADE ---
             document.getElementById('btn-crop-confirm').addEventListener('click', function() {
                 if (!cropper) return;
 
                 document.getElementById('crop-modal').classList.remove('active');
-                setUploadState(true); // Bloqueia e mostra loading
+                setUploadState(true); // Bloqueia UI e mostra loading
 
+                // Gera o Canvas com alta qualidade e resolução aumentada
                 cropper.getCroppedCanvas({
-                    maxWidth: 1280, 
-                    maxHeight: 1280,
+                    maxWidth: 1600,   // Limite aumentado para preservar detalhes de texto
+                    maxHeight: 1600,
+                    imageSmoothingEnabled: true,
                     imageSmoothingQuality: 'high',
                 }).toBlob((blob) => {
                     
                     const url = URL.createObjectURL(blob);
                     showPreview(url);
 
+                    // Cria arquivo com qualidade JPEG máxima (1.0)
                     const file = new File([blob], "nutritional_label.jpg", { type: "image/jpeg" });
 
                     // Upload manual Livewire
                     @this.upload('data.image_nutritional', file, (uploadedFilename) => {
                         // SUCCESS
-                        setUploadState(false); // Libera botão
+                        setUploadState(false); // Libera botão de salvar
                         if(cropper) { cropper.destroy(); cropper = null; }
                     }, () => {
                         // ERROR
-                        alert('Erro ao enviar imagem.');
+                        alert('Erro ao enviar imagem. Tente novamente.');
                         setUploadState(false);
-                        document.getElementById('btn-submit').disabled = true; // Mantém travado
+                        document.getElementById('btn-submit').disabled = true; 
                         if(cropper) { cropper.destroy(); cropper = null; }
                     });
 
-                }, 'image/jpeg', 0.9);
+                }, 'image/jpeg', 1.0); // 1.0 = Qualidade Máxima (Sem compressão extra)
             });
 
-            // --- SCANNER LOGIC (Mantida igual) ---
+            // --- SCANNER LOGIC (Barcode) ---
             async function loadCameras() {
                 try {
                     const devices = await Html5Qrcode.getCameras();
@@ -238,15 +243,19 @@
                     if (backCameras.length === 0) backCameras = devices;
 
                     currentCameraId = backCameras[0].id;
+                    // Tenta achar câmera "wide" ou "0" (principal)
                     const wide = backCameras.find(c => c.label.toLowerCase().includes('0') || c.label.toLowerCase().includes('wide'));
                     if (wide) currentCameraId = wide.id;
                 } catch (e) { console.error(e); }
             }
 
             async function startScanner() {
+                // Se já achou produto, não liga scanner
                 if (@json($foundProduct)) return;
+                
                 if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} html5QrCode = null; }
                 document.getElementById('reader').innerHTML = '';
+                
                 if (backCameras.length === 0) await loadCameras();
                 
                 html5QrCode = new Html5Qrcode("reader");
@@ -274,6 +283,7 @@
                 setTimeout(startScanner, 600); 
             });
             
+            // Inicia ao carregar
             startScanner();
         });
     </script>
