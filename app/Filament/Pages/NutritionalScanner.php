@@ -33,9 +33,15 @@ class NutritionalScanner extends Page implements HasForms
     {
         return $form
             ->schema([
-                // Mantemos o componente no DOM mas escondemos via CSS para o JS conseguir acessá-lo
                 FileUpload::make('image_nutritional')
-                    ->extraAttributes(['id' => 'hidden-file-input', 'style' => 'display: none !important'])
+                    ->extraAttributes([
+                        'id' => 'hidden-file-input', 
+                        'style' => 'display: none !important',
+                    ])
+                    ->extraInputAttributes([
+                        'capture' => 'environment',
+                        'accept' => 'image/*'
+                    ])
                     ->hiddenLabel()
                     ->image()
                     ->directory('uploads/nutritional')
@@ -45,9 +51,6 @@ class NutritionalScanner extends Page implements HasForms
             ->statePath('data');
     }
 
-    /**
-     * Recebe a imagem do Cropper.js (Base64), salva e vincula ao produto.
-     */
     public function processCroppedImage(string $base64Data)
     {
         try {
@@ -59,8 +62,6 @@ class NutritionalScanner extends Page implements HasForms
                 $path = 'uploads/nutritional/' . $filename;
 
                 Storage::disk('public')->put($path, $image);
-
-                // Atualiza o estado para que o save() funcione
                 $this->data['image_nutritional'] = $path;
                 
                 return true;
@@ -78,9 +79,7 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            $this->data['image_nutritional'] = null;
         } else {
-            $this->foundProduct = null;
             Notification::make()->title('EAN não cadastrado')->danger()->send();
             $this->dispatch('reset-scanner');
         }
