@@ -10,7 +10,6 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -25,7 +24,10 @@ class NutritionalScanner extends Page implements HasForms
     public $foundProduct = null;
     public ?array $data = [];
 
-    public function mount(): void { $this->form->fill(); }
+    public function mount(): void 
+    { 
+        $this->form->fill(); 
+    }
 
     public function form(Form $form): Form
     {
@@ -34,12 +36,22 @@ class NutritionalScanner extends Page implements HasForms
                 FileUpload::make('image_nutritional')
                     ->hiddenLabel()
                     ->image()
-                    ->imageResizeMode('contain')
-                    ->imageResizeTargetWidth(1280)
-                    ->imageResizeTargetHeight(1280)
+                    
+                    // --- NOVA CONFIGURAÇÃO DE CROP (RECORTAR) ---
+                    ->imageEditor() // Ativa o editor (Cropper.js)
+                    ->imageEditorMode(2) // 2 = Modal (Ideal para mobile)
+                    ->imageCropAspectRatio(null) // Null = Livre (Sem proporção fixa)
+                    
+                    // --- OTIMIZAÇÃO PÓS-CROP ---
+                    // Definimos um limite alto apenas para não salvar arquivos gigantescos (20MB+),
+                    // mas mantemos qualidade suficiente para o OCR ler letras pequenas.
+                    ->imageResizeTargetWidth('2000') 
+                    ->imageResizeTargetHeight('2000')
+                    
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    // Força a câmera traseira no nível do componente
+                    
+                    // Mantém a captura de câmera, mas permite acesso à galeria para edição
                     ->extraInputAttributes([
                         'capture' => 'environment',
                         'accept' => 'image/*'
@@ -58,10 +70,16 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
+            // Limpa o campo de imagem para nova captura
             $this->form->fill(['image_nutritional' => null]); 
         } else {
             $this->foundProduct = null;
-            Notification::make()->title('EAN não cadastrado')->danger()->send();
+            Notification::make()
+                ->title('EAN não cadastrado')
+                ->danger()
+                ->send();
+            
+            // Reinicia o scanner após erro
             $this->dispatch('reset-scanner');
         }
     }
@@ -69,10 +87,24 @@ class NutritionalScanner extends Page implements HasForms
     public function save()
     {
         $state = $this->form->getState();
+        
         if ($this->foundProduct && !empty($state['image_nutritional'])) {
-            $this->foundProduct->update(['image_nutritional' => $state['image_nutritional']]);
-            Notification::make()->title('Salvo com sucesso!')->success()->send();
+            // Salva o caminho da imagem recortada no produto
+            $this->foundProduct->update([
+                'image_nutritional' => $state['image_nutritional']
+            ]);
+
+            Notification::make()
+                ->title('Imagem salva e enviada para IA!')
+                ->success()
+                ->send();
+
             $this->resetScanner();
+        } else {
+            Notification::make()
+                ->title('Erro: Nenhuma imagem capturada.')
+                ->warning()
+                ->send();
         }
     }
 
@@ -82,6 +114,7 @@ class NutritionalScanner extends Page implements HasForms
         $this->foundProduct = null;
         $this->data = [];
         $this->form->fill();
+        // Emite evento para o Javascript reiniciar a câmera
         $this->dispatch('reset-scanner'); 
     }
 }
