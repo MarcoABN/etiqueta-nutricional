@@ -8,7 +8,6 @@ class GeminiFdaTranslator
 {
     protected OllamaService $ollama;
 
-    // Injeção de dependência do serviço local
     public function __construct(OllamaService $ollama)
     {
         $this->ollama = $ollama;
@@ -22,9 +21,9 @@ class GeminiFdaTranslator
         try {
             $prompt = $this->getSystemPrompt($productName);
             
-            // Timeout de 10 segundos é suficiente para processamento de texto puro (sem imagem)
-            // Se demorar mais que isso, o OllamaService corta para não travar o PHP
-            $result = $this->ollama->completion($prompt, 10);
+            // CORREÇÃO CRÍTICA: Aumentado de 10s para 60s.
+            // Isso cobre o tempo de "Cold Start" (carregar modelo na GPU) + Latência da VPN.
+            $result = $this->ollama->completion($prompt, 60);
             
             return $this->cleanText($result);
             
@@ -34,30 +33,19 @@ class GeminiFdaTranslator
         }
     }
 
-    /**
-     * Limpa a resposta da LLM para garantir que salve apenas o nome.
-     */
     private function cleanText(?string $text): ?string
     {
         if (empty($text)) {
             return null;
         }
 
-        // Remove blocos de código markdown se houver
+        // Remove blocos de código e metadados comuns de LLMs
         $text = str_replace(['```json', '```'], '', $text);
+        $text = str_replace(['Output:', 'Translation:', 'Identity Statement:', 'EN:', 'English:', 'Answer:'], '', $text);
         
-        // Remove prefixos comuns de chat
-        $text = str_replace(['Output:', 'Translation:', 'Identity Statement:', 'EN:', 'English:'], '', $text);
-        
-        // Remove aspas extras e espaços
-        $text = trim($text, " \t\n\r\0\x0B\"'");
-
-        return $text;
+        return trim($text, " \t\n\r\0\x0B\"'");
     }
 
-    /**
-     * Constrói o prompt baseado nas regras do CFR Title 21 (Sec 101.3 e 102.5)
-     */
     private function getSystemPrompt(string $productName): string
     {
         return <<<EOT
