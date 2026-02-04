@@ -2,147 +2,101 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class GeminiFdaTranslator
 {
-    protected $ollama; // Serviço Local
-    protected $googleKey;
-    protected $perplexityKey;
+    protected OllamaService $ollama;
 
-    protected $googleUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-001:generateContent';
-    protected $perplexityUrl = 'https://api.perplexity.ai/chat/completions';
-
-    // Injeção de dependência do OllamaService
+    // Injeção de dependência do serviço local
     public function __construct(OllamaService $ollama)
     {
         $this->ollama = $ollama;
-        $this->googleKey = env('GEMINI_API_KEY');
-        $this->perplexityKey = env('PERPLEXITY_API_KEY');
     }
 
+    /**
+     * Gera o "Statement of Identity" (Nome FDA) para o produto.
+     */
     public function translate(string $productName): ?string
     {
-        // 1. TENTATIVA LOCAL (Prioridade Máxima - Custo Zero)
-        // Se o serviço estiver online via Tailscale, usa ele.
-        $localResult = $this->tryLocal($productName);
-        if ($localResult) {
-            return $localResult;
-        }
-
-        // 2. Tenta Google (Grátis, mas com limite de cota)
-        if (!empty($this->googleKey)) {
-            // Log apenas para monitorar se o local está falhando muito
-            Log::info("Fallback para Google: $productName"); 
-            $result = $this->tryGoogle($productName);
-            if ($result) {
-                return $result;
-            }
-        }
-
-        // 3. Fallback Final: Perplexity (Pago/Cota)
-        if (!empty($this->perplexityKey)) {
-            Log::info("Fallback para Perplexity: $productName");
-            return $this->tryPerplexity($productName);
-        }
-
-        return null;
-    }
-
-    // --- Lógica Local (Ollama) ---
-    protected function tryLocal($productName)
-    {
-        $prompt = $this->getSystemPrompt($productName, 'local');
-        
-        // Timeout de apenas 5 segundos!
-        // Se sua GPU estiver ocupada com imagem, isso vai falhar rápido e liberar o processo para o Google.
-        $text = $this->ollama->completion($prompt, 15); 
-        
-        return $this->cleanText($text);
-    }
-
-    // --- Lógica do Google ---
-    protected function tryGoogle($productName)
-    {
         try {
-            usleep(2000000); // 2s delay para evitar rate limit
-            $prompt = $this->getSystemPrompt($productName, 'google');
-
-            $response = Http::withOptions(['verify' => false])
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->post("{$this->googleUrl}?key={$this->googleKey}", [
-                    'contents' => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig' => ['temperature' => 0.1, 'maxOutputTokens' => 500]
-                ]);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
-                return $this->cleanText($text);
-            }
-            return null;
+            $prompt = $this->getSystemPrompt($productName);
+            
+            // Timeout de 10 segundos é suficiente para processamento de texto puro (sem imagem)
+            // Se demorar mais que isso, o OllamaService corta para não travar o PHP
+            $result = $this->ollama->completion($prompt, 10);
+            
+            return $this->cleanText($result);
+            
         } catch (\Exception $e) {
+            Log::error("Erro na Tradução Local (FDA): " . $e->getMessage());
             return null;
         }
     }
 
-    // --- Lógica da Perplexity ---
-    protected function tryPerplexity($productName)
+    /**
+     * Limpa a resposta da LLM para garantir que salve apenas o nome.
+     */
+    private function cleanText(?string $text): ?string
     {
-        try {
-            $response = Http::withOptions(['verify' => false])
-                ->withToken($this->perplexityKey)
-                ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
-                ->post($this->perplexityUrl, [
-                    'model' => 'sonar',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $this->getSystemPrompt(null, 'perplexity')],
-                        ['role' => 'user', 'content' => "Produto: \"{$productName}\""]
-                    ],
-                    'temperature' => 0.1,
-                    'max_tokens' => 200,
-                ]);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                $text = $data['choices'][0]['message']['content'] ?? null;
-                return $this->cleanText($text);
-            }
-            return null;
-        } catch (\Exception $e) {
+        if (empty($text)) {
             return null;
         }
+
+        // Remove blocos de código markdown se houver
+        $text = str_replace(['```json', '```'], '', $text);
+        
+        // Remove prefixos comuns de chat
+        $text = str_replace(['Output:', 'Translation:', 'Identity Statement:', 'EN:', 'English:'], '', $text);
+        
+        // Remove aspas extras e espaços
+        $text = trim($text, " \t\n\r\0\x0B\"'");
+
+        return $text;
     }
 
-    private function cleanText($text)
+    /**
+     * Constrói o prompt baseado nas regras do CFR Title 21 (Sec 101.3 e 102.5)
+     */
+    private function getSystemPrompt(string $productName): string
     {
-        if (!$text) return null;
-        // Limpeza agressiva para garantir que só venha o nome
-        return trim(str_replace(['Saída:', 'Output:', '"', 'Product:', 'Translation:'], '', $text));
-    }
+        return <<<EOT
+You are an expert in FDA Food Labeling Regulations (21 CFR).
+Your task is to convert a Portuguese commercial product name into a compliant **FDA Statement of Identity**.
 
-    private function getSystemPrompt($productName, $type)
-    {
-        $base = <<<EOT
-Você é um especialista em rotulagem FDA. Traduza do Português para o Inglês.
-REGRAS:
-1. MANTENHA A MARCA (Ex: "Lacta").
-2. TRADUZA a descrição (Ex: "Wafer").
-3. NÃO USE BOLD (**), MARKDOWN, OR QUOTES.
-4. MANTENHA o peso no final.
-5. Retorne APENAS o texto traduzido final. Sem introduções.
-EXEMPLO: "Biscoito Trakinas Morango 140g" -> "Trakinas Strawberry Sandwich Cookies 140g"
+### CRITICAL RULES (Based on 21 CFR 101.3):
+1. **BRAND NAME**: Keep the brand name exactly as is at the beginning.
+2. **COMMON NAME**: Identify what the food actually IS (e.g., "Biscoito Recheado" is "Sandwich Cookies", "Bebida Láctea" is "Dairy Beverage", "Salgadinho" is "Snack").
+3. **FLAVORS**: 
+   - "Sabor Morango" -> "Strawberry Flavored" (Artificial/Natural flavor).
+   - "Com Morango" -> "Strawberry" (Real fruit).
+   - If unsure, use "Flavored".
+4. **QUANTITY/PACK**: Keep units (g, kg, ml, L) and pack counts (e.g., "12x1L", "Pack of 3") at the very end.
+
+### STRUCTURE TARGET:
+[Brand] + [Flavor/Feature] + [Common Name] + [Net Qty]
+
+### EXAMPLES:
+- IN: "Biscoito Trakinas Morango 140g"
+  OUT: "Trakinas Strawberry Flavored Sandwich Cookies 140g"
+
+- IN: "Leite Integral Itambé 1 Litro"
+  OUT: "Itambé Whole Milk 1L"
+
+- IN: "Achocolatado Nescau 2.0 400g"
+  OUT: "Nescau 2.0 Chocolate Powder Drink Mix 400g"
+
+- IN: "Refrigerante Coca-Cola Sem Açúcar 350ml"
+  OUT: "Coca-Cola Zero Sugar Soda 350ml"
+
+- IN: "Fardo Refrigerante Guaraná Antarctica 6x1,5L"
+  OUT: "Guaraná Antarctica Soda 6x1.5L Pack"
+
+### INPUT PRODUCT:
+"{$productName}"
+
+### OUTPUT INSTRUCTION:
+Return **ONLY** the final English string. Do not explain. Do not use Markdown.
 EOT;
-
-        if ($type === 'local') {
-             return $base . "\n\nProduto para traduzir: \"{$productName}\"";
-        }
-        
-        if ($type === 'google') {
-            return $base . "\n\nEntrada: \"{$productName}\"\nSaída:";
-        }
-        
-        return $base;
     }
 }
