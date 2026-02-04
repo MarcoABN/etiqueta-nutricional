@@ -7,9 +7,10 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\Storage;
+use App\Jobs\ProcessProductImage; // Importante para despachar o Job manualmente
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -34,35 +35,64 @@ class NutritionalScanner extends Page implements HasForms
         return $form
             ->schema([
                 FileUpload::make('image_nutritional')
-                    ->hiddenLabel()
+                    ->label('Foto da Tabela') // Label visível ajuda a entender
                     ->image()
                     
-                    // --- NOVA CONFIGURAÇÃO DE CROP (RECORTAR) ---
-                    ->imageEditor() // Ativa o editor (Cropper.js)
-                    ->imageEditorMode(2) // 2 = Modal (Ideal para mobile)
-                    ->imageCropAspectRatio(null) // Null = Livre (Sem proporção fixa)
+                    // --- CONFIGURAÇÃO DO CROP ---
+                    ->imageEditor()
+                    ->imageEditorMode(2) // Modal
+                    ->imageCropAspectRatio(null) // Livre
                     
-                    // --- OTIMIZAÇÃO PÓS-CROP ---
-                    // Definimos um limite alto apenas para não salvar arquivos gigantescos (20MB+),
-                    // mas mantemos qualidade suficiente para o OCR ler letras pequenas.
-                    ->imageResizeTargetWidth('2000') 
+                    // --- REMOVIDO O LIVE E O AFTER STATE UPDATED ---
+                    // Isso impede que o formulário seja processado assim que a foto é tirada.
+                    // O usuário precisa clicar em "Enviar" depois de editar.
+                    // ->live() 
+                    // ->afterStateUpdated(...) 
+                    
+                    ->imageResizeTargetWidth('2000')
                     ->imageResizeTargetHeight('2000')
-                    
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    
-                    // Mantém a captura de câmera, mas permite acesso à galeria para edição
                     ->extraInputAttributes([
                         'capture' => 'environment',
                         'accept' => 'image/*'
                     ])
-                    ->live() 
-                    ->afterStateUpdated(fn () => $this->dispatch('file-uploaded-callback'))
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
     }
 
+    // Ação que será chamada pelo botão na View
+    public function processImage()
+    {
+        $state = $this->form->getState();
+
+        if ($this->foundProduct && !empty($state['image_nutritional'])) {
+            
+            // 1. Salva a imagem no produto
+            $this->foundProduct->update([
+                'image_nutritional' => $state['image_nutritional']
+            ]);
+
+            // 2. Dispara o Job de IA manualmente
+            ProcessProductImage::dispatch($this->foundProduct);
+
+            Notification::make()
+                ->title('Imagem enviada! Processando IA...')
+                ->success()
+                ->send();
+
+            // 3. Reinicia o scanner
+            $this->resetScanner();
+        } else {
+            Notification::make()
+                ->title('Tire a foto e faça o recorte antes de enviar.')
+                ->warning()
+                ->send();
+        }
+    }
+    
+    // ... (Mantenha handleBarcodeScan e resetScanner iguais)
     public function handleBarcodeScan($code)
     {
         $this->scannedCode = $code;
@@ -70,41 +100,11 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Limpa o campo de imagem para nova captura
             $this->form->fill(['image_nutritional' => null]); 
         } else {
             $this->foundProduct = null;
-            Notification::make()
-                ->title('EAN não cadastrado')
-                ->danger()
-                ->send();
-            
-            // Reinicia o scanner após erro
+            Notification::make()->title('EAN não cadastrado')->danger()->send();
             $this->dispatch('reset-scanner');
-        }
-    }
-
-    public function save()
-    {
-        $state = $this->form->getState();
-        
-        if ($this->foundProduct && !empty($state['image_nutritional'])) {
-            // Salva o caminho da imagem recortada no produto
-            $this->foundProduct->update([
-                'image_nutritional' => $state['image_nutritional']
-            ]);
-
-            Notification::make()
-                ->title('Imagem salva e enviada para IA!')
-                ->success()
-                ->send();
-
-            $this->resetScanner();
-        } else {
-            Notification::make()
-                ->title('Erro: Nenhuma imagem capturada.')
-                ->warning()
-                ->send();
         }
     }
 
@@ -114,7 +114,6 @@ class NutritionalScanner extends Page implements HasForms
         $this->foundProduct = null;
         $this->data = [];
         $this->form->fill();
-        // Emite evento para o Javascript reiniciar a câmera
         $this->dispatch('reset-scanner'); 
     }
 }
