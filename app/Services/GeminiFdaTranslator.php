@@ -55,8 +55,9 @@ class GeminiFdaTranslator
     {
         $prompt = $this->getSystemPrompt($productName, 'local');
         
-        // Chama o novo método completion do OllamaService
-        $text = $this->ollama->completion($prompt);
+        // Timeout de apenas 5 segundos!
+        // Se sua GPU estiver ocupada com imagem, isso vai falhar rápido e liberar o processo para o Google.
+        $text = $this->ollama->completion($prompt, 15); 
         
         return $this->cleanText($text);
     }

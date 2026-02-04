@@ -12,110 +12,78 @@ class OllamaService
 
     public function __construct()
     {
-        // Pega do .env (Use o IP do Tailscale)
         $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:11434'), '/');
-        // Modelo definido na imagem que você mandou (qwen3:8b ou qwen3-vl:8b se tiver suporte a visão)
-        // RECOMENDAÇÃO: Use qwen2.5-vl ou qwen3-vl para imagens.
-        $this->model = env('OLLAMA_MODEL', 'qwen2.5-vl');
+        // Garante que usa o modelo exato da sua print (qwen3-vl:8b)
+        $this->model = env('OLLAMA_MODEL', 'qwen3-vl:8b'); 
     }
 
-    public function extractNutritionalData(string $base64Image): ?array
+    // Adicionamos o parâmetro $timeoutSeconds
+    public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 300): ?array
     {
-        // Mapeamento exato para suas colunas do banco
         $prompt = <<<EOT
 Analise a tabela nutricional na imagem. Extraia os dados para um JSON estrito.
 Regras:
-1. Retorne APENAS o JSON. Sem markdown, sem explicações.
-2. Se um valor não existir ou for ilegível, use null.
-3. Remova unidades (g, mg, kcal, %) dos valores numéricos, deixe apenas o número.
-4. Mapeie exatamente para estas chaves JSON:
-
-- servings_per_container (texto aprox)
-- serving_weight (ex: "25g")
-- serving_size_quantity (ex: "2 1/2")
-- serving_size_unit (ex: "xícaras")
-
-- calories (numero)
-- total_carb (numero)
-- total_carb_dv (numero, %VD)
-- total_sugars (numero)
-- added_sugars (numero)
-- added_sugars_dv (numero, %VD)
-- protein (numero)
-- protein_dv (numero, %VD)
-- total_fat (numero)
-- total_fat_dv (numero, %VD)
-- sat_fat (numero)
-- sat_fat_dv (numero, %VD)
-- trans_fat (numero)
-- trans_fat_dv (numero, %VD)
-- fiber (numero)
-- fiber_dv (numero, %VD)
-- sodium (numero)
-- sodium_dv (numero, %VD)
-
+1. Retorne APENAS o JSON.
+2. Se ilegível, use null.
+3. Remova unidades (g, mg, kcal).
+4. Chaves obrigatórias: servings_per_container, serving_weight, serving_size_quantity, serving_size_unit, calories, total_carb, total_carb_dv, total_sugars, added_sugars, added_sugars_dv, protein, protein_dv, total_fat, total_fat_dv, sat_fat, sat_fat_dv, trans_fat, trans_fat_dv, fiber, fiber_dv, sodium, sodium_dv.
 EOT;
 
+        return $this->query($prompt, $base64Image, true, $timeoutSeconds);
+    }
+
+    public function completion(string $prompt, int $timeoutSeconds = 10): ?string
+    {
+        // Timeout curto por padrão para texto
+        return $this->query($prompt, null, false, $timeoutSeconds);
+    }
+
+    private function query(string $prompt, ?string $image, bool $json, int $timeout)
+    {
         try {
-            // Timeout generoso (3 min) para fila sequencial
-            $response = Http::timeout(180)->post("{$this->host}/api/chat", [
+            $payload = [
                 'model' => $this->model,
-                'format' => 'json',
                 'stream' => false,
                 'messages' => [
                     [
                         'role' => 'user',
                         'content' => $prompt,
-                        'images' => [$base64Image]
                     ]
                 ],
                 'options' => [
-                    'temperature' => 0.0, // Zero criatividade = máxima precisão
+                    'temperature' => 0.1,
                 ]
-            ]);
+            ];
+
+            if ($image) {
+                $payload['messages'][0]['images'] = [$image];
+            }
+
+            if ($json) {
+                $payload['format'] = 'json';
+            }
+
+            // AQUI ESTÁ A CORREÇÃO PRINCIPAL: O timeout explícito
+            $response = Http::timeout($timeout)
+                ->connectTimeout(10) // Timeout de conexão curto
+                ->post("{$this->host}/api/chat", $payload);
 
             if ($response->successful()) {
                 $content = $response->json('message.content');
-                // Limpeza extra caso o modelo mande ```json ... ```
-                $cleanContent = str_replace(['```json', '```'], '', $content);
-                return json_decode($cleanContent, true);
+                if ($json) {
+                    $clean = str_replace(['```json', '```'], '', $content);
+                    return json_decode($clean, true);
+                }
+                return $content;
             }
 
-            Log::error('Ollama Error: ' . $response->body());
+            // Log detalhado do erro (Isso vai aparecer no laravel.log)
+            Log::error("Ollama API Error [{$response->status()}]: " . $response->body());
             return null;
 
         } catch (\Exception $e) {
-            Log::error('Ollama Connection Error: ' . $e->getMessage());
-            return null;
-        }
-    }
-
-    public function completion(string $prompt): ?string
-    {
-        try {
-            $response = Http::timeout(300)->post("{$this->host}/api/chat", [
-                'model' => $this->model,
-                'stream' => false,
-                'messages' => [
-                    [
-                        'role' => 'user',
-                        'content' => $prompt
-                    ]
-                ],
-                'options' => [
-                    'temperature' => 0.1, // Baixa criatividade para tradução fiel
-                ]
-            ]);
-
-            if ($response->successful()) {
-                return $response->json('message.content');
-            }
-
-            Log::warning('Ollama Local falhou na tradução: ' . $response->body());
-            return null;
-
-        } catch (\Exception $e) {
-            Log::error('Erro de conexão Ollama: ' . $e->getMessage());
+            // Log da exceção (Timeout, DNS, etc)
+            Log::error("Ollama Connection Exception: " . $e->getMessage());
             return null;
         }
     }
