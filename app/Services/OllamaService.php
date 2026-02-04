@@ -11,7 +11,7 @@ class OllamaService
     protected string $visionModel;
     protected string $textModel;
 
-    // Dicionário de Tradução (Mantido no PHP para performance)
+    // Dicionário de Tradução (Medidas Caseiras)
     protected array $unitMap = [
         '/colher.*sopa/i'   => 'Tablespoon',
         '/colher.*ch[aá]/i' => 'Teaspoon',
@@ -31,37 +31,36 @@ class OllamaService
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://100.89.133.69:11434'), '/');
-        // Modelo 30b é essencial para entender instruções de "colunas"
         $this->visionModel = env('OLLAMA_VISION_MODEL', 'qwen3-vl:30b'); 
         $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma2:latest');
     }
 
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // PROMPT ATUALIZADO: Lógica das "Duas Últimas Colunas"
+        // PROMPT REFATORADO: Lógica de "Header Matching" (Mais visual e humano)
         $prompt = <<<EOT
-Analise a Tabela Nutricional. Extraia os dados EXATAMENTE como escritos.
+Analise esta Tabela Nutricional.
 
-REGRA DE COLUNAS (IMPORTANTE):
-A tabela pode ter 2 ou 3 colunas de números. Você deve focar nas DUAS ÚLTIMAS:
-1. A ÚLTIMA coluna é sempre o %VD (% Daily Value). Extraia para os campos "_dv".
-2. A PENÚLTIMA coluna é o Valor Nutricional da Porção. Extraia para os campos de valor.
-3. Se houver uma antepenúltima coluna (primeira à esquerda, ex: "100g"), IGNORE-A completamente.
+PASSO 1: IDENTIFIQUE A PORÇÃO
+Localize o texto "Porção" no topo. Ex: "Porção: 25 g (2 1/2 xícaras)".
+- Separe o PESO (25 g).
+- Separe a MEDIDA CASEIRA (2 1/2 xícaras).
 
-SEÇÃO CABEÇALHO (Porção):
-- "servings_per_container": Texto completo da linha "Porções por embalagem" (ex: "Cerca de 2").
-- "serving_weight": Valor métrico da porção (ex: "25 g").
-- "serving_measure_text": Texto completo da medida caseira entre parênteses (ex: "2 1/2 xícaras").
+PASSO 2: IDENTIFIQUE A COLUNA CORRETA
+A tabela abaixo tem colunas de números.
+- Procure o cabeçalho da coluna que corresponde ao PESO da porção (ex: procure a coluna com título "25 g").
+- Se não houver título exato, use a coluna do MEIO (se houver 3) ou a PRIMEIRA (se houver 2).
+- IGNORE a coluna "100 g" ou "100 ml".
 
-FORMATO DE SAÍDA:
-- Retorne APENAS JSON.
-- Se o valor for "Zero", "Não contém" ou "-", retorne "0".
+PASSO 3: EXTRAIA OS DADOS DESSA COLUNA ESPECÍFICA
+Para cada nutriente (Carboidratos, Proteínas, Sódio...), extraia o valor numérico que está NA COLUNA IDENTIFICADA no Passo 2.
+Extraia também o %VD da última coluna.
 
-JSON ALVO:
+JSON ALVO (Retorne APENAS JSON):
 {
-  "servings_per_container": "string",
-  "serving_weight": "string",
-  "serving_measure_text": "string",
+  "servings_per_container": "string (texto completo da linha 'Porções por embalagem')",
+  "serving_weight": "string (ex: 25 g)",
+  "serving_measure_text": "string (ex: 2 1/2 xícaras)",
   "calories": "number",
   "total_carb": "number",
   "total_carb_dv": "number",
@@ -99,7 +98,9 @@ EOT;
         $jsonData = $this->robustJsonDecode($response);
         
         if (!$this->isValidNutritionalData($jsonData)) {
-            Log::warning("Ollama: Dados inválidos detectados.");
+            Log::warning("Ollama: JSON retornado não contém dados nutricionais válidos.");
+            // Opcional: Logar o raw response para debug se precisar
+            // Log::debug("Raw Response: " . substr($response, 0, 200));
             return null;
         }
 
@@ -114,16 +115,24 @@ EOT;
         $servingsPerContainer = $matches[0] ?? '1'; 
         $servingsPerContainer = str_replace(',', '.', $servingsPerContainer);
 
-        // 2. Processar Medida Caseira (Mantendo fração original "2 1/2")
+        // 2. Processar Medida Caseira
         $measureText = $data['serving_measure_text'] ?? '';
         $measureData = $this->parseHouseholdMeasure($measureText);
 
-        // 3. Limpeza Numérica Padrão
+        // 3. Limpeza Numérica Robustecida
         $cleanNum = function($key) use ($data) {
             if (!isset($data[$key])) return '0';
+            
+            // Remove letras, espaços e símbolos irrelevantes, mantendo números, vírgula, ponto e traço
             $val = preg_replace('/[^0-9,\.-]/', '', (string)$data[$key]);
+            
+            // Troca vírgula por ponto para padronização
             $val = str_replace(',', '.', $val);
-            return ($val === '' || $val === '.') ? '0' : $val;
+            
+            // Verifica se resultou em string vazia, apenas ponto ou traço isolado
+            if ($val === '' || $val === '.' || $val === '-') return '0';
+            
+            return $val;
         };
 
         $cleanText = fn($key) => isset($data[$key]) ? trim((string)$data[$key]) : null;
@@ -178,8 +187,9 @@ EOT;
         }
 
         $qty = '1';
-        // Captura frações ("2 1/2", "1/2") ou números decimais/inteiros
-        if (preg_match('/(\d+\s+\d+\/\d+|\d+\/\d+|\d+[\.,]\d+|\d+)/', $text, $matches)) {
+        // Regex aprimorada para capturar "2 1/2" ou "2.5" ou "2" no início da string
+        // Captura o primeiro grupo numérico que encontrar
+        if (preg_match('/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+[\.,]\d+|\d+)/', trim($text), $matches)) {
             $qty = trim($matches[0]);
         }
 
@@ -195,7 +205,8 @@ EOT;
             $response = Http::timeout($timeout)->connectTimeout(5)->post("{$this->host}/api/chat", [
                 'model' => $model,
                 'messages' => [['role' => 'user', 'content' => $prompt, 'images' => [$image]]],
-                'stream' => false, 'format' => 'json',
+                'stream' => false, 
+                'format' => 'json',
                 'options' => ['temperature' => 0.0, 'num_ctx' => 2048]
             ]);
             return $response->successful() ? $response->json('message.content') : null;
@@ -214,7 +225,9 @@ EOT;
     private function isValidNutritionalData(?array $data): bool
     {
         if (!$data) return false;
-        return isset($data['calories']) || isset($data['serving_weight']) || isset($data['total_fat']);
+        // Verifica se pelo menos 1 campo importante veio preenchido (não nulo e não zero "string")
+        // Mas cuidado: "0" é válido. "null" é falha de leitura.
+        return isset($data['calories']) || isset($data['serving_weight']) || isset($data['total_carb']);
     }
 
     public function completion(string $prompt, int $timeoutSeconds = 60): ?string { return null; }
