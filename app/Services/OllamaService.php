@@ -1,149 +1,137 @@
 <?php
 
-namespace App\Services;
+namespace App\Jobs;
 
-use Illuminate\Support\Facades\Http;
+use App\Models\Product;
+use App\Services\OllamaService;
+use App\Services\GeminiFdaTranslator;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
-class OllamaService
+class ProcessProductImage implements ShouldQueue
 {
-    protected string $host;
-    protected string $visionModel;
-    protected string $textModel;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct()
+    // Timeout generoso para cobrir (Upload Imagem + Leitura + Tradução)
+    public $timeout = 300; 
+    public $tries = 1; 
+
+    public function __construct(public Product $product) {}
+
+    // Injetamos tanto o serviço de IA (Ollama) quanto o Tradutor
+    public function handle(OllamaService $ollama, GeminiFdaTranslator $translator): void
     {
-        $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:11434'), '/');
-        
-        // MOTOR 1: VISÃO (Lento, Detalhado, para Imagens)
-        // Padrão: qwen3-vl:8b
-        $this->visionModel = env('OLLAMA_MODEL', 'qwen3-vl:8b');
-        
-        // MOTOR 2: TEXTO (Rápido, Raciocínio, para Tradução)
-        // Padrão: gemma3:4b (ou llama3.2)
-        $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma3:4b');
-    }
+        $this->product->update(['ai_status' => 'processing']);
 
-    /**
-     * MOTOR DE VISÃO: Extrai dados da tabela nutricional com regras FDA.
-     * Usa o modelo pesado (Vision).
-     */
-    public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 180): ?array
-    {
-        // Recuperamos o prompt rico com regras de conversão de unidades
-        $prompt = <<<EOT
-Analise a tabela nutricional na imagem. Extraia os dados para JSON.
-
-### REGRAS DE UNIDADE (FDA HOUSEHOLD MEASURES):
-Traduza o campo 'serving_size_unit' do Português para Inglês Padrão:
-- "Xícara", "Xic" -> "cup"
-- "Colher de sopa" -> "tbsp"
-- "Colher de chá" -> "tsp"
-- "Unidade", "Biscoito" -> "piece"
-- "Fatia" -> "slice"
-- "Copo" -> "glass"
-- "Pedaço" -> "piece"
-- "Porção" -> "serving"
-
-### JSON OUTPUT KEYS (Estrito):
-- serving_per_container (texto)
-- serving_weight (numero, ex: 25)
-- serving_size_quantity (numero/fracao, ex: "2 1/2")
-- serving_size_unit (TRADUZIDO, ex: "cup")
-- calories (numero)
-- total_carb (numero)
-- total_carb_dv (numero)
-- total_sugars (numero)
-- added_sugars (numero)
-- added_sugars_dv (numero)
-- protein (numero)
-- protein_dv (numero)
-- total_fat (numero)
-- total_fat_dv (numero)
-- sat_fat (numero)
-- sat_fat_dv (numero)
-- trans_fat (numero)
-- trans_fat_dv (numero)
-- fiber (numero)
-- fiber_dv (numero)
-- sodium (numero)
-- sodium_dv (numero)
-
-Retorne APENAS o JSON. Se ilegível, use null.
-EOT;
-
-        // Chama o método query usando explicitamente o visionModel
-        return $this->query($this->visionModel, $prompt, $base64Image, true, $timeoutSeconds);
-    }
-
-    /**
-     * MOTOR DE TEXTO: Tradução e lógica de strings.
-     * Usa o modelo leve (Text).
-     */
-    public function completion(string $prompt, int $timeoutSeconds = 30): ?string
-    {
-        // Chama o método query usando explicitamente o textModel
-        // Sem imagem, apenas texto
-        return $this->query($this->textModel, $prompt, null, false, $timeoutSeconds);
-    }
-
-    /**
-     * Executor Genérico de Requisições Ollama
-     */
-    private function query(string $model, string $prompt, ?string $image, bool $json, int $timeout)
-    {
         try {
-            $payload = [
-                'model' => $model, // Modelo dinâmico (Visão ou Texto)
-                'stream' => false,
-                'messages' => [
-                    [
-                        'role' => 'user',
-                        'content' => $prompt,
-                    ]
-                ],
-                'options' => [
-                    'temperature' => 0.1, // Baixa criatividade para precisão
-                    'num_ctx' => 4096     // Contexto alto para tabelas grandes
-                ]
+            // --- ETAPA 1: DADOS NUTRICIONAIS (VISÃO) ---
+            $nutritionalData = [];
+            
+            if ($this->product->image_nutritional) {
+                $path = Storage::disk('public')->path($this->product->image_nutritional);
+                
+                if (file_exists($path)) {
+                    // Otimiza imagem para envio rápido
+                    $b64 = $this->optimizeImage($path);
+                    
+                    // Extrai dados (Timeout 180s)
+                    $extractedData = $ollama->extractNutritionalData($b64, 180);
+                    
+                    if ($extractedData) {
+                        $nutritionalData = $extractedData;
+                    }
+                }
+            }
+
+            // --- ETAPA 2: APLICAÇÃO DE VALORES DEFAULT (REGRA 1) ---
+            // Campos que OBRIGATORIAMENTE devem ser 0 se estiverem vazios/nulos
+            $mandatoryFields = [
+                'total_fat', 'total_fat_dv',
+                'sat_fat', 'sat_fat_dv',
+                'trans_fat', 'trans_fat_dv',
+                'cholesterol', 'cholesterol_dv',
+                'sodium', 'sodium_dv',
+                'total_carb', 'total_carb_dv',
+                'fiber', 'fiber_dv', // dietary fiber
+                'total_sugars', 
+                'added_sugars', 'added_sugars_dv',
+                'protein', 'protein_dv'
             ];
 
-            if ($image) {
-                $payload['messages'][0]['images'] = [$image];
+            foreach ($mandatoryFields as $field) {
+                // Se não existir ou for null, seta 0. Se tiver valor, mantém.
+                $nutritionalData[$field] = $nutritionalData[$field] ?? 0;
             }
 
-            if ($json) {
-                $payload['format'] = 'json';
-            }
-
-            $response = Http::timeout($timeout)
-                ->connectTimeout(5)
-                ->post("{$this->host}/api/chat", $payload);
-
-            if ($response->successful()) {
-                $content = $response->json('message.content');
+            // --- ETAPA 3: TRADUÇÃO DO NOME (REGRA 2) ---
+            // Só traduz se o campo estiver vazio. Se já tiver tradução, respeita a existente.
+            if (empty($this->product->product_name_en)) {
+                $translatedName = $translator->translate($this->product->product_name);
                 
-                if ($json) {
-                    // Limpeza de segurança para JSON (caso a IA mande Markdown)
-                    $clean = str_replace(['```json', '```'], '', $content);
-                    
-                    // Regex para pegar apenas o objeto JSON {}
-                    if (preg_match('/\{.*\}/s', $clean, $matches)) {
-                        $clean = $matches[0];
-                    }
-                    
-                    return json_decode($clean, true);
+                if ($translatedName) {
+                    $nutritionalData['product_name_en'] = $translatedName;
                 }
-                
-                return $content;
             }
 
-            Log::error("Ollama Error [{$model}]: " . $response->body());
-            return null;
+            // --- ETAPA 4: SALVAR TUDO ---
+            if (!empty($nutritionalData)) {
+                $this->product->update(array_merge($nutritionalData, [
+                    'ai_status' => 'completed',
+                    'last_ai_processed_at' => now(),
+                    'ai_error_message' => null
+                ]));
+                
+                Log::info("Produto {$this->product->id} processado (Nutrição + Tradução).");
+            } else {
+                throw new \Exception("Nenhum dado foi gerado (nem imagem, nem tradução).");
+            }
 
         } catch (\Exception $e) {
-            Log::error("Ollama Exception [{$model}]: " . $e->getMessage());
-            return null;
+            $this->product->update([
+                'ai_status' => 'error',
+                'ai_error_message' => $e->getMessage()
+            ]);
+            Log::error("Falha Job Produto {$this->product->id}: " . $e->getMessage());
         }
+    }
+
+    /**
+     * Redimensiona a imagem para otimizar o tráfego de rede via Tailscale
+     */
+    private function optimizeImage($path): string
+    {
+        list($width, $height, $type) = getimagesize($path);
+        
+        if ($width <= 1024) {
+            return base64_encode(file_get_contents($path));
+        }
+
+        $newWidth = 1024;
+        $newHeight = ($height / $width) * $newWidth;
+
+        $thumb = imagecreatetruecolor($newWidth, $newHeight);
+        
+        switch ($type) {
+            case IMAGETYPE_JPEG: $source = imagecreatefromjpeg($path); break;
+            case IMAGETYPE_PNG: $source = imagecreatefrompng($path); break;
+            case IMAGETYPE_WEBP: $source = imagecreatefromwebp($path); break;
+            default: return base64_encode(file_get_contents($path));
+        }
+
+        imagecopyresampled($thumb, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+
+        ob_start();
+        imagejpeg($thumb, null, 80);
+        $data = ob_get_clean();
+
+        imagedestroy($thumb);
+        imagedestroy($source);
+
+        return base64_encode($data);
     }
 }
