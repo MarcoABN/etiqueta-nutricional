@@ -33,24 +33,21 @@ class NutritionalScanner extends Page implements HasForms
     {
         return $form
             ->schema([
+                // Este componente fica invisível e serve apenas para validar/salvar o caminho no banco
                 FileUpload::make('image_nutritional')
-                    ->extraAttributes([
-                        'id' => 'hidden-file-input', 
-                        'style' => 'display: none !important',
-                    ])
-                    ->extraInputAttributes([
-                        'capture' => 'environment',
-                        'accept' => 'image/*'
-                    ])
                     ->hiddenLabel()
                     ->image()
                     ->directory('uploads/nutritional')
                     ->disk('public')
+                    ->extraAttributes(['class' => '!hidden']) // Garante ocultação visual
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
     }
 
+    /**
+     * Processa a imagem recortada vinda do JavaScript (Base64)
+     */
     public function processCroppedImage(string $base64Data)
     {
         try {
@@ -58,16 +55,22 @@ class NutritionalScanner extends Page implements HasForms
                 $image = substr($base64Data, strpos($base64Data, ',') + 1);
                 $image = base64_decode($image);
 
-                $filename = 'crop_' . uniqid() . '.jpg';
+                if ($image === false) {
+                    throw new \Exception('Falha ao decodificar imagem');
+                }
+
+                $filename = 'crop_' . time() . '_' . uniqid() . '.jpg';
                 $path = 'uploads/nutritional/' . $filename;
 
                 Storage::disk('public')->put($path, $image);
+
+                // Vincula o caminho do arquivo ao estado do formulário
                 $this->data['image_nutritional'] = $path;
                 
                 return true;
             }
         } catch (\Exception $e) {
-            Notification::make()->title('Erro no processamento')->danger()->send();
+            Notification::make()->title('Erro ao processar imagem: ' . $e->getMessage())->danger()->send();
         }
         return false;
     }
@@ -79,8 +82,19 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
+            // Limpa imagem anterior se houver
+            $this->data['image_nutritional'] = null;
         } else {
-            Notification::make()->title('EAN não cadastrado')->danger()->send();
+            // Produto não encontrado
+            $this->foundProduct = null;
+            Notification::make()
+                ->title('EAN não cadastrado')
+                ->body("O código $code não foi encontrado.")
+                ->danger()
+                ->duration(3000)
+                ->send();
+            
+            // Dispara evento para o frontend reiniciar a câmera
             $this->dispatch('reset-scanner');
         }
     }
@@ -94,6 +108,8 @@ class NutritionalScanner extends Page implements HasForms
 
             Notification::make()->title('Salvo com sucesso!')->success()->send();
             $this->resetScanner();
+        } else {
+            Notification::make()->title('Erro: Imagem não capturada')->warning()->send();
         }
     }
 
