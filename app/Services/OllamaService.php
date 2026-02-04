@@ -64,7 +64,7 @@ EOT;
         return $this->query($prompt, $base64Image, true, $timeoutSeconds);
     }
 
-    public function completion(string $prompt, int $timeoutSeconds = 60): ?string
+    public function completion(string $prompt, int $timeoutSeconds = 180): ?string
     {
         return $this->query($prompt, null, false, $timeoutSeconds);
     }
