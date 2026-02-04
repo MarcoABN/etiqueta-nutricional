@@ -22,7 +22,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile; // Importante
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ProductResource extends Resource
 {
@@ -62,7 +62,7 @@ class ProductResource extends Resource
                                     ->label('Cód. Barras')
                                     ->unique(ignoreRecord: true)
                                     ->columnSpan(3),
-                                
+
                                 Select::make('curve')
                                     ->label('Curva')
                                     ->options([
@@ -91,13 +91,13 @@ class ProductResource extends Resource
                                 TextInput::make('product_name_en')
                                     ->label('Nome (Inglês - Tradução)')
                                     ->columnSpan(12),
-                                
+
                                 TextInput::make('imported_by')
                                     ->label('Importado Por')
                                     ->placeholder('Nome da empresa importadora')
                                     ->columnSpan(12),
                             ]),
-                        
+
                         Forms\Components\Grid::make(6)
                             ->schema([
                                 TextInput::make('servings_per_container')->label('Porções/Emb.')->numeric()->columnSpan(1),
@@ -116,17 +116,17 @@ class ProductResource extends Resource
                                     TextInput::make('calories')
                                         ->label('Valor energético (kcal)')
                                         ->extraInputAttributes(['class' => 'font-bold text-lg']),
-                                    
+
                                     Forms\Components\Grid::make(4)->schema([
                                         TextInput::make('total_carb')->label('Carbo (g)')->columnSpan(3),
                                         TextInput::make('total_carb_dv')->label('%VD')->columnSpan(1),
-                                        
+
                                         TextInput::make('total_sugars')->label('Açúcares Tot (g)')->columnSpan(4),
                                         TextInput::make('added_sugars')->label('Açúcares Add (g)')->columnSpan(3),
                                         TextInput::make('added_sugars_dv')->label('%VD')->columnSpan(1),
-                                        
+
                                         TextInput::make('sugar_alcohol')->label('Álcool de Açúcar (g)')->columnSpan(4),
-                                        
+
                                         TextInput::make('protein')->label('Proteínas (g)')->columnSpan(3),
                                         TextInput::make('protein_dv')->label('%VD')->columnSpan(1),
                                     ]),
@@ -136,22 +136,22 @@ class ProductResource extends Resource
                                     Forms\Components\Grid::make(4)->schema([
                                         TextInput::make('total_fat')->label('Gorduras Totais (g)')->columnSpan(3),
                                         TextInput::make('total_fat_dv')->label('%VD')->columnSpan(1),
-                                        
+
                                         TextInput::make('sat_fat')->label('Gord. Sat (g)')->columnSpan(3),
                                         TextInput::make('sat_fat_dv')->label('%VD')->columnSpan(1),
-                                        
+
                                         TextInput::make('trans_fat')->label('Gord. Trans (g)')->columnSpan(3),
                                         TextInput::make('trans_fat_dv')->label('%VD')->columnSpan(1),
-                                        
+
                                         TextInput::make('poly_fat')->label('Gord. Poli (g)')->columnSpan(4),
                                         TextInput::make('mono_fat')->label('Gord. Mono (g)')->columnSpan(4),
-                                        
+
                                         TextInput::make('fiber')->label('Fibras (g)')->columnSpan(3),
                                         TextInput::make('fiber_dv')->label('%VD')->columnSpan(1),
-                                        
+
                                         TextInput::make('sodium')->label('Sódio (mg)')->columnSpan(3),
                                         TextInput::make('sodium_dv')->label('%VD')->columnSpan(1),
-                                        
+
                                         TextInput::make('cholesterol')->label('Colesterol (mg)')->columnSpan(3),
                                         TextInput::make('cholesterol_dv')->label('%VD')->columnSpan(1),
                                     ]),
@@ -170,8 +170,8 @@ class ProductResource extends Resource
                             ])->columnSpan(1),
                         ]),
                     ]),
-                
-                 Section::make('Micronutrientes (Vitaminas e Minerais)')
+
+                Section::make('Micronutrientes (Vitaminas e Minerais)')
                     ->collapsible()
                     ->collapsed()
                     ->compact()
@@ -181,32 +181,32 @@ class ProductResource extends Resource
                             TextInput::make('calcium')->label('Cálcio'),
                             TextInput::make('iron')->label('Ferro'),
                             TextInput::make('potassium')->label('Potássio'),
-                            
+
                             TextInput::make('vitamin_a')->label('Vit A'),
                             TextInput::make('vitamin_c')->label('Vit C'),
                             TextInput::make('vitamin_e')->label('Vit E'),
                             TextInput::make('vitamin_k')->label('Vit K'),
-                            
+
                             TextInput::make('thiamin')->label('Tiamina (B1)'),
                             TextInput::make('riboflavin')->label('Riboflavina (B2)'),
                             TextInput::make('niacin')->label('Niacina (B3)'),
                             TextInput::make('vitamin_b6')->label('Vit B6'),
-                            
+
                             TextInput::make('folate')->label('Folato'),
                             TextInput::make('vitamin_b12')->label('Vit B12'),
                             TextInput::make('biotin')->label('Biotina'),
                             TextInput::make('pantothenic_acid')->label('Ác. Pantotênico'),
-                            
+
                             TextInput::make('phosphorus')->label('Fósforo'),
                             TextInput::make('iodine')->label('Iodo'),
                             TextInput::make('magnesium')->label('Magnésio'),
                             TextInput::make('zinc')->label('Zinco'),
-                            
+
                             TextInput::make('selenium')->label('Selênio'),
                             TextInput::make('copper')->label('Cobre'),
                             TextInput::make('manganese')->label('Manganês'),
                             TextInput::make('chromium')->label('Cromo'),
-                            
+
                             TextInput::make('molybdenum')->label('Molibdênio'),
                             TextInput::make('chloride')->label('Cloreto'),
                         ]),
@@ -214,7 +214,7 @@ class ProductResource extends Resource
 
                 Section::make('Imagem do Rótulo')
                     ->description('Visualize a imagem capturada pelo scanner ou anexe manualmente.')
-                    ->collapsible() 
+                    ->collapsible()
                     ->collapsed(false)
                     ->schema([
                         FileUpload::make('image_nutritional')
@@ -247,45 +247,45 @@ class ProductResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
-                
+
                 Tables\Columns\TextColumn::make('barcode')
                     ->label('EAN')
                     ->searchable()
                     ->color('gray')
                     ->copyable(),
-                
+
                 Tables\Columns\TextColumn::make('curve')
                     ->label('Curva')
                     ->badge()
-                    ->color(fn ($state) => match ($state) {
+                    ->color(fn($state) => match ($state) {
                         'A' => 'success',
                         'B' => 'warning',
                         'C' => 'danger',
                         default => 'gray',
                     })
-                    ->formatStateUsing(fn ($state) => $state ?? '-')
+                    ->formatStateUsing(fn($state) => $state ?? '-')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('import_status')
                     ->label('Status')
                     ->badge()
-                    ->color(fn ($state) => match ($state) {
+                    ->color(fn($state) => match ($state) {
                         'Liberado' => 'success',
                         'Em Análise' => 'warning',
                         'Bloqueado' => 'danger',
                         default => 'gray',
                     })
-                    ->formatStateUsing(fn ($state) => $state ?? 'Indefinido')
+                    ->formatStateUsing(fn($state) => $state ?? 'Indefinido')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
                     ->searchable()
-                    ->description(fn (Product $record) => $record->product_name_en)
+                    ->description(fn(Product $record) => $record->product_name_en)
                     ->limit(40),
             ])
             ->defaultSort('created_at', 'desc')
-            
+
             ->filters([
                 SelectFilter::make('curve')
                     ->label('Filtrar por Curva')
@@ -318,20 +318,20 @@ class ProductResource extends Resource
                             function (Builder $query, $status): Builder {
                                 if ($status === 'finalizado') {
                                     return $query->whereNotNull('product_name_en')
-                                                 ->where('product_name_en', '!=', '')
-                                                 ->whereNotNull('ingredients')
-                                                 ->where('ingredients', '!=', '')
-                                                 ->whereNotNull('calories')
-                                                 ->whereNotNull('allergens_contains');
+                                        ->where('product_name_en', '!=', '')
+                                        ->whereNotNull('ingredients')
+                                        ->where('ingredients', '!=', '')
+                                        ->whereNotNull('calories')
+                                        ->whereNotNull('allergens_contains');
                                 }
 
                                 if ($status === 'pendente') {
                                     return $query->where(function (Builder $query) {
                                         $query->whereNull('product_name_en')
-                                              ->orWhere('product_name_en', '')
-                                              ->orWhereNull('ingredients')
-                                              ->orWhere('ingredients', '')
-                                              ->orWhereNull('calories');
+                                            ->orWhere('product_name_en', '')
+                                            ->orWhereNull('ingredients')
+                                            ->orWhere('ingredients', '')
+                                            ->orWhereNull('calories');
                                     });
                                 }
 
@@ -351,7 +351,7 @@ class ProductResource extends Resource
                         ->color('success')
                         ->action(function (Collection $records) {
                             return response()->streamDownload(function () use ($records) {
-                                echo "\xEF\xBB\xBF"; 
+                                echo "\xEF\xBB\xBF";
                                 $handle = fopen('php://output', 'w');
                                 fputcsv($handle, ['Cod. WinThor', 'Produto', 'Traducao', 'EAN', 'Curva', 'Status Importacao'], ';');
                                 foreach ($records as $record) {
@@ -376,12 +376,14 @@ class ProductResource extends Resource
                         ->requiresConfirmation()
                         ->modalHeading('Tradução Inteligente')
                         ->action(function (Collection $records) {
-                            $service = new GeminiFdaTranslator();
+                            // CORREÇÃO AQUI: Usando o container para injetar dependências
+                            $service = app(GeminiFdaTranslator::class);
                             $processed = 0;
                             set_time_limit(300);
 
                             foreach ($records as $record) {
-                                if ($record->product_name_en) continue;
+                                if ($record->product_name_en)
+                                    continue;
                                 $newName = $service->translate($record->product_name);
                                 if ($newName) {
                                     $record->update(['product_name_en' => $newName]);

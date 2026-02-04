@@ -93,7 +93,7 @@ EOT;
     public function completion(string $prompt): ?string
     {
         try {
-            $response = Http::timeout(60)->post("{$this->host}/api/chat", [
+            $response = Http::timeout(300)->post("{$this->host}/api/chat", [
                 'model' => $this->model,
                 'stream' => false,
                 'messages' => [
