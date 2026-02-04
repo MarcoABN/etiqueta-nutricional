@@ -10,10 +10,7 @@
         .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .fi-page { height: 100dvh; overflow: hidden; background: #000; color: white; }
         
-        /* Containers */
         .app-container { height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; display: flex; flex-direction: column; z-index: 10; }
-        
-        /* Oculta o uploader original do Filament, usaremos upload programático */
         .hidden-uploader { display: none; } 
 
         /* Scanner View */
@@ -28,7 +25,6 @@
             border: 1px solid rgba(255, 255, 255, 0.3); color: white;
         }
 
-        /* Animação Scanner */
         .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 160px; pointer-events: none; z-index: 30; box-shadow: 0 0 0 9999px rgba(0,0,0,0.75); border-radius: 20px; border: 2px solid rgba(255,255,255,0.4); }
         .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; box-shadow: 0 0 15px #22c55e; animation: scanning 2s infinite ease-in-out; }
         @keyframes scanning { 0% {top: 10%;} 50% {top: 90%;} 100% {top: 10%;} }
@@ -36,43 +32,47 @@
         /* Photo & Review View */
         #photo-view { position: absolute; inset: 0; z-index: 40; background: #111; display: flex; flex-direction: column; }
         .product-info { background: #1f2937; padding: 20px; border-bottom: 1px solid #374151; }
-        .btn-capture { background: #22c55e; color: #000; padding: 18px; border-radius: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 10px; width: 85%; margin: 0 auto; }
-        .footer-actions { padding: 15px; background: #000; display: flex; gap: 10px; }
-        .btn-save { background: #22c55e; flex: 2; height: 55px; border-radius: 12px; color: #000; font-weight: bold; }
-        .btn-save:disabled { background: #1a5e32; opacity: 0.5; color: #444; }
-        .btn-cancel { background: #374151; flex: 1; height: 55px; border-radius: 12px; color: #fff; }
+        
+        /* Área Central Dinâmica */
+        .viewport-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+        
+        /* Preview da Imagem Recortada */
+        #preview-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000; display: none; }
+        #final-preview { max-width: 90%; max-height: 90%; border-radius: 8px; border: 2px solid #22c55e; box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
 
-        /* CROPPER MODAL STYLES */
-        #crop-modal {
-            position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; flex-direction: column;
-            visibility: hidden; opacity: 0; transition: opacity 0.3s ease;
-        }
+        /* Estado Vazio (Placeholder) */
+        #empty-state { display: flex; flex-direction: column; align-items: center; }
+
+        .btn-capture { background: #22c55e; color: #000; padding: 18px; border-radius: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 10px; width: 85%; margin: 20px auto 0; z-index: 50; position: relative; }
+        .btn-capture.secondary { background: #374151; color: white; margin-top: 10px; font-size: 0.9em; padding: 12px; }
+
+        .footer-actions { padding: 15px; background: #000; display: flex; gap: 10px; z-index: 60; }
+        .btn-save { background: #22c55e; flex: 2; height: 55px; border-radius: 12px; color: #000; font-weight: bold; border: none; }
+        .btn-save:disabled { background: #1a5e32; opacity: 0.5; color: #444; cursor: not-allowed; }
+        .btn-cancel { background: #374151; flex: 1; height: 55px; border-radius: 12px; color: #fff; border: none; }
+
+        /* MODAL DE CROP */
+        #crop-modal { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; flex-direction: column; visibility: hidden; opacity: 0; transition: opacity 0.3s ease; }
         #crop-modal.active { visibility: visible; opacity: 1; }
         .crop-container { flex: 1; background: #000; position: relative; overflow: hidden; }
-        .crop-actions { 
-            height: 70px; background: #111; display: flex; align-items: center; justify-content: space-between; padding: 0 15px;
-            border-top: 1px solid #333;
-        }
-        .btn-crop-cancel { color: #fff; padding: 10px 20px; font-weight: 600; }
-        .btn-crop-confirm { background: #22c55e; color: #000; padding: 10px 25px; border-radius: 8px; font-weight: 800; }
+        .crop-actions { height: 70px; background: #111; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-top: 1px solid #333; }
+        .btn-crop-cancel { color: #fff; padding: 10px 20px; font-weight: 600; background: transparent; border: none; }
+        .btn-crop-confirm { background: #22c55e; color: #000; padding: 10px 25px; border-radius: 8px; font-weight: 800; border: none; }
         
-        /* Ajuste do Cropper para Dark Mode */
-        .cropper-bg { background-image: none; background-color: #000; }
-        .cropper-modal { opacity: 0.8; background-color: #000; }
-        .cropper-view-box { outline: 2px solid #22c55e; outline-color: rgba(34, 197, 94, 0.75); }
-        .cropper-line, .cropper-point { background-color: #22c55e; }
+        .cropper-bg { background: #000; }
+        .cropper-modal { opacity: 0.85; background-color: #000; }
+        .cropper-view-box { outline: 2px solid #22c55e; }
+        .cropper-point { background-color: #22c55e; }
     </style>
 
     <div class="app-container">
-        
         <input type="file" id="temp-camera-input" accept="image/*" capture="environment" style="display:none;" />
-
         <div class="hidden-uploader" wire:ignore>{{ $this->form }}</div>
 
         @if(!$foundProduct)
-        <button id="btn-switch" class="btn-switch-camera active:scale-90 transition-transform">
-            <x-heroicon-o-arrow-path class="w-6 h-6" />
-        </button>
+            <button id="btn-switch" class="btn-switch-camera active:scale-90 transition-transform">
+                <x-heroicon-o-arrow-path class="w-6 h-6" />
+            </button>
         @endif
 
         <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
@@ -87,23 +87,36 @@
                     <h2 class="text-lg font-bold leading-tight">{{ $foundProduct->product_name }}</h2>
                 </div>
 
-                <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                    <div class="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
-                        <x-heroicon-o-camera id="icon-idle" class="w-10 h-10 text-gray-500" />
-                        <svg id="icon-loading" class="animate-spin h-10 w-10 text-green-500 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        <x-heroicon-s-check-circle id="icon-success" class="w-10 h-10 text-green-500 hidden" />
+                <div class="viewport-area">
+                    <div id="empty-state">
+                        <div class="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-4">
+                            <x-heroicon-o-camera class="w-12 h-12 text-gray-500" />
+                        </div>
+                        <p class="text-gray-400 text-sm">Toque abaixo para fotografar</p>
                     </div>
 
-                    <button type="button" onclick="triggerCamera()" class="btn-capture shadow-lg active:scale-95 transition-all">
+                    <div id="preview-container" wire:ignore>
+                        <img id="final-preview" src="" alt="Nutritional Table">
+                    </div>
+
+                    <div id="upload-loading" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center hidden z-50">
+                        <svg class="animate-spin h-10 w-10 text-green-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span class="text-green-500 font-bold text-sm">PROCESSANDO...</span>
+                    </div>
+                </div>
+
+                <div class="px-6 pb-2">
+                    <button type="button" id="btn-take-photo" onclick="triggerCamera()" class="btn-capture shadow-lg active:scale-95 transition-all">
                         <x-heroicon-s-camera class="w-6 h-6" />
-                        TIRAR FOTO
+                        <span id="txt-take-photo">TIRAR FOTO</span>
                     </button>
-                    <p class="text-xs text-gray-500 mt-4">A foto poderá ser recortada na próxima etapa.</p>
                 </div>
 
                 <div class="footer-actions">
-                    <button wire:click="resetScanner" class="btn-cancel">VOLTAR</button>
-                    <button id="btn-submit" wire:click="save" disabled class="btn-save">SALVAR</button>
+                    <button wire:click="resetScanner" class="btn-cancel">CANCELAR</button>
+                    <button id="btn-submit" wire:click="save" disabled class="btn-save">
+                        SALVAR DADOS
+                    </button>
                 </div>
             </div>
         @endif
@@ -126,7 +139,126 @@
             let backCameras = [];
             let cropper = null;
 
-            // --- Lógica do Scanner QR Code (Mantida Original) ---
+            // --- FUNÇÕES DE INTERFACE ---
+            
+            function showPreview(blobUrl) {
+                // 1. Esconde o estado vazio
+                document.getElementById('empty-state').style.display = 'none';
+                
+                // 2. Mostra o container de preview com a imagem
+                const previewContainer = document.getElementById('preview-container');
+                const finalPreview = document.getElementById('final-preview');
+                finalPreview.src = blobUrl;
+                previewContainer.style.display = 'flex';
+
+                // 3. Altera o texto do botão de foto
+                document.getElementById('txt-take-photo').innerText = 'TIRAR OUTRA';
+                document.getElementById('btn-take-photo').classList.add('secondary');
+            }
+
+            function setUploadState(isUploading) {
+                const loader = document.getElementById('upload-loading');
+                const btnSave = document.getElementById('btn-submit');
+                
+                if (isUploading) {
+                    loader.classList.remove('hidden');
+                    btnSave.disabled = true;
+                    btnSave.style.opacity = '0.5';
+                } else {
+                    loader.classList.add('hidden');
+                    btnSave.disabled = false;
+                    btnSave.style.opacity = '1';
+                    btnSave.innerText = 'SALVAR DADOS';
+                }
+            }
+
+            // --- LÓGICA DE CÂMERA E CROP ---
+
+            window.triggerCamera = function() {
+                document.getElementById('temp-camera-input').click();
+            };
+
+            document.getElementById('temp-camera-input').addEventListener('change', function(e) {
+                if (e.target.files && e.target.files.length > 0) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(event) {
+                        const img = document.getElementById('image-to-crop');
+                        img.src = event.target.result;
+                        
+                        document.getElementById('crop-modal').classList.add('active');
+
+                        if(cropper) cropper.destroy();
+                        cropper = new Cropper(img, {
+                            viewMode: 1,
+                            dragMode: 'move',
+                            autoCropArea: 0.9,
+                            restore: false,
+                            guides: true,
+                            center: true,
+                            highlight: false,
+                            cropBoxMovable: true,
+                            cropBoxResizable: true,
+                            toggleDragModeOnDblclick: false,
+                        });
+                        
+                        // Reseta o input para permitir selecionar a mesma foto se cancelar
+                        e.target.value = '';
+                    }
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            document.getElementById('btn-crop-cancel').addEventListener('click', function() {
+                document.getElementById('crop-modal').classList.remove('active');
+                if(cropper) cropper.destroy();
+                cropper = null;
+            });
+
+            document.getElementById('btn-crop-confirm').addEventListener('click', function() {
+                if (!cropper) return;
+
+                // 1. Feedback Visual Imediato (UI Optimista)
+                document.getElementById('crop-modal').classList.remove('active');
+                setUploadState(true); // Bloqueia salvar e mostra loading
+
+                cropper.getCroppedCanvas({
+                    maxWidth: 1280,
+                    maxHeight: 1280,
+                    imageSmoothingQuality: 'high',
+                }).toBlob((blob) => {
+                    
+                    // Mostra o resultado na tela imediatamente
+                    const url = URL.createObjectURL(blob);
+                    showPreview(url);
+
+                    // Cria arquivo para upload
+                    const file = new File([blob], "nutritional_label.jpg", { type: "image/jpeg" });
+
+                    // Upload manual para o Livewire
+                    @this.upload('data.image_nutritional', file, (uploadedFilename) => {
+                        // Sucesso: Libera o botão salvar
+                        setUploadState(false);
+                        Livewire.dispatch('file-uploaded-callback'); 
+                        
+                        if(cropper) { cropper.destroy(); cropper = null; }
+
+                    }, () => {
+                        // Erro
+                        alert('Erro ao enviar imagem. Tente novamente.');
+                        setUploadState(false);
+                        document.getElementById('btn-submit').disabled = true; // Mantém travado em erro
+                        if(cropper) { cropper.destroy(); cropper = null; }
+                    });
+
+                }, 'image/jpeg', 0.9);
+            });
+
+
+            // --- LÓGICA DO SCANNER (QR CODE) ---
+            // (Esta parte permanece inalterada para garantir o funcionamento do fluxo anterior)
+            
             async function loadCameras() {
                 try {
                     const devices = await Html5Qrcode.getCameras();
@@ -140,7 +272,9 @@
             }
 
             async function startScanner() {
+                // Se já achou produto, não inicia scanner
                 if (@json($foundProduct)) return;
+
                 if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} html5QrCode = null; }
                 document.getElementById('reader').innerHTML = '';
                 if (backCameras.length === 0) await loadCameras();
@@ -163,119 +297,14 @@
                 await startScanner();
             });
 
-            // --- Nova Lógica de Câmera e Crop ---
-
-            // 1. Aciona o input oculto temporário
-            window.triggerCamera = function() {
-                const tempInput = document.getElementById('temp-camera-input');
-                tempInput.value = ''; // Reset para permitir selecionar mesma foto
-                tempInput.click();
-            };
-
-            // 2. Ao selecionar foto, abre o Modal de Crop
-            document.getElementById('temp-camera-input').addEventListener('change', function(e) {
-                if (e.target.files && e.target.files.length > 0) {
-                    const file = e.target.files[0];
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(event) {
-                        const img = document.getElementById('image-to-crop');
-                        img.src = event.target.result;
-                        
-                        // Exibe Modal
-                        const modal = document.getElementById('crop-modal');
-                        modal.classList.add('active');
-
-                        // Inicia Cropper
-                        if(cropper) cropper.destroy();
-                        cropper = new Cropper(img, {
-                            viewMode: 1,      // Restringe o crop box dentro da tela
-                            dragMode: 'move', // Permite mover a imagem
-                            autoCropArea: 0.9,
-                            restore: false,
-                            guides: true,
-                            center: true,
-                            highlight: false,
-                            cropBoxMovable: true,
-                            cropBoxResizable: true,
-                            toggleDragModeOnDblclick: false,
-                        });
-                    }
-                    reader.readAsDataURL(file);
-                }
-            });
-
-            // 3. Botão Cancelar Crop
-            document.getElementById('btn-crop-cancel').addEventListener('click', function() {
-                document.getElementById('crop-modal').classList.remove('active');
-                if(cropper) cropper.destroy();
-                cropper = null;
-            });
-
-            // 4. Botão Confirmar Crop -> Upload para Livewire
-            document.getElementById('btn-crop-confirm').addEventListener('click', function() {
-                if (!cropper) return;
-
-                setUIStatus('loading');
-                document.getElementById('crop-modal').classList.remove('active');
-
-                // Obtém o canvas recortado
-                cropper.getCroppedCanvas({
-                    maxWidth: 1280,
-                    maxHeight: 1280,
-                    imageSmoothingQuality: 'high',
-                }).toBlob((blob) => {
-                    // Prepara o arquivo para upload
-                    const file = new File([blob], "nutritional_label.jpg", { type: "image/jpeg" });
-
-                    // Upload manual para o Livewire (bypassing FilePond UI)
-                    // 'data.image_nutritional' é o statePath do componente
-                    @this.upload('data.image_nutritional', file, (uploadedFilename) => {
-                        // Success Callback
-                        setUIStatus('success');
-                        Livewire.dispatch('file-uploaded-callback'); // Notifica PHP
-                        if(cropper) cropper.destroy();
-                        cropper = null;
-                    }, () => {
-                        // Error Callback
-                        alert('Erro ao enviar imagem. Tente novamente.');
-                        setUIStatus('idle');
-                        if(cropper) cropper.destroy();
-                    });
-
-                }, 'image/jpeg', 0.9);
-            });
-
-            // --- UI Helpers ---
-            function setUIStatus(status) {
-                const btn = document.getElementById('btn-submit');
-                const idle = document.getElementById('icon-idle');
-                const load = document.getElementById('icon-loading');
-                const success = document.getElementById('icon-success');
-                if (!btn) return;
-                
-                [idle, load, success].forEach(i => i?.classList.add('hidden'));
-                
-                if (status === 'loading') { 
-                    btn.disabled = true; 
-                    load.classList.remove('hidden'); 
-                }
-                else if (status === 'success') { 
-                    btn.disabled = false; 
-                    success.classList.remove('hidden'); 
-                }
-                else { 
-                    btn.disabled = true; 
-                    idle.classList.remove('hidden'); 
-                }
-            }
-
             Livewire.on('reset-scanner', () => { 
-                setUIStatus('idle'); 
+                // Reseta UI
+                document.getElementById('empty-state').style.display = 'flex';
+                document.getElementById('preview-container').style.display = 'none';
+                document.getElementById('btn-submit').disabled = true;
                 setTimeout(startScanner, 600); 
             });
             
-            // Inicializa scanner
             startScanner();
         });
     </script>
