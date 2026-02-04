@@ -13,34 +13,23 @@
         .app-container { height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; display: flex; flex-direction: column; z-index: 10; }
         .hidden-uploader { display: none; } 
 
-        /* Scanner View */
+        /* Scanner */
         #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; }
         #reader { width: 100%; height: 100%; object-fit: cover; }
-        
-        .btn-switch-camera {
-            position: absolute; top: 25px; right: 25px; z-index: 50;
-            width: 48px; height: 48px; border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px);
-            display: flex; align-items: center; justify-content: center;
-            border: 1px solid rgba(255, 255, 255, 0.3); color: white;
-        }
-
+        .btn-switch-camera { position: absolute; top: 25px; right: 25px; z-index: 50; width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, 0.3); color: white; }
         .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 160px; pointer-events: none; z-index: 30; box-shadow: 0 0 0 9999px rgba(0,0,0,0.75); border-radius: 20px; border: 2px solid rgba(255,255,255,0.4); }
         .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; box-shadow: 0 0 15px #22c55e; animation: scanning 2s infinite ease-in-out; }
         @keyframes scanning { 0% {top: 10%;} 50% {top: 90%;} 100% {top: 10%;} }
 
-        /* Photo & Review View */
+        /* Photo View */
         #photo-view { position: absolute; inset: 0; z-index: 40; background: #111; display: flex; flex-direction: column; }
         .product-info { background: #1f2937; padding: 20px; border-bottom: 1px solid #374151; }
         
-        /* Área Central Dinâmica */
         .viewport-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; }
         
-        /* Preview da Imagem Recortada */
         #preview-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000; display: none; }
         #final-preview { max-width: 90%; max-height: 90%; border-radius: 8px; border: 2px solid #22c55e; box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
 
-        /* Estado Vazio (Placeholder) */
         #empty-state { display: flex; flex-direction: column; align-items: center; }
 
         .btn-capture { background: #22c55e; color: #000; padding: 18px; border-radius: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 10px; width: 85%; margin: 20px auto 0; z-index: 50; position: relative; }
@@ -51,14 +40,13 @@
         .btn-save:disabled { background: #1a5e32; opacity: 0.5; color: #444; cursor: not-allowed; }
         .btn-cancel { background: #374151; flex: 1; height: 55px; border-radius: 12px; color: #fff; border: none; }
 
-        /* MODAL DE CROP */
+        /* Modal Crop */
         #crop-modal { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; flex-direction: column; visibility: hidden; opacity: 0; transition: opacity 0.3s ease; }
         #crop-modal.active { visibility: visible; opacity: 1; }
         .crop-container { flex: 1; background: #000; position: relative; overflow: hidden; }
         .crop-actions { height: 70px; background: #111; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-top: 1px solid #333; }
         .btn-crop-cancel { color: #fff; padding: 10px 20px; font-weight: 600; background: transparent; border: none; }
         .btn-crop-confirm { background: #22c55e; color: #000; padding: 10px 25px; border-radius: 8px; font-weight: 800; border: none; }
-        
         .cropper-bg { background: #000; }
         .cropper-modal { opacity: 0.85; background-color: #000; }
         .cropper-view-box { outline: 2px solid #22c55e; }
@@ -96,12 +84,12 @@
                     </div>
 
                     <div id="preview-container" wire:ignore>
-                        <img id="final-preview" src="" alt="Nutritional Table">
+                        <img id="final-preview" src="" alt="Preview">
                     </div>
 
-                    <div id="upload-loading" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center hidden z-50">
+                    <div id="upload-loading" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center hidden z-50" wire:ignore>
                         <svg class="animate-spin h-10 w-10 text-green-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        <span class="text-green-500 font-bold text-sm">PROCESSANDO...</span>
+                        <span class="text-green-500 font-bold text-sm">ENVIANDO...</span>
                     </div>
                 </div>
 
@@ -114,7 +102,7 @@
 
                 <div class="footer-actions">
                     <button wire:click="resetScanner" class="btn-cancel">CANCELAR</button>
-                    <button id="btn-submit" wire:click="save" disabled class="btn-save">
+                    <button id="btn-submit" wire:click="save" wire:loading.attr="disabled" disabled class="btn-save">
                         SALVAR DADOS
                     </button>
                 </div>
@@ -139,19 +127,16 @@
             let backCameras = [];
             let cropper = null;
 
-            // --- FUNÇÕES DE INTERFACE ---
+            // --- UI FUNCTIONS ---
             
             function showPreview(blobUrl) {
-                // 1. Esconde o estado vazio
                 document.getElementById('empty-state').style.display = 'none';
-                
-                // 2. Mostra o container de preview com a imagem
                 const previewContainer = document.getElementById('preview-container');
                 const finalPreview = document.getElementById('final-preview');
+                
                 finalPreview.src = blobUrl;
                 previewContainer.style.display = 'flex';
 
-                // 3. Altera o texto do botão de foto
                 document.getElementById('txt-take-photo').innerText = 'TIRAR OUTRA';
                 document.getElementById('btn-take-photo').classList.add('secondary');
             }
@@ -166,13 +151,13 @@
                     btnSave.style.opacity = '0.5';
                 } else {
                     loader.classList.add('hidden');
+                    // AQUI OCORRE O DESBLOQUEIO
                     btnSave.disabled = false;
                     btnSave.style.opacity = '1';
-                    btnSave.innerText = 'SALVAR DADOS';
                 }
             }
 
-            // --- LÓGICA DE CÂMERA E CROP ---
+            // --- CAMERA & CROP ---
 
             window.triggerCamera = function() {
                 document.getElementById('temp-camera-input').click();
@@ -186,7 +171,6 @@
                     reader.onload = function(event) {
                         const img = document.getElementById('image-to-crop');
                         img.src = event.target.result;
-                        
                         document.getElementById('crop-modal').classList.add('active');
 
                         if(cropper) cropper.destroy();
@@ -202,9 +186,7 @@
                             cropBoxResizable: true,
                             toggleDragModeOnDblclick: false,
                         });
-                        
-                        // Reseta o input para permitir selecionar a mesma foto se cancelar
-                        e.target.value = '';
+                        e.target.value = ''; // Reset input
                     }
                     reader.readAsDataURL(file);
                 }
@@ -212,53 +194,43 @@
 
             document.getElementById('btn-crop-cancel').addEventListener('click', function() {
                 document.getElementById('crop-modal').classList.remove('active');
-                if(cropper) cropper.destroy();
-                cropper = null;
+                if(cropper) { cropper.destroy(); cropper = null; }
             });
 
             document.getElementById('btn-crop-confirm').addEventListener('click', function() {
                 if (!cropper) return;
 
-                // 1. Feedback Visual Imediato (UI Optimista)
                 document.getElementById('crop-modal').classList.remove('active');
-                setUploadState(true); // Bloqueia salvar e mostra loading
+                setUploadState(true); // Bloqueia e mostra loading
 
                 cropper.getCroppedCanvas({
-                    maxWidth: 1280,
+                    maxWidth: 1280, 
                     maxHeight: 1280,
                     imageSmoothingQuality: 'high',
                 }).toBlob((blob) => {
                     
-                    // Mostra o resultado na tela imediatamente
                     const url = URL.createObjectURL(blob);
                     showPreview(url);
 
-                    // Cria arquivo para upload
                     const file = new File([blob], "nutritional_label.jpg", { type: "image/jpeg" });
 
-                    // Upload manual para o Livewire
+                    // Upload manual Livewire
                     @this.upload('data.image_nutritional', file, (uploadedFilename) => {
-                        // Sucesso: Libera o botão salvar
-                        setUploadState(false);
-                        Livewire.dispatch('file-uploaded-callback'); 
-                        
+                        // SUCCESS
+                        setUploadState(false); // Libera botão
                         if(cropper) { cropper.destroy(); cropper = null; }
-
                     }, () => {
-                        // Erro
-                        alert('Erro ao enviar imagem. Tente novamente.');
+                        // ERROR
+                        alert('Erro ao enviar imagem.');
                         setUploadState(false);
-                        document.getElementById('btn-submit').disabled = true; // Mantém travado em erro
+                        document.getElementById('btn-submit').disabled = true; // Mantém travado
                         if(cropper) { cropper.destroy(); cropper = null; }
                     });
 
                 }, 'image/jpeg', 0.9);
             });
 
-
-            // --- LÓGICA DO SCANNER (QR CODE) ---
-            // (Esta parte permanece inalterada para garantir o funcionamento do fluxo anterior)
-            
+            // --- SCANNER LOGIC (Mantida igual) ---
             async function loadCameras() {
                 try {
                     const devices = await Html5Qrcode.getCameras();
@@ -272,9 +244,7 @@
             }
 
             async function startScanner() {
-                // Se já achou produto, não inicia scanner
                 if (@json($foundProduct)) return;
-
                 if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} html5QrCode = null; }
                 document.getElementById('reader').innerHTML = '';
                 if (backCameras.length === 0) await loadCameras();
@@ -298,7 +268,6 @@
             });
 
             Livewire.on('reset-scanner', () => { 
-                // Reseta UI
                 document.getElementById('empty-state').style.display = 'flex';
                 document.getElementById('preview-container').style.display = 'none';
                 document.getElementById('btn-submit').disabled = true;

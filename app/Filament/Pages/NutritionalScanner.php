@@ -9,7 +9,6 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -24,8 +23,8 @@ class NutritionalScanner extends Page implements HasForms
     public $foundProduct = null;
     public ?array $data = [];
 
-    // Listener para feedback visual vindo do JS
-    protected $listeners = ['file-uploaded-callback' => 'onFileUploaded'];
+    // Listener para resetar via JS se necessário
+    protected $listeners = ['reset-scanner-ui' => 'resetScanner'];
 
     public function mount(): void 
     { 
@@ -44,13 +43,12 @@ class NutritionalScanner extends Page implements HasForms
                     ->imageResizeTargetHeight(1280)
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    // O atributo capture é mantido para compatibilidade, 
-                    // mas o trigger principal agora é feito via JS no Blade
                     ->extraInputAttributes([
                         'capture' => 'environment',
                         'accept' => 'image/*'
                     ])
-                    ->live() 
+                    // REMOVIDO ->live() para evitar refresh da tela
+                    // REMOVIDO ->afterStateUpdated() pois controlamos via JS
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
@@ -63,7 +61,6 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Limpa qualquer imagem anterior ao encontrar novo produto
             $this->data['image_nutritional'] = null;
             $this->form->fill($this->data); 
         } else {
@@ -73,27 +70,23 @@ class NutritionalScanner extends Page implements HasForms
         }
     }
 
-    public function onFileUploaded()
-    {
-        // Método auxiliar apenas para garantir state update se necessário
-    }
-
     public function save()
     {
         $state = $this->form->getState();
         
-        if ($this->foundProduct && !empty($state['image_nutritional'])) {
-            // Em caso de array (multifile), pega o primeiro, senão pega a string direta
-            $path = is_array($state['image_nutritional']) 
-                ? array_values($state['image_nutritional'])[0] 
-                : $state['image_nutritional'];
+        // Verifica se a imagem chegou (pode vir como array ou string dependendo do adapter)
+        $image = $state['image_nutritional'] ?? null;
+        if (is_array($image)) {
+            $image = array_values($image)[0];
+        }
 
-            $this->foundProduct->update(['image_nutritional' => $path]);
+        if ($this->foundProduct && !empty($image)) {
+            $this->foundProduct->update(['image_nutritional' => $image]);
             
             Notification::make()->title('Salvo com sucesso!')->success()->send();
             $this->resetScanner();
         } else {
-            Notification::make()->title('Nenhuma imagem capturada')->warning()->send();
+            Notification::make()->title('Erro: Nenhuma imagem detectada')->warning()->send();
         }
     }
 
