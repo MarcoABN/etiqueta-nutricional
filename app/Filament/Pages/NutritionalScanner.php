@@ -7,9 +7,10 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Section;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -17,10 +18,9 @@ class NutritionalScanner extends Page implements HasForms
 
     protected static ?string $navigationIcon = 'heroicon-o-qr-code';
     protected static ?string $navigationLabel = 'Coletor Nutricional';
-    protected static ?string $title = ''; // Remove título padrão para ganhar espaço
+    protected static ?string $title = ''; 
     protected static string $view = 'filament.pages.nutritional-scanner';
 
-    // Variáveis Públicas (Essenciais para o Livewire)
     public $scannedCode = null;
     public $foundProduct = null;
     public ?array $data = [];
@@ -34,24 +34,29 @@ class NutritionalScanner extends Page implements HasForms
     {
         return $form
             ->schema([
-                Section::make('Captura')
-                    ->heading('Foto da Tabela Nutricional')
-                    ->schema([
-                        FileUpload::make('image_nutritional')
-                            ->hiddenLabel() // Esconde o label padrão para usarmos o nosso customizado no Blade
-                            ->image()
-                            ->imageEditor() // Permite recortar a foto após tirar
-                            ->imageEditorMode(2)
-                            ->directory('uploads/nutritional')
-                            ->required()
-                            // --- O PULO DO GATO ---
-                            // Isso força o celular a abrir a câmera traseira direto, sem perguntar "Galeria ou Câmera?"
-                            ->extraInputAttributes([
-                                'capture' => 'environment', 
-                                'accept' => 'image/*'
-                            ])
-                            ->columnSpanFull(),
+                FileUpload::make('image_nutritional')
+                    ->hiddenLabel()
+                    ->image()
+                    // --- OTIMIZAÇÃO EXTREMA DE ESPAÇO ---
+                    ->imageResizeMode('contain')
+                    ->imageResizeTargetWidth('1280') // 720p/HD
+                    ->imageResizeTargetHeight('1280')
+                    ->imageQuality(60) // Reduz o peso do arquivo drasticamente
+                    ->imageEditor()
+                    ->imageEditorMode(2)
+                    // ------------------------------------
+                    ->directory('uploads/nutritional')
+                    ->disk('public')
+                    ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file) {
+                        $cod = $this->foundProduct->codprod ?? 'EAN_' . $this->scannedCode;
+                        return "{$cod}_" . now()->format('Ymd_His') . '.' . $file->getClientOriginalExtension();
+                    })
+                    ->extraInputAttributes([
+                        'capture' => 'environment',
+                        'accept' => 'image/*'
                     ])
+                    ->required()
+                    ->statePath('image_nutritional'),
             ])
             ->statePath('data');
     }
@@ -63,19 +68,17 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Carrega foto existente se houver, para o usuário ver/substituir
             $this->form->fill([
                 'image_nutritional' => $product->image_nutritional,
             ]);
-            // Toca um som de sucesso no frontend (via dispatch event se necessário)
         } else {
-            // Zera o produto e avisa
             $this->foundProduct = null;
             Notification::make()
-                ->title('EAN não cadastrado')
-                ->body("Código: {$code}")
+                ->title('Produto não encontrado')
                 ->danger()
                 ->send();
+            
+            $this->dispatch('reset-scanner-error');
         }
     }
 
@@ -83,14 +86,18 @@ class NutritionalScanner extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        if ($this->foundProduct) {
+        if ($this->foundProduct && !empty($data['image_nutritional'])) {
+            // Limpeza de arquivo antigo
+            $oldImage = $this->foundProduct->image_nutritional;
+            if ($oldImage && $oldImage !== $data['image_nutritional']) {
+                Storage::disk('public')->delete($oldImage);
+            }
+
             $this->foundProduct->update([
                 'image_nutritional' => $data['image_nutritional']
             ]);
 
-            Notification::make()->title('Foto salva com sucesso!')->success()->send();
-            
-            // Reinicia o fluxo para o próximo produto
+            Notification::make()->title('Dados salvos!')->success()->send();
             $this->resetScanner();
         }
     }
@@ -100,8 +107,6 @@ class NutritionalScanner extends Page implements HasForms
         $this->scannedCode = null;
         $this->foundProduct = null;
         $this->form->fill();
-        
-        // Avisa o front para religar a câmera de leitura
         $this->dispatch('reset-scanner'); 
     }
 }
