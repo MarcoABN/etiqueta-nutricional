@@ -9,7 +9,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\Storage; // Necessário para apagar a foto antiga
+use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class NutritionalScanner extends Page implements HasForms
@@ -37,18 +37,17 @@ class NutritionalScanner extends Page implements HasForms
                 FileUpload::make('image_nutritional')
                     ->hiddenLabel()
                     ->image()
-                    // --- OTIMIZAÇÃO DE PERFORMANCE (720p) ---
-                    // Reduz drasticamente o tempo de processamento da CPU do servidor
+                    ->live() // <--- O PULO DO GATO: Sincroniza assim que o upload termina
+                    // Otimização HD (720p) - Rápido e Legível
                     ->imageResizeMode('contain')
-                    ->imageResizeTargetWidth(1280)  // Largura Máxima HD
-                    ->imageResizeTargetHeight(1280) // Altura Máxima HD (cobre fotos verticais)
+                    ->imageResizeTargetWidth(1280)
+                    ->imageResizeTargetHeight(1280)
                     ->imageResizeUpscale(false)
-                    // ----------------------------------------
                     ->directory('uploads/nutritional')
                     ->disk('public')
+                    // Nomeia com timestamp para evitar cache e conflito
                     ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file) {
                         $cod = $this->foundProduct->codprod ?? 'SEM_COD';
-                        // Timestamp evita que o navegador mostre a foto antiga do cache
                         return "{$cod}_nutri_" . time() . '.' . $file->getClientOriginalExtension();
                     })
                     ->required()
@@ -70,7 +69,6 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Carrega a imagem atual no formulário para o usuário ver
             $this->form->fill([
                 'image_nutritional' => $product->image_nutritional,
             ]);
@@ -90,12 +88,12 @@ class NutritionalScanner extends Page implements HasForms
     public function save()
     {
         try {
-            // Valida o formulário. Se o upload não terminou, o Filament lança exceção aqui.
+            // Agora com ->live(), o getState() já deve ter o valor correto
             $data = $this->form->getState();
         } catch (\Exception $e) {
             Notification::make()
-                ->title('Aguarde o envio...')
-                ->body('A imagem ainda está sendo enviada. Aguarde o ícone de carregamento sumir.')
+                ->title('Aguarde...')
+                ->body('Finalizando processamento da imagem.')
                 ->warning()
                 ->send();
             return;
@@ -103,17 +101,15 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($this->foundProduct && !empty($data['image_nutritional'])) {
             
-            // --- LIMPEZA AUTOMÁTICA (SOBRESCREVER) ---
+            // --- Lógica de Sobrescrita (Limpeza) ---
             $oldImage = $this->foundProduct->image_nutritional;
             
-            // Se já existia uma foto antes, apagamos do disco para liberar espaço
-            // (Comparamos se o caminho é diferente para garantir)
+            // Se a imagem nova for diferente da antiga (o nome sempre muda pelo time()), apaga a velha
             if ($oldImage && $oldImage !== $data['image_nutritional']) {
                 if (Storage::disk('public')->exists($oldImage)) {
                     Storage::disk('public')->delete($oldImage);
                 }
             }
-            // ------------------------------------------
 
             $this->foundProduct->update([
                 'image_nutritional' => $data['image_nutritional']
@@ -125,7 +121,6 @@ class NutritionalScanner extends Page implements HasForms
                 ->duration(1500)
                 ->send();
             
-            // Reinicia o fluxo imediatamente
             $this->resetScanner();
         } else {
             Notification::make()->title('Erro ao salvar')->danger()->send();
@@ -138,7 +133,6 @@ class NutritionalScanner extends Page implements HasForms
         $this->foundProduct = null;
         $this->data = []; 
         $this->form->fill();
-        // Avisa o front-end para limpar a tela e ligar a câmera de novo
         $this->dispatch('reset-scanner'); 
     }
 }
