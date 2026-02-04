@@ -9,43 +9,54 @@ class OllamaService
 {
     protected string $host;
     protected string $visionModel;
-    protected string $textModel;
 
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://100.89.133.69:11434'), '/');
         $this->visionModel = env('OLLAMA_VISION_MODEL', 'qwen3-vl:8b'); 
-        $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma2:latest');
     }
 
-    public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 300): ?array
+    public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // Prompt original mantido e reforçado
+        // Prompt otimizado com a ordem informada pelo usuário
         $prompt = <<<EOT
-Analise esta imagem da Tabela Nutricional.
-Sua missão é extrair dados para popular um banco SQL.
-ATENÇÃO: Extraia EXATAMENTE os números como estão na imagem.
+Analise esta Tabela Nutricional. Extraia os dados seguindo estritamente a ordem padrão.
 
-REGRAS OBRIGATÓRIAS:
-1. Retorne APENAS um objeto JSON válido. Não use Markdown (```json).
-2. Se o valor for "Zero", "0", ou não existir, retorne 0.
-3. Foque na coluna "Porção" principal. Ignore a coluna "100g" ou "%VD" se não for pedido.
+ORDEM DOS DADOS NA IMAGEM (Geralmente):
+1. Porção (Ex: 30g) e Medida Caseira (Ex: 1 colher).
+2. Valor Energético / Calorias.
+3. Carboidratos.
+4. Açúcares Totais.
+5. Açúcares Adicionados.
+6. Proteínas.
+7. Gorduras Totais.
+8. Gorduras Saturadas.
+9. Gorduras Trans.
+10. Fibra Alimentar.
+11. Sódio.
 
-SCHEMA JSON ALVO:
+REGRAS DE EXTRAÇÃO:
+- "serving_weight": Apenas o peso/volume numérico (ex: "30g", "200ml").
+- "serving_size_quantity": A quantidade da medida caseira (ex: "1.5", "1").
+- "serving_size_unit": O nome da medida caseira (ex: "xícara", "fatia", "unidade").
+- Se o valor for "Zero", "0", ou traço "-", retorne 0.
+- Retorne APENAS o JSON abaixo.
+
 {
-  "tamanho_porcao": "string (ex: 30g)",
-  "porcoes_embalagem": "string",
-  "calorias": "number",
-  "carboidratos": "number",
-  "acucares_totais": "number",
-  "acucares_adicionados": "number",
-  "proteinas": "number",
-  "gorduras_totais": "number",
-  "gorduras_saturadas": "number",
-  "gorduras_trans": "number",
-  "fibra": "number",
-  "sodio": "number",
-  "colesterol": "number"
+  "serving_weight": "string",
+  "serving_size_quantity": "string",
+  "serving_size_unit": "string",
+  "servings_per_container": "string",
+  "calories": "number",
+  "total_carb": "number",
+  "total_sugars": "number",
+  "added_sugars": "number",
+  "protein": "number",
+  "total_fat": "number",
+  "sat_fat": "number",
+  "trans_fat": "number",
+  "fiber": "number",
+  "sodium": "number"
 }
 EOT;
 
@@ -56,38 +67,30 @@ EOT;
         $jsonData = $this->robustJsonDecode($response);
         
         if (!$jsonData) {
-            Log::error("Ollama Vision: Falha ao decodificar JSON. Retorno: " . substr($response, 0, 150));
+            Log::error("Ollama: JSON inválido. Raw: " . substr($response, 0, 100) . "...");
             return null;
         }
 
-        return $this->mapPortugueseKeysToSchema($jsonData);
+        return $this->sanitizeData($jsonData);
     }
 
     private function queryVision(string $model, string $prompt, string $image, int $timeout): ?string
     {
         try {
-            $payload = [
-                'model' => $model,
-                'stream' => false,
-                'messages' => [
-                    [
-                        'role' => 'user', 
-                        'content' => $prompt,
-                        'images' => [$image]
-                    ]
-                ],
-                'options' => [
-                    'temperature' => 0.1, // Temperatura baixa para precisão
-                    'num_ctx' => 4096,    // Contexto maior para imagens detalhadas
-                ]
-            ];
-
-            // Tenta forçar modo JSON se o modelo suportar (opcional, remove se der erro)
-            // $payload['format'] = 'json'; 
-
             $response = Http::timeout($timeout)
-                ->connectTimeout(10) // Timeout de conexão curto, timeout de leitura longo
-                ->post("{$this->host}/api/chat", $payload);
+                ->connectTimeout(10) // Timeout rápido para saber se o server existe
+                ->post("{$this->host}/api/chat", [
+                    'model' => $model,
+                    'messages' => [
+                        ['role' => 'user', 'content' => $prompt, 'images' => [$image]]
+                    ],
+                    'stream' => false,
+                    'format' => 'json', // Força saída JSON estruturada
+                    'options' => [
+                        'temperature' => 0.0, // Zero criatividade, apenas leitura pura
+                        'num_ctx' => 4096,
+                    ]
+                ]);
 
             if ($response->successful()) {
                 return $response->json('message.content');
@@ -97,58 +100,53 @@ EOT;
             return null;
 
         } catch (\Exception $e) {
-            Log::error("Ollama Conexão Exception: " . $e->getMessage());
+            Log::error("Ollama Conexão Falhou: " . $e->getMessage());
             return null;
         }
     }
 
     private function robustJsonDecode(string $input): ?array
     {
-        // Limpeza agressiva de Markdown que o Ollama adora colocar
         $clean = preg_replace('/```(?:json)?/i', '', $input);
         $clean = str_replace(['```', '`'], '', $clean);
         
-        // Tenta encontrar o primeiro { e o último }
         if (preg_match('/\{[\s\S]*\}/', $clean, $matches)) {
             $clean = $matches[0];
         }
-
-        // Corrige vírgulas sobrando antes de fechar chaves/colchetes
+        
+        // Correção comum de vírgulas trailing
         $clean = preg_replace('/,\s*}/', '}', $clean);
-        $clean = preg_replace('/,\s*]/', ']', $clean);
 
         return json_decode($clean, true);
     }
 
-    private function mapPortugueseKeysToSchema(array $ptData): array
+    private function sanitizeData(array $data): array
     {
-        // Helper para limpar números (remove 'g', 'mg', troca vírgula por ponto)
-        $cleanNum = function($key) use ($ptData) {
-            if (!isset($ptData[$key])) return '0';
-            $val = preg_replace('/[^0-9,\.-]/', '', (string)$ptData[$key]);
+        // Garante que números sejam números e strings sejam limpas
+        $cleanNum = function($key) use ($data) {
+            if (!isset($data[$key])) return '0';
+            // Remove tudo que não for número, ponto ou vírgula
+            $val = preg_replace('/[^0-9,\.-]/', '', (string)$data[$key]);
             $val = str_replace(',', '.', $val);
             return is_numeric($val) ? (string)$val : '0';
         };
 
-        $cleanText = fn($key) => isset($ptData[$key]) ? trim((string)$ptData[$key]) : null;
-
         return [
-            'serving_weight'        => $cleanText('tamanho_porcao'),
-            'servings_per_container'=> $cleanText('porcoes_embalagem'),
-            'calories'          => $cleanNum('calorias'),
-            'total_carb'        => $cleanNum('carboidratos'),
-            'total_sugars'      => $cleanNum('acucares_totais'),
-            'added_sugars'      => $cleanNum('acucares_adicionados'),
-            'protein'           => $cleanNum('proteinas'),
-            'total_fat'         => $cleanNum('gorduras_totais'),
-            'sat_fat'           => $cleanNum('gorduras_saturadas'),
-            'trans_fat'         => $cleanNum('gorduras_trans'),
-            'fiber'             => $cleanNum('fibra'),
-            'sodium'            => $cleanNum('sodio'),
-            'cholesterol'       => $cleanNum('colesterol'),
+            'serving_weight'        => $data['serving_weight'] ?? null,
+            'serving_size_quantity' => $data['serving_size_quantity'] ?? null,
+            'serving_size_unit'     => $data['serving_size_unit'] ?? null,
+            'servings_per_container'=> $data['servings_per_container'] ?? null,
+            
+            'calories'      => $cleanNum('calories'),
+            'total_carb'    => $cleanNum('total_carb'),
+            'total_sugars'  => $cleanNum('total_sugars'),
+            'added_sugars'  => $cleanNum('added_sugars'),
+            'protein'       => $cleanNum('protein'),
+            'total_fat'     => $cleanNum('total_fat'),
+            'sat_fat'       => $cleanNum('sat_fat'),
+            'trans_fat'     => $cleanNum('trans_fat'),
+            'fiber'         => $cleanNum('fiber'),
+            'sodium'        => $cleanNum('sodium'),
         ];
     }
-    
-    // Método completion (texto) pode ser mantido igual ao original
-    public function completion(string $prompt): ?string { /* ... */ return null; }
 }

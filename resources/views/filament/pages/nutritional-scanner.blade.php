@@ -232,7 +232,7 @@
                         if(cropper) { cropper.destroy(); cropper = null; }
                     });
 
-                }, 'image/jpeg', 1.0); // 1.0 = Qualidade Máxima (Sem compressão extra)
+                }, 'image/jpeg', 0,9); // 1.0 = Qualidade Máxima (Sem compressão extra)
             });
 
             // --- SCANNER LOGIC (Barcode) ---
