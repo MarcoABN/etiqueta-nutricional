@@ -11,83 +11,75 @@ class OllamaService
     protected string $visionModel;
     protected string $textModel;
 
-    // Dicionário de Tradução (Medidas Caseiras)
+    // Dicionário de Medidas (Mantido)
     protected array $unitMap = [
-        '/colher.*sopa/i'   => 'Tablespoon',
-        '/colher.*ch[aá]/i' => 'Teaspoon',
-        '/colher.*sobremesa/i' => 'Dessert Spoon',
-        '/x[ií]cara/i'      => 'Cup',
-        '/copo/i'           => 'Cup', 
-        '/unidade/i'        => 'Piece',
-        '/fatia/i'          => 'Slice',
-        '/pote/i'           => 'Container',
-        '/garrafa/i'        => 'Bottle',
-        '/lata/i'           => 'Can',
-        '/biscoito/i'       => 'Cookie',
-        '/barra/i'          => 'Bar',
-        '/embalagem/i'      => 'Package',
+        '/colher.*sopa/i' => 'Tablespoon', '/colher.*ch[aá]/i' => 'Teaspoon',
+        '/x[ií]cara/i' => 'Cup', '/copo/i' => 'Cup', '/unidade/i' => 'Piece',
+        '/fatia/i' => 'Slice', '/pote/i' => 'Container', '/garrafa/i' => 'Bottle',
+        '/lata/i' => 'Can', '/biscoito/i' => 'Cookie', '/barra/i' => 'Bar',
+        '/embalagem/i' => 'Package',
     ];
 
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://100.89.133.69:11434'), '/');
+        // Qwen 30B é ótimo para listar sequências numéricas
         $this->visionModel = env('OLLAMA_VISION_MODEL', 'qwen3-vl:30b'); 
         $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma2:latest');
     }
 
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // PROMPT REFATORADO: Lógica de "Header Matching" (Mais visual e humano)
+        // PROMPT DE VETORES: Pede todos os números, sem pedir para escolher coluna
         $prompt = <<<EOT
-Analise esta Tabela Nutricional.
+Analise a imagem da Tabela Nutricional.
 
-PASSO 1: IDENTIFIQUE A PORÇÃO
-Localize o texto "Porção" no topo. Ex: "Porção: 25 g (2 1/2 xícaras)".
-- Separe o PESO (25 g).
-- Separe a MEDIDA CASEIRA (2 1/2 xícaras).
+TAREFA 1: CABEÇALHO DA PORÇÃO
+Extraia o texto exato da linha "Porções por embalagem" e da linha "Porção".
 
-PASSO 2: IDENTIFIQUE A COLUNA CORRETA
-A tabela abaixo tem colunas de números.
-- Procure o cabeçalho da coluna que corresponde ao PESO da porção (ex: procure a coluna com título "25 g").
-- Se não houver título exato, use a coluna do MEIO (se houver 3) ou a PRIMEIRA (se houver 2).
-- IGNORE a coluna "100 g" ou "100 ml".
+TAREFA 2: LINHAS NUTRICIONAIS (VETORES)
+Para cada nutriente listado abaixo, extraia TODOS os números encontrados na mesma linha, lendo da ESQUERDA para a DIREITA.
+Retorne os números em um array (lista). Exemplo: Se a linha for "Carboidratos 30g 10g 4%", retorne ["30", "10", "4"].
 
-PASSO 3: EXTRAIA OS DADOS DESSA COLUNA ESPECÍFICA
-Para cada nutriente (Carboidratos, Proteínas, Sódio...), extraia o valor numérico que está NA COLUNA IDENTIFICADA no Passo 2.
-Extraia também o %VD da última coluna.
+NUTRIENTES ALVO:
+- Calorias (Valor Energético)
+- Carboidratos
+- Açúcares Totais
+- Açúcares Adicionados
+- Proteínas
+- Gorduras Totais
+- Gorduras Saturadas
+- Gorduras Trans
+- Fibra Alimentar
+- Sódio
+- Colesterol
+- Cálcio, Ferro, Potássio, Vitamina A, C, D (se houver)
 
-JSON ALVO (Retorne APENAS JSON):
+JSON ALVO:
 {
-  "servings_per_container": "string (texto completo da linha 'Porções por embalagem')",
-  "serving_weight": "string (ex: 25 g)",
-  "serving_measure_text": "string (ex: 2 1/2 xícaras)",
-  "calories": "number",
-  "total_carb": "number",
-  "total_carb_dv": "number",
-  "total_sugars": "number",
-  "added_sugars": "number",
-  "added_sugars_dv": "number",
-  "sugar_alcohol": "number",
-  "protein": "number",
-  "protein_dv": "number",
-  "total_fat": "number",
-  "total_fat_dv": "number",
-  "sat_fat": "number",
-  "sat_fat_dv": "number",
-  "trans_fat": "number",
-  "trans_fat_dv": "number",
-  "fiber": "number",
-  "fiber_dv": "number",
-  "sodium": "number",
-  "sodium_dv": "number",
-  "cholesterol": "number",
-  "cholesterol_dv": "number",
-  "vitamin_a": "number",
-  "vitamin_c": "number",
-  "vitamin_d": "number",
-  "calcium": "number",
-  "iron": "number",
-  "potassium": "number"
+  "header_servings_per_container": "string (texto completo)",
+  "header_serving_info": "string (texto completo ex: 25g 2 1/2 xícaras)",
+  
+  "rows": {
+    "calories": ["num1", "num2"...],
+    "total_carb": ["num1", "num2"...],
+    "total_sugars": [],
+    "added_sugars": [],
+    "sugar_alcohol": [],
+    "protein": [],
+    "total_fat": [],
+    "sat_fat": [],
+    "trans_fat": [],
+    "fiber": [],
+    "sodium": [],
+    "cholesterol": [],
+    "vitamin_d": [],
+    "calcium": [],
+    "iron": [],
+    "potassium": [],
+    "vitamin_a": [],
+    "vitamin_c": []
+  }
 }
 EOT;
 
@@ -98,80 +90,83 @@ EOT;
         $jsonData = $this->robustJsonDecode($response);
         
         if (!$this->isValidNutritionalData($jsonData)) {
-            Log::warning("Ollama: JSON retornado não contém dados nutricionais válidos.");
-            // Opcional: Logar o raw response para debug se precisar
-            // Log::debug("Raw Response: " . substr($response, 0, 200));
+            Log::warning("Ollama: Retorno inválido ou vazio.");
             return null;
         }
 
-        return $this->processAndSanitizeData($jsonData);
+        return $this->processStrategyRow($jsonData);
     }
 
-    private function processAndSanitizeData(array $data): array
+    /**
+     * Lógica de Seleção Inteligente via PHP
+     */
+    private function processStrategyRow(array $data): array
     {
-        // 1. Processar Porções por Embalagem
-        $servingsRaw = $data['servings_per_container'] ?? '';
+        // 1. Processar Cabeçalho (Porções e Medidas)
+        $servingsRaw = $data['header_servings_per_container'] ?? '';
         preg_match('/[0-9]+([.,][0-9]+)?/', $servingsRaw, $matches);
-        $servingsPerContainer = $matches[0] ?? '1'; 
-        $servingsPerContainer = str_replace(',', '.', $servingsPerContainer);
+        $servingsPerContainer = str_replace(',', '.', $matches[0] ?? '1');
 
-        // 2. Processar Medida Caseira
-        $measureText = $data['serving_measure_text'] ?? '';
+        $servingInfoRaw = $data['header_serving_info'] ?? '';
+        // Separa "25g" de "2 1/2 xícaras"
+        preg_match('/(\d+\s*[g|ml|kg|l]+)/i', $servingInfoRaw, $weightMatch);
+        $servingWeight = $weightMatch[0] ?? trim($servingInfoRaw); // Fallback
+        
+        // Remove o peso para sobrar só a medida caseira
+        $measureText = trim(str_replace($servingWeight, '', $servingInfoRaw));
+        // Limpa parênteses
+        $measureText = trim($measureText, "() ");
+        
         $measureData = $this->parseHouseholdMeasure($measureText);
 
-        // 3. Limpeza Numérica Robustecida
-        $cleanNum = function($key) use ($data) {
-            if (!isset($data[$key])) return '0';
-            
-            // Remove letras, espaços e símbolos irrelevantes, mantendo números, vírgula, ponto e traço
-            $val = preg_replace('/[^0-9,\.-]/', '', (string)$data[$key]);
-            
-            // Troca vírgula por ponto para padronização
-            $val = str_replace(',', '.', $val);
-            
-            // Verifica se resultou em string vazia, apenas ponto ou traço isolado
-            if ($val === '' || $val === '.' || $val === '-') return '0';
-            
-            return $val;
-        };
-
-        $cleanText = fn($key) => isset($data[$key]) ? trim((string)$data[$key]) : null;
-
-        return [
-            'servings_per_container' => $servingsPerContainer, 
-            'serving_weight'        => $cleanText('serving_weight'),
-            'serving_size_quantity' => $measureData['qty'], 
-            'serving_size_unit'     => $measureData['unit'],
-            
-            // Macros
-            'calories'          => $cleanNum('calories'),
-            'total_carb'        => $cleanNum('total_carb'),
-            'total_carb_dv'     => $cleanNum('total_carb_dv'),
-            'total_sugars'      => $cleanNum('total_sugars'),
-            'added_sugars'      => $cleanNum('added_sugars'),
-            'added_sugars_dv'   => $cleanNum('added_sugars_dv'),
-            'sugar_alcohol'     => $cleanNum('sugar_alcohol'),
-            'protein'           => $cleanNum('protein'),
-            'protein_dv'        => $cleanNum('protein_dv'),
-            'total_fat'         => $cleanNum('total_fat'),
-            'total_fat_dv'      => $cleanNum('total_fat_dv'),
-            'sat_fat'           => $cleanNum('sat_fat'),
-            'sat_fat_dv'        => $cleanNum('sat_fat_dv'),
-            'trans_fat'         => $cleanNum('trans_fat'),
-            'trans_fat_dv'      => $cleanNum('trans_fat_dv'),
-            'fiber'             => $cleanNum('fiber'),
-            'fiber_dv'          => $cleanNum('fiber_dv'),
-            'sodium'            => $cleanNum('sodium'),
-            'sodium_dv'         => $cleanNum('sodium_dv'),
-            'cholesterol'       => $cleanNum('cholesterol'),
-            'cholesterol_dv'    => $cleanNum('cholesterol_dv'),
-            'vitamin_d'         => $cleanNum('vitamin_d'),
-            'calcium'           => $cleanNum('calcium'),
-            'iron'              => $cleanNum('iron'),
-            'potassium'         => $cleanNum('potassium'),
-            'vitamin_a'         => $cleanNum('vitamin_a'),
-            'vitamin_c'         => $cleanNum('vitamin_c'),
+        // 2. Processar Linhas (A Mágica da Escolha de Coluna)
+        $rows = $data['rows'] ?? [];
+        $finalData = [
+            'servings_per_container' => $servingsPerContainer,
+            'serving_weight' => $servingWeight,
+            'serving_size_quantity' => $measureData['qty'],
+            'serving_size_unit' => $measureData['unit'],
         ];
+
+        foreach ($rows as $key => $values) {
+            // Limpa os valores para garantir que são números
+            $numbers = array_map(function($val) {
+                return (float) str_replace(',', '.', preg_replace('/[^0-9,\.-]/', '', (string)$val));
+            }, $values);
+
+            // Remove zeros vazios ou valores inválidos
+            $numbers = array_values(array_filter($numbers, fn($n) => is_numeric($n)));
+
+            $count = count($numbers);
+            
+            // LÓGICA DE DECISÃO DE COLUNA
+            if ($count >= 3) {
+                // Cenário: [100g, Porção, %VD] -> Ignora o primeiro (index 0)
+                $val = $numbers[1]; // Porção
+                $dv  = $numbers[2]; // %VD
+            } elseif ($count == 2) {
+                // Cenário: [Porção, %VD] -> Pega o primeiro
+                $val = $numbers[0]; // Porção
+                $dv  = $numbers[1]; // %VD
+            } elseif ($count == 1) {
+                // Cenário: Só tem o valor, sem %VD
+                $val = $numbers[0];
+                $dv  = 0;
+            } else {
+                $val = 0;
+                $dv  = 0;
+            }
+
+            // Mapeia para o schema do banco
+            $finalData[$key] = (string)$val;
+            
+            // Se tiver campo de DV no banco, salva
+            if (in_array($key, ['total_carb', 'added_sugars', 'protein', 'total_fat', 'sat_fat', 'trans_fat', 'fiber', 'sodium', 'cholesterol'])) {
+                $finalData[$key . '_dv'] = (string)$dv;
+            }
+        }
+
+        return $finalData;
     }
 
     private function parseHouseholdMeasure(string $text): array
@@ -187,17 +182,14 @@ EOT;
         }
 
         $qty = '1';
-        // Regex aprimorada para capturar "2 1/2" ou "2.5" ou "2" no início da string
-        // Captura o primeiro grupo numérico que encontrar
-        if (preg_match('/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+[\.,]\d+|\d+)/', trim($text), $matches)) {
+        if (preg_match('/(\d+\s+\d+\/\d+|\d+\/\d+|\d+[\.,]\d+|\d+)/', $text, $matches)) {
             $qty = trim($matches[0]);
         }
 
-        return [
-            'qty' => $qty,
-            'unit' => $translatedUnit
-        ];
+        return ['qty' => $qty, 'unit' => $translatedUnit];
     }
+
+    // --- Métodos de Suporte ---
 
     private function queryVision(string $model, string $prompt, string $image, int $timeout): ?string
     {
@@ -205,12 +197,11 @@ EOT;
             $response = Http::timeout($timeout)->connectTimeout(5)->post("{$this->host}/api/chat", [
                 'model' => $model,
                 'messages' => [['role' => 'user', 'content' => $prompt, 'images' => [$image]]],
-                'stream' => false, 
-                'format' => 'json',
-                'options' => ['temperature' => 0.0, 'num_ctx' => 2048]
+                'stream' => false, 'format' => 'json',
+                'options' => ['temperature' => 0.0, 'num_ctx' => 4096]
             ]);
             return $response->successful() ? $response->json('message.content') : null;
-        } catch (\Exception $e) { return null; }
+        } catch (\Exception $e) { Log::error($e->getMessage()); return null; }
     }
 
     private function robustJsonDecode(string $input): ?array
@@ -224,11 +215,8 @@ EOT;
 
     private function isValidNutritionalData(?array $data): bool
     {
-        if (!$data) return false;
-        // Verifica se pelo menos 1 campo importante veio preenchido (não nulo e não zero "string")
-        // Mas cuidado: "0" é válido. "null" é falha de leitura.
-        return isset($data['calories']) || isset($data['serving_weight']) || isset($data['total_carb']);
+        return isset($data['rows']) || isset($data['header_serving_info']);
     }
-
+    
     public function completion(string $prompt, int $timeoutSeconds = 60): ?string { return null; }
 }
