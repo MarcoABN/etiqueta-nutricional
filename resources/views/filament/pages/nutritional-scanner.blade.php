@@ -1,291 +1,282 @@
 <x-filament-panels::page>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
     <style>
-        /* CSS Reset para Fullscreen */
+        /* Layout Reset Kiosk */
         .fi-topbar, .fi-header, .fi-breadcrumbs, .fi-sidebar, .fi-footer { display: none !important; }
         .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .fi-page { height: 100dvh; overflow: hidden; background: #000; color: white; }
         
-        .app-container { height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; display: flex; flex-direction: column; z-index: 10; background: #000; }
+        /* Containers */
+        .app-container { height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; display: flex; flex-direction: column; z-index: 10; }
         
-        /* Scanner Visuals */
+        /* Oculta o uploader original do Filament, usaremos upload programático */
+        .hidden-uploader { display: none; } 
+
+        /* Scanner View */
         #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; }
-        #reader { width: 100%; height: 100%; }
-        /* Força o video a preencher a tela */
-        #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
+        #reader { width: 100%; height: 100%; object-fit: cover; }
         
-        .scan-frame { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 80%; max-width: 300px; height: 200px; 
-            pointer-events: none; z-index: 30; 
-            box-shadow: 0 0 0 9999px rgba(0,0,0,0.7); 
-            border-radius: 16px; border: 2px solid rgba(255,255,255,0.6); 
-        }
-        .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; animation: scanning 2s infinite linear; }
-        @keyframes scanning { 0% {top: 5%;} 50% {top: 95%;} 100% {top: 5%;} }
-
         .btn-switch-camera {
-            position: absolute; top: 30px; right: 30px; z-index: 60;
+            position: absolute; top: 25px; right: 25px; z-index: 50;
             width: 48px; height: 48px; border-radius: 50%;
-            background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3);
-            display: flex; align-items: center; justify-content: center; color: white;
-            cursor: pointer;
+            background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(255, 255, 255, 0.3); color: white;
         }
 
-        /* Product Found / Photo View */
+        /* Animação Scanner */
+        .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 160px; pointer-events: none; z-index: 30; box-shadow: 0 0 0 9999px rgba(0,0,0,0.75); border-radius: 20px; border: 2px solid rgba(255,255,255,0.4); }
+        .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; box-shadow: 0 0 15px #22c55e; animation: scanning 2s infinite ease-in-out; }
+        @keyframes scanning { 0% {top: 10%;} 50% {top: 90%;} 100% {top: 10%;} }
+
+        /* Photo & Review View */
         #photo-view { position: absolute; inset: 0; z-index: 40; background: #111; display: flex; flex-direction: column; }
-        .info-header { padding: 30px 20px; background: #1f2937; border-bottom: 1px solid #374151; }
-        
-        .capture-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
-        .btn-capture { 
-            background: #22c55e; color: #000; padding: 20px 30px; 
-            border-radius: 50px; font-weight: 800; font-size: 16px;
-            display: flex; align-items: center; gap: 10px; 
-            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+        .product-info { background: #1f2937; padding: 20px; border-bottom: 1px solid #374151; }
+        .btn-capture { background: #22c55e; color: #000; padding: 18px; border-radius: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 10px; width: 85%; margin: 0 auto; }
+        .footer-actions { padding: 15px; background: #000; display: flex; gap: 10px; }
+        .btn-save { background: #22c55e; flex: 2; height: 55px; border-radius: 12px; color: #000; font-weight: bold; }
+        .btn-save:disabled { background: #1a5e32; opacity: 0.5; color: #444; }
+        .btn-cancel { background: #374151; flex: 1; height: 55px; border-radius: 12px; color: #fff; }
+
+        /* CROPPER MODAL STYLES */
+        #crop-modal {
+            position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; flex-direction: column;
+            visibility: hidden; opacity: 0; transition: opacity 0.3s ease;
         }
-
-        .footer-actions { padding: 20px; background: #000; display: flex; gap: 15px; border-top: 1px solid #333; }
-        .btn-base { flex: 1; height: 56px; border-radius: 12px; font-weight: bold; font-size: 16px; }
-        .btn-cancel { background: #374151; color: white; }
-        .btn-save { background: #22c55e; color: black; flex: 2; }
-        .btn-save:disabled { background: #1f4e30; color: #666; opacity: 0.7; }
-
-        /* Crop UI */
-        #crop-overlay { position: fixed; inset: 0; background: #000; z-index: 100; display: none; flex-direction: column; }
-        .crop-stage { flex: 1; position: relative; overflow: hidden; background: #000; }
-        #image-to-crop { display: block; max-width: 100%; }
-
-        /* Inputs invisíveis */
-        #manual-input { display: none; }
+        #crop-modal.active { visibility: visible; opacity: 1; }
+        .crop-container { flex: 1; background: #000; position: relative; overflow: hidden; }
+        .crop-actions { 
+            height: 70px; background: #111; display: flex; align-items: center; justify-content: space-between; padding: 0 15px;
+            border-top: 1px solid #333;
+        }
+        .btn-crop-cancel { color: #fff; padding: 10px 20px; font-weight: 600; }
+        .btn-crop-confirm { background: #22c55e; color: #000; padding: 10px 25px; border-radius: 8px; font-weight: 800; }
+        
+        /* Ajuste do Cropper para Dark Mode */
+        .cropper-bg { background-image: none; background-color: #000; }
+        .cropper-modal { opacity: 0.8; background-color: #000; }
+        .cropper-view-box { outline: 2px solid #22c55e; outline-color: rgba(34, 197, 94, 0.75); }
+        .cropper-line, .cropper-point { background-color: #22c55e; }
     </style>
 
-    <div class="app-container" x-data="scannerApp()" x-init="init()">
-        <input type="file" id="manual-input" accept="image/*" capture="environment">
+    <div class="app-container">
+        
+        <input type="file" id="temp-camera-input" accept="image/*" capture="environment" style="display:none;" />
 
-        <div x-show="!$wire.foundProduct" class="btn-switch-camera" @click="cycleCamera()">
+        <div class="hidden-uploader" wire:ignore>{{ $this->form }}</div>
+
+        @if(!$foundProduct)
+        <button id="btn-switch" class="btn-switch-camera active:scale-90 transition-transform">
             <x-heroicon-o-arrow-path class="w-6 h-6" />
-        </div>
+        </button>
+        @endif
 
-        <div id="scanner-view" x-show="!$wire.foundProduct" wire:ignore>
-            <div id="reader"></div>
+        <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
+            <div id="reader" wire:ignore></div>
             <div class="scan-frame"><div class="scan-line"></div></div>
         </div>
 
-        <template x-if="$wire.foundProduct">
+        @if($foundProduct)
             <div id="photo-view">
-                <div class="info-header">
-                    <div class="text-green-500 text-xs font-bold uppercase tracking-widest mb-1">EAN: <span x-text="$wire.scannedCode"></span></div>
-                    <h1 class="text-xl font-bold text-white leading-tight" x-text="$wire.foundProduct?.product_name"></h1>
+                <div class="product-info">
+                    <span class="text-green-500 text-[10px] font-bold tracking-widest uppercase">EAN: {{ $scannedCode }}</span>
+                    <h2 class="text-lg font-bold leading-tight">{{ $foundProduct->product_name }}</h2>
                 </div>
 
-                <div class="capture-area">
-                    <div class="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-                        <x-heroicon-o-camera x-show="status === 'idle'" class="w-10 h-10 text-gray-400" />
-                        <svg x-show="status === 'loading'" class="animate-spin h-10 w-10 text-green-500" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        <x-heroicon-s-check-circle x-show="status === 'success'" class="w-12 h-12 text-green-500" />
+                <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                    <div class="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                        <x-heroicon-o-camera id="icon-idle" class="w-10 h-10 text-gray-500" />
+                        <svg id="icon-loading" class="animate-spin h-10 w-10 text-green-500 hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <x-heroicon-s-check-circle id="icon-success" class="w-10 h-10 text-green-500 hidden" />
                     </div>
 
-                    <button @click="triggerInput()" class="btn-capture active:scale-95 transition-transform">
+                    <button type="button" onclick="triggerCamera()" class="btn-capture shadow-lg active:scale-95 transition-all">
                         <x-heroicon-s-camera class="w-6 h-6" />
-                        <span>FOTO DA TABELA</span>
+                        TIRAR FOTO
                     </button>
-                    <p class="text-gray-500 text-xs">Foque bem nos números</p>
+                    <p class="text-xs text-gray-500 mt-4">A foto poderá ser recortada na próxima etapa.</p>
                 </div>
 
                 <div class="footer-actions">
-                    <button @click="reset()" class="btn-base btn-cancel">VOLTAR</button>
-                    <button @click="save()" :disabled="status !== 'success'" class="btn-base btn-save">SALVAR</button>
+                    <button wire:click="resetScanner" class="btn-cancel">VOLTAR</button>
+                    <button id="btn-submit" wire:click="save" disabled class="btn-save">SALVAR</button>
                 </div>
             </div>
-        </template>
+        @endif
+    </div>
 
-        <div id="crop-overlay">
-            <div class="crop-stage">
-                <img id="image-to-crop" src="">
-            </div>
-            <div class="footer-actions" style="z-index: 101;">
-                <button @click="cancelCrop()" class="btn-base btn-cancel">CANCELAR</button>
-                <button @click="confirmCrop()" class="btn-base btn-save">RECORTAR</button>
-            </div>
+    <div id="crop-modal" wire:ignore>
+        <div class="crop-container">
+            <img id="image-to-crop" src="" style="max-width: 100%; display: block;">
+        </div>
+        <div class="crop-actions">
+            <button type="button" id="btn-crop-cancel" class="btn-crop-cancel">CANCELAR</button>
+            <button type="button" id="btn-crop-confirm" class="btn-crop-confirm">RECORTAR E USAR</button>
         </div>
     </div>
 
     <script>
-        function scannerApp() {
-            return {
-                status: 'idle',
-                html5QrCode: null,
-                cropper: null,
-                selectedCameraId: null, // Armazena ID específico se o usuário trocar
-                allCameras: [],
+        document.addEventListener('livewire:initialized', () => {
+            let html5QrCode = null;
+            let currentCameraId = null;
+            let backCameras = [];
+            let cropper = null;
 
-                init() {
-                    // Inicia scanner na montagem
-                    this.$nextTick(() => this.startScanner());
+            // --- Lógica do Scanner QR Code (Mantida Original) ---
+            async function loadCameras() {
+                try {
+                    const devices = await Html5Qrcode.getCameras();
+                    backCameras = devices.filter(d => !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('user'));
+                    if (backCameras.length === 0) backCameras = devices;
 
-                    // Listener para reset vindo do PHP
-                    Livewire.on('reset-scanner-ui', () => {
-                        this.status = 'idle';
-                        this.startScanner();
+                    currentCameraId = backCameras[0].id;
+                    const wide = backCameras.find(c => c.label.toLowerCase().includes('0') || c.label.toLowerCase().includes('wide'));
+                    if (wide) currentCameraId = wide.id;
+                } catch (e) { console.error(e); }
+            }
+
+            async function startScanner() {
+                if (@json($foundProduct)) return;
+                if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} html5QrCode = null; }
+                document.getElementById('reader').innerHTML = '';
+                if (backCameras.length === 0) await loadCameras();
+                
+                html5QrCode = new Html5Qrcode("reader");
+                const config = { fps: 15, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 };
+
+                html5QrCode.start(currentCameraId, config, (decodedText) => {
+                    html5QrCode.stop().then(() => { 
+                        html5QrCode = null; 
+                        @this.handleBarcodeScan(decodedText); 
+                    });
+                }).catch(() => {});
+            }
+
+            document.getElementById('btn-switch')?.addEventListener('click', async () => {
+                if (backCameras.length < 2) return;
+                let index = backCameras.findIndex(c => c.id === currentCameraId);
+                currentCameraId = backCameras[(index + 1) % backCameras.length].id;
+                await startScanner();
+            });
+
+            // --- Nova Lógica de Câmera e Crop ---
+
+            // 1. Aciona o input oculto temporário
+            window.triggerCamera = function() {
+                const tempInput = document.getElementById('temp-camera-input');
+                tempInput.value = ''; // Reset para permitir selecionar mesma foto
+                tempInput.click();
+            };
+
+            // 2. Ao selecionar foto, abre o Modal de Crop
+            document.getElementById('temp-camera-input').addEventListener('change', function(e) {
+                if (e.target.files && e.target.files.length > 0) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(event) {
+                        const img = document.getElementById('image-to-crop');
+                        img.src = event.target.result;
+                        
+                        // Exibe Modal
+                        const modal = document.getElementById('crop-modal');
+                        modal.classList.add('active');
+
+                        // Inicia Cropper
+                        if(cropper) cropper.destroy();
+                        cropper = new Cropper(img, {
+                            viewMode: 1,      // Restringe o crop box dentro da tela
+                            dragMode: 'move', // Permite mover a imagem
+                            autoCropArea: 0.9,
+                            restore: false,
+                            guides: true,
+                            center: true,
+                            highlight: false,
+                            cropBoxMovable: true,
+                            cropBoxResizable: true,
+                            toggleDragModeOnDblclick: false,
+                        });
+                    }
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            // 3. Botão Cancelar Crop
+            document.getElementById('btn-crop-cancel').addEventListener('click', function() {
+                document.getElementById('crop-modal').classList.remove('active');
+                if(cropper) cropper.destroy();
+                cropper = null;
+            });
+
+            // 4. Botão Confirmar Crop -> Upload para Livewire
+            document.getElementById('btn-crop-confirm').addEventListener('click', function() {
+                if (!cropper) return;
+
+                setUIStatus('loading');
+                document.getElementById('crop-modal').classList.remove('active');
+
+                // Obtém o canvas recortado
+                cropper.getCroppedCanvas({
+                    maxWidth: 1280,
+                    maxHeight: 1280,
+                    imageSmoothingQuality: 'high',
+                }).toBlob((blob) => {
+                    // Prepara o arquivo para upload
+                    const file = new File([blob], "nutritional_label.jpg", { type: "image/jpeg" });
+
+                    // Upload manual para o Livewire (bypassing FilePond UI)
+                    // 'data.image_nutritional' é o statePath do componente
+                    @this.upload('data.image_nutritional', file, (uploadedFilename) => {
+                        // Success Callback
+                        setUIStatus('success');
+                        Livewire.dispatch('file-uploaded-callback'); // Notifica PHP
+                        if(cropper) cropper.destroy();
+                        cropper = null;
+                    }, () => {
+                        // Error Callback
+                        alert('Erro ao enviar imagem. Tente novamente.');
+                        setUIStatus('idle');
+                        if(cropper) cropper.destroy();
                     });
 
-                    // Configura o input de arquivo manual
-                    const input = document.getElementById('manual-input');
-                    input.addEventListener('change', (e) => {
-                        if (e.target.files && e.target.files[0]) {
-                            const reader = new FileReader();
-                            reader.onload = (evt) => this.openCrop(evt.target.result);
-                            reader.readAsDataURL(e.target.files[0]);
-                            input.value = ''; // Reseta para permitir selecionar o mesmo arquivo
-                        }
-                    });
-                },
+                }, 'image/jpeg', 0.9);
+            });
 
-                async startScanner() {
-                    if (this.$wire.foundProduct) return;
-                    
-                    // Limpa instância anterior
-                    if (this.html5QrCode) {
-                        try { await this.html5QrCode.stop(); } catch(e) {}
-                        this.html5QrCode = null;
-                    }
-
-                    this.html5QrCode = new Html5Qrcode("reader");
-
-                    const config = { 
-                        fps: 20, // Mais quadros por segundo ajuda na leitura rápida
-                        qrbox: { width: 250, height: 150 }, // Área de leitura
-                        aspectRatio: 1.0 
-                    };
-
-                    try {
-                        // ESTRATÉGIA DE INICIALIZAÇÃO:
-                        // 1. Se temos um ID selecionado manualmente, usa ele.
-                        // 2. Se não, usa o modo "environment" (traseira) padrão.
-                        let cameraConfig = this.selectedCameraId 
-                            ? { deviceId: { exact: this.selectedCameraId } }
-                            : { facingMode: "environment" };
-
-                        await this.html5QrCode.start(
-                            cameraConfig, 
-                            config, 
-                            (text) => {
-                                this.stopAndProcess(text);
-                            },
-                            (err) => { /* Ignora erros de frame vazio */ }
-                        );
-                    } catch (err) {
-                        console.error("Erro ao iniciar câmera:", err);
-                        // Fallback: Se falhar (ex: environment não suportado), tenta qualquer câmera
-                        if (!this.selectedCameraId) {
-                            this.html5QrCode.start({ facingMode: "user" }, config, (text) => this.stopAndProcess(text))
-                                .catch(e => alert("Não foi possível acessar a câmera. Verifique as permissões."));
-                        }
-                    }
-                },
-
-                async stopAndProcess(text) {
-                    if(this.html5QrCode) {
-                        await this.html5QrCode.stop();
-                        this.html5QrCode.clear();
-                    }
-                    this.$wire.handleBarcodeScan(text);
-                },
-
-                async cycleCamera() {
-                    // 1. Para o scanner atual
-                    if (this.html5QrCode) {
-                        try { await this.html5QrCode.stop(); } catch(e) {}
-                    }
-
-                    // 2. Lista câmeras se ainda não listou
-                    if (this.allCameras.length === 0) {
-                        try {
-                            this.allCameras = await Html5Qrcode.getCameras();
-                        } catch(e) {
-                            alert("Erro ao listar câmeras.");
-                            return;
-                        }
-                    }
-
-                    if (this.allCameras.length < 2) {
-                        alert("Apenas uma câmera detectada.");
-                        this.startScanner();
-                        return;
-                    }
-
-                    // 3. Encontra o índice da câmera atual (ou define 0)
-                    let currentIndex = 0;
-                    if (this.selectedCameraId) {
-                        currentIndex = this.allCameras.findIndex(c => c.id === this.selectedCameraId);
-                    }
-
-                    // 4. Pega a próxima câmera
-                    let nextIndex = (currentIndex + 1) % this.allCameras.length;
-                    this.selectedCameraId = this.allCameras[nextIndex].id;
-
-                    // 5. Reinicia com o novo ID
-                    this.startScanner();
-                },
-
-                // Lógica de Foto e Crop
-                triggerInput() {
-                    document.getElementById('manual-input').click();
-                },
-
-                openCrop(imgSrc) {
-                    const overlay = document.getElementById('crop-overlay');
-                    const img = document.getElementById('image-to-crop');
-                    
-                    img.src = imgSrc;
-                    overlay.style.display = 'flex';
-
-                    if (this.cropper) this.cropper.destroy();
-                    
-                    this.cropper = new Cropper(img, {
-                        viewMode: 1,
-                        dragMode: 'move',
-                        autoCropArea: 0.9,
-                        restore: false,
-                        guides: true,
-                        center: true,
-                        highlight: false,
-                        background: false
-                    });
-                },
-
-                cancelCrop() {
-                    document.getElementById('crop-overlay').style.display = 'none';
-                    if (this.cropper) {
-                        this.cropper.destroy();
-                        this.cropper = null;
-                    }
-                },
-
-                async confirmCrop() {
-                    if (!this.cropper) return;
-                    this.status = 'loading';
-                    
-                    const canvas = this.cropper.getCroppedCanvas({ maxWidth: 1280, maxHeight: 1280 });
-                    const base64 = canvas.toDataURL('image/jpeg', 0.85);
-
-                    await this.$wire.processCroppedImage(base64);
-                    
-                    this.status = 'success';
-                    this.cancelCrop();
-                },
-
-                reset() {
-                    this.$wire.resetScanner();
-                },
-
-                save() {
-                    this.$wire.save();
+            // --- UI Helpers ---
+            function setUIStatus(status) {
+                const btn = document.getElementById('btn-submit');
+                const idle = document.getElementById('icon-idle');
+                const load = document.getElementById('icon-loading');
+                const success = document.getElementById('icon-success');
+                if (!btn) return;
+                
+                [idle, load, success].forEach(i => i?.classList.add('hidden'));
+                
+                if (status === 'loading') { 
+                    btn.disabled = true; 
+                    load.classList.remove('hidden'); 
+                }
+                else if (status === 'success') { 
+                    btn.disabled = false; 
+                    success.classList.remove('hidden'); 
+                }
+                else { 
+                    btn.disabled = true; 
+                    idle.classList.remove('hidden'); 
                 }
             }
-        }
+
+            Livewire.on('reset-scanner', () => { 
+                setUIStatus('idle'); 
+                setTimeout(startScanner, 600); 
+            });
+            
+            // Inicializa scanner
+            startScanner();
+        });
     </script>
 </x-filament-panels::page>
