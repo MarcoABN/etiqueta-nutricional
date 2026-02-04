@@ -8,14 +8,6 @@
         .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .fi-page { height: 100dvh; overflow: hidden; background: #000; font-family: 'Inter', sans-serif; }
 
-        /* Esconde o input padrão do FilePond mas mantém funcionalidade */
-        .filepond--root {
-            position: absolute !important; width: 1px !important; height: 1px !important;
-            padding: 0 !important; margin: -1px !important; overflow: hidden !important;
-            clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important;
-            opacity: 0 !important; pointer-events: none;
-        }
-
         :root { --primary: #22c55e; }
 
         .app-container {
@@ -23,6 +15,7 @@
             display: flex; flex-direction: column;
         }
 
+        /* Scanner Styles (Mantidos iguais) */
         #scanner-view { position: absolute; inset: 0; z-index: 10; background: #000; }
         #reader { width: 100%; height: 100%; object-fit: cover; }
         
@@ -30,8 +23,7 @@
             position: absolute; top: 20px; right: 20px; z-index: 50;
             width: 48px; height: 48px; border-radius: 50%;
             background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3);
-            color: white; display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(4px); cursor: pointer;
+            color: white; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); cursor: pointer;
         }
 
         .scan-frame {
@@ -50,79 +42,37 @@
         }
         @keyframes scanning { 0% {top: 10%; opacity: 0;} 50% {opacity: 1;} 100% {top: 90%; opacity: 0;} }
         .scan-text {
-            position: absolute; bottom: 15%; left: 0; right: 0; text-align: center;
-            color: white; font-size: 14px; font-weight: 500; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 21;
+            position: absolute; bottom: 15%; left: 0; right: 0; text-align: center; color: white; font-size: 14px; font-weight: 500; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 21;
         }
 
-        #photo-view { 
-            position: absolute; inset: 0; z-index: 20; background: #111; 
-            display: flex; flex-direction: column;
-        }
-
-        .header-info {
-            background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 100%);
-            padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
+        /* Photo View Styles */
+        #photo-view { position: absolute; inset: 0; z-index: 20; background: #111; display: flex; flex-direction: column; }
+        .header-info { background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 100%); padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .header-info h2 { color: white; font-size: 20px; font-weight: 700; margin-bottom: 4px; line-height: 1.2; }
-        .header-info span { 
-            display: inline-block; color: #9ca3af; font-size: 13px; font-family: monospace; 
-            background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; margin-top: 4px;
-        }
-
-        .viewport-area {
-            flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
-            background: #000; overflow: hidden; padding: 20px;
-        }
-
-        .confirm-stage {
-            display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center;
-            width: 100%;
-        }
-        .confirm-btn {
-            background: var(--primary); color: #000; border: none;
-            padding: 18px 32px; border-radius: 12px; font-size: 16px; font-weight: 700;
-            display: flex; align-items: center; gap: 10px; width: 100%; max-width: 320px;
-            justify-content: center; box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
-        }
-
-        .preview-stage {
-            width: 100%; height: 100%; display: flex;
-            flex-direction: column; align-items: center; justify-content: center;
-        }
-        .preview-image { 
-            width: 100%; height: 100%; object-fit: contain; border-radius: 8px; 
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-
-        .controls-bar {
-            height: 100px; background: #000; display: flex; align-items: center; justify-content: space-between;
-            padding: 0 30px; border-top: 1px solid rgba(255,255,255,0.1);
-        }
-        .icon-btn {
-            width: 50px; height: 50px; border-radius: 50%; background: #222; color: white;
-            display: flex; align-items: center; justify-content: center; border: 1px solid #333;
-        }
-        .save-btn {
-            background: var(--primary); color: #000; width: 60px; height: 60px;
-            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); border: none;
-            transition: all 0.3s ease;
-        }
-        /* Estilo visual quando desabilitado */
-        .save-btn:disabled { 
-            opacity: 0.7; 
-            filter: grayscale(0.5); 
-            cursor: not-allowed; 
-            background: #166534; /* Um verde mais escuro/fechado */
-        }
+        .header-info span { display: inline-block; color: #9ca3af; font-size: 13px; font-family: monospace; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; margin-top: 4px; }
+        .viewport-area { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; background: #000; overflow: hidden; padding: 20px; }
+        .confirm-stage { display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; width: 100%; }
+        .confirm-btn { background: var(--primary); color: #000; border: none; padding: 18px 32px; border-radius: 12px; font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 320px; justify-content: center; box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3); }
+        .preview-stage { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .preview-image { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .controls-bar { height: 100px; background: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .icon-btn { width: 50px; height: 50px; border-radius: 50%; background: #222; color: white; display: flex; align-items: center; justify-content: center; border: 1px solid #333; }
+        .save-btn { background: var(--primary); color: #000; width: 60px; height: 60px; box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); border: none; transition: all 0.3s ease; }
+        .save-btn:disabled { opacity: 0.5; filter: grayscale(1); cursor: not-allowed; }
         .hidden { display: none !important; }
     </style>
 
     <div class="app-container">
-
-        {{-- O componente de upload do Filament fica escondido, mas ativo --}}
-        <div style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; overflow: hidden">
-            {{ $this->form }}
-        </div>
+        
+        {{-- INPUT NATIVO DE UPLOAD (Invisível) --}}
+        {{-- Isso substitui o componente complexo do Filament --}}
+        <input type="file" 
+               wire:model="photo" 
+               accept="image/*" 
+               capture="environment" 
+               id="native-camera-input" 
+               style="display: none;"
+        >
 
         {{-- SCANNER --}}
         <div id="scanner-view" class="{{ $foundProduct ? 'hidden' : '' }}">
@@ -130,11 +80,7 @@
             <button id="btn-switch-cam" class="switch-camera-btn" style="display: none;">
                 <x-heroicon-o-arrows-right-left class="w-6 h-6" />
             </button>
-            <div class="scan-frame">
-                <div class="scan-corner tl"></div><div class="scan-corner tr"></div>
-                <div class="scan-corner bl"></div><div class="scan-corner br"></div>
-                <div class="scan-line"></div>
-            </div>
+            <div class="scan-frame"><div class="scan-corner tl"></div><div class="scan-corner tr"></div><div class="scan-corner bl"></div><div class="scan-corner br"></div><div class="scan-line"></div></div>
             <div class="scan-text">Aponte para o código de barras</div>
         </div>
 
@@ -144,32 +90,42 @@
              x-data="{ 
                  mode: 'confirm',
                  init() {
-                     // Se já tiver foto salva no banco, entra no modo preview direto
                      if (@js(!empty($foundProduct->image_nutritional))) {
                         this.mode = 'preview';
                      }
                  }
              }"
              @reset-scanner.window="mode = 'confirm'"
-             @set-preview-mode.window="mode = 'preview'"
+             @photo-uploaded.window="mode = 'preview'"
         >
             <div class="header-info">
                 <h2>{{ $foundProduct?->product_name ?? 'Produto Identificado' }}</h2>
                 <span>EAN: {{ $scannedCode }}</span>
             </div>
 
-            <div class="viewport-area" wire:ignore>
+            <div class="viewport-area" wire:ignore.self>
+                {{-- Botão inicial: Clica no input hidden --}}
                 <div class="confirm-stage" x-show="mode === 'confirm'">
                     <p class="text-gray-400 text-sm">Confirme o produto para tirar a foto.</p>
-                    <button id="btn-confirm-capture" class="confirm-btn">
+                    <button type="button" onclick="document.getElementById('native-camera-input').click()" class="confirm-btn">
                         <x-heroicon-o-camera class="w-6 h-6"/>
                         FOTOGRAFAR
                     </button>
                 </div>
 
+                {{-- Preview: Mostra a imagem temporária (recém upload) ou a salva no banco --}}
                 <div class="preview-stage" x-show="mode === 'preview'" style="display: none;">
-                    <img id="local-preview" class="preview-image" alt="Preview">
-                    <button id="btn-retake" class="text-gray-400 text-xs mt-4 underline p-2">Tirar outra foto</button>
+                    @if ($photo)
+                        {{-- Preview do Upload Temporário do Livewire --}}
+                        <img src="{{ $photo->temporaryUrl() }}" class="preview-image" alt="New Preview">
+                    @elseif ($foundProduct?->image_nutritional)
+                        {{-- Imagem salva no banco --}}
+                        <img src="{{ asset('storage/' . $foundProduct->image_nutritional) }}" class="preview-image" alt="Saved Preview">
+                    @endif
+                    
+                    <button type="button" onclick="document.getElementById('native-camera-input').click()" class="text-gray-400 text-xs mt-4 underline p-2">
+                        Tirar outra foto
+                    </button>
                 </div>
             </div>
 
@@ -179,27 +135,22 @@
                 </button>
 
                 <div x-show="mode === 'preview'" style="display: none;">
-                    {{-- 
-                       BOTÃO CORRIGIDO E MELHORADO:
-                       1. Bloqueia (disabled) se estiver salvando (save) OU fazendo upload (data.image_nutritional).
-                       2. Muda o ícone para feedback visual exato do que está acontecendo.
-                    --}}
                     <button wire:click="save" 
                             wire:loading.attr="disabled"
-                            wire:target="save, data.image_nutritional"
+                            wire:target="photo, save"
                             class="icon-btn save-btn">
                         
-                        {{-- 1. Estado Normal (Pronto para salvar) --}}
-                        <span wire:loading.remove wire:target="save, data.image_nutritional">
+                        {{-- Estados do Ícone --}}
+                        <span wire:loading.remove wire:target="photo, save">
                             <x-heroicon-m-check class="w-8 h-8"/>
                         </span>
                         
-                        {{-- 2. Estado Uploading (Enviando para nuvem/temp) --}}
-                        <span wire:loading wire:target="data.image_nutritional">
+                        {{-- Uploading da foto --}}
+                        <span wire:loading wire:target="photo">
                             <x-heroicon-o-arrow-up-tray class="w-6 h-6 animate-bounce"/>
                         </span>
 
-                        {{-- 3. Estado Saving (Persistindo no banco) --}}
+                        {{-- Salvando no banco --}}
                         <span wire:loading wire:target="save">
                             <x-heroicon-o-arrow-path class="w-6 h-6 animate-spin"/>
                         </span>
@@ -214,85 +165,44 @@
             let html5QrCode = null;
             let availableCameras = [];
             let currentCameraIndex = 0;
-
-            const btnConfirm = document.getElementById('btn-confirm-capture');
-            const btnRetake = document.getElementById('btn-retake');
-            const previewImg = document.getElementById('local-preview');
             const btnSwitchCam = document.getElementById('btn-switch-cam');
 
-            // --- Lógica de Upload ---
-            // Simula o clique no input file oculto do Filament/FilePond quando o usuário clica em "Fotografar"
-            function openCamera() {
-                const fileInput = document.querySelector('input[type="file"].filepond--browser');
-                if (fileInput) {
-                    // Remove listener anterior para evitar duplicidade
-                    fileInput.onchange = null;
-                    
-                    fileInput.onchange = (e) => {
-                        if (e.target.files && e.target.files[0]) {
-                            const file = e.target.files[0];
-                            // Cria preview local imediato para UX rápida
-                            previewImg.src = URL.createObjectURL(file);
-                            // Muda a UI para modo preview
-                            window.dispatchEvent(new CustomEvent('set-preview-mode'));
-                        }
-                    };
-                    fileInput.click();
-                } else {
-                    alert("Erro: Componente de câmera não inicializada. Recarregue a página.");
-                }
-            }
-
-            if(btnConfirm) btnConfirm.addEventListener('click', openCamera);
-            if(btnRetake) btnRetake.addEventListener('click', openCamera);
-
-            // --- Scanner de Código de Barras ---
+            // --- Gerenciamento de Câmera/Scanner ---
             async function startScanner() {
-                // Se já achou produto, não liga scanner
-                if (@json($foundProduct)) return;
+                if (@json($foundProduct)) return; // Não inicia se já tiver produto
                 if (html5QrCode && html5QrCode.isScanning) return;
 
                 try {
                     if (availableCameras.length === 0) {
                         availableCameras = await Html5Qrcode.getCameras();
-                        // Ordena para priorizar câmeras traseiras ("environment" ou "back")
                         availableCameras.sort((a, b) => {
                             const labelA = a.label.toLowerCase();
-                            const isBackA = labelA.includes('back') || labelA.includes('traseira') || labelA.includes('environment');
-                            return isBackA ? -1 : 1;
+                            const isBack = labelA.includes('back') || labelA.includes('traseira') || labelA.includes('environment');
+                            return isBack ? -1 : 1;
                         });
-                        
-                        // Mostra botão de troca apenas se houver > 1 câmera
                         if (availableCameras.length > 1) btnSwitchCam.style.display = 'flex';
                     }
 
-                    if (availableCameras.length === 0) {
-                        alert("Nenhuma câmera encontrada. Verifique as permissões.");
-                        return;
+                    if (availableCameras.length > 0) {
+                        html5QrCode = new Html5Qrcode("reader");
+                        await html5QrCode.start(
+                            { deviceId: { exact: availableCameras[currentCameraIndex].id } }, 
+                            { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 },
+                            (decodedText) => {
+                                stopScanner();
+                                @this.handleBarcodeScan(decodedText);
+                            },
+                            () => {}
+                        );
                     }
-
-                    html5QrCode = new Html5Qrcode("reader");
-                    await html5QrCode.start(
-                        { deviceId: { exact: availableCameras[currentCameraIndex].id } }, 
-                        { fps: 10, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 },
-                        (decodedText) => {
-                            stopScanner();
-                            // Chama o método PHP do Livewire
-                            @this.handleBarcodeScan(decodedText);
-                        },
-                        () => {} // Callback de erro de leitura (ignorado para não spammar console)
-                    );
-                } catch (err) { console.error("Erro ao iniciar câmera:", err); }
+                } catch (err) { console.error("Cam Error", err); }
             }
 
             function stopScanner() {
-                if (html5QrCode) {
-                    return html5QrCode.stop().then(() => html5QrCode.clear()).catch(()=>{});
-                }
+                if (html5QrCode) return html5QrCode.stop().then(() => html5QrCode.clear()).catch(()=>{});
                 return Promise.resolve();
             }
 
-            // Troca de câmera
             btnSwitchCam.addEventListener('click', async () => {
                 if (availableCameras.length < 2) return;
                 await stopScanner();
@@ -300,16 +210,15 @@
                 setTimeout(startScanner, 200);
             });
 
-            // Inicia scanner ao carregar
             startScanner();
 
-            // Listeners de eventos do Livewire
-            Livewire.on('reset-scanner', () => {
-                previewImg.src = '';
-                setTimeout(startScanner, 500);
-            });
-            
+            Livewire.on('reset-scanner', () => setTimeout(startScanner, 500));
             Livewire.on('reset-scanner-error', () => setTimeout(startScanner, 1500));
+            
+            // Quando o upload nativo termina, muda a UI para preview
+            Livewire.on('photo-uploaded', () => {
+                window.dispatchEvent(new CustomEvent('photo-uploaded'));
+            });
         });
     </script>
 </x-filament-panels::page>

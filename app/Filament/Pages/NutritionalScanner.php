@@ -6,15 +6,15 @@ use App\Models\Product;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
-use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
-use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads; // <--- Importante: Sistema nativo de upload
 
 class NutritionalScanner extends Page implements HasForms
 {
     use InteractsWithForms;
+    use WithFileUploads; // <--- Habilita uploads diretos
 
     protected static ?string $navigationIcon = 'heroicon-o-qr-code';
     protected static ?string $navigationLabel = 'Coletor Nutricional';
@@ -23,6 +23,10 @@ class NutritionalScanner extends Page implements HasForms
 
     public $scannedCode = null;
     public $foundProduct = null;
+    
+    // Variável dedicada para o upload da foto (substitui o form schema complexo)
+    public $photo; 
+
     public ?array $data = [];
 
     public function mount(): void
@@ -32,35 +36,10 @@ class NutritionalScanner extends Page implements HasForms
 
     public function form(Form $form): Form
     {
+        // Removemos o FileUpload daqui pois ele estava causando conflito oculto.
+        // O formulário fica vazio ou com outros campos se houver.
         return $form
-            ->schema([
-                FileUpload::make('image_nutritional')
-                    ->hiddenLabel()
-                    ->image()
-                    ->live()
-                    // Otimização HD (720p/1080p) - Rápido e Legível
-                    ->imageResizeMode('contain')
-                    ->imageResizeTargetWidth(1280)
-                    ->imageResizeTargetHeight(1280)
-                    ->imageResizeUpscale(false)
-                    ->directory('uploads/nutritional')
-                    ->disk('public')
-                    // Nomeia com timestamp para evitar cache e conflito
-                    ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file) {
-                        $cod = $this->foundProduct->codprod ?? 'SEM_COD';
-                        // Limpa caracteres especiais do código do produto para evitar erros no sistema de arquivos
-                        $cod = preg_replace('/[^A-Za-z0-9\-]/', '', $cod);
-                        return "{$cod}_nutri_" . time() . '.' . $file->getClientOriginalExtension();
-                    })
-                    ->required()
-                    ->extraAttributes(['id' => 'nutritional-upload-component'])
-                    ->extraInputAttributes([
-                        'capture' => 'environment',
-                        'accept' => 'image/*'
-                    ])
-                    ->panelLayout('integrated')
-                    ->columnSpanFull(),
-            ])
+            ->schema([])
             ->statePath('data');
     }
 
@@ -71,10 +50,8 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Preenche o formulário com a imagem existente, se houver
-            $this->form->fill([
-                'image_nutritional' => $product->image_nutritional,
-            ]);
+            // Limpa foto anterior da memória se houver
+            $this->reset('photo');
         } else {
             $this->foundProduct = null;
             Notification::make()
@@ -88,58 +65,50 @@ class NutritionalScanner extends Page implements HasForms
         }
     }
 
+    // Método chamado automaticamente quando o upload termina (opcional, para debug ou UX)
+    public function updatedPhoto()
+    {
+        $this->dispatch('photo-uploaded');
+    }
+
     public function save()
     {
-        // CORREÇÃO: Acessa diretamente os dados sincronizados pelo Livewire ($this->data)
-        // em vez de forçar uma validação completa com getState(), que causa o loop infinito
-        // quando o upload ainda está sendo processado internamente.
-        
-        $rawImage = $this->data['image_nutritional'] ?? null;
-        $imagePath = null;
-
-        // O FileUpload pode retornar um array (uuid => path) ou string direta
-        if (is_array($rawImage)) {
-            // Pega o primeiro valor do array (o caminho do arquivo)
-            $imagePath = array_values($rawImage)[0] ?? null;
-        } elseif (is_string($rawImage)) {
-            $imagePath = $rawImage;
-        }
-
-        // Validação Manual: Se não tiver produto ou não tiver caminho de imagem válido
         if (!$this->foundProduct) {
             Notification::make()->title('Nenhum produto selecionado')->danger()->send();
             return;
         }
 
-        if (empty($imagePath)) {
+        // Validação direta na propriedade $photo
+        if (!$this->photo) {
             Notification::make()
-                ->title('Aguarde...')
-                ->body('A imagem ainda está sendo enviada ou processada.')
+                ->title('Nenhuma foto capturada')
+                ->body('Por favor, tire a foto novamente.')
                 ->warning()
                 ->send();
             return;
         }
 
-        // Processo de Salvamento
         try {
+            // Definição do nome do arquivo
+            $cod = $this->foundProduct->codprod ?? 'SEM_COD';
+            $cod = preg_replace('/[^A-Za-z0-9\-]/', '', $cod);
+            $filename = "{$cod}_nutri_" . time() . '.' . $this->photo->getClientOriginalExtension();
+
+            // Salva no disco 'public' dentro de 'uploads/nutritional'
+            $path = $this->photo->storeAs('uploads/nutritional', $filename, 'public');
+
+            // Lógica de limpar imagem antiga
             $oldImage = $this->foundProduct->image_nutritional;
-            
-            // Se a imagem mudou, deleta a antiga do disco para economizar espaço
-            if ($oldImage && $oldImage !== $imagePath) {
-                if (Storage::disk('public')->exists($oldImage)) {
-                    Storage::disk('public')->delete($oldImage);
-                }
+            if ($oldImage && Storage::disk('public')->exists($oldImage)) {
+                Storage::disk('public')->delete($oldImage);
             }
 
+            // Atualiza banco
             $this->foundProduct->update([
-                'image_nutritional' => $imagePath
+                'image_nutritional' => $path
             ]);
 
-            Notification::make()
-                ->title('Salvo com sucesso!')
-                ->success()
-                ->duration(1500)
-                ->send();
+            Notification::make()->title('Salvo com sucesso!')->success()->send();
             
             $this->resetScanner();
 
@@ -156,8 +125,8 @@ class NutritionalScanner extends Page implements HasForms
     {
         $this->scannedCode = null;
         $this->foundProduct = null;
+        $this->photo = null; // Limpa o arquivo temporário
         $this->data = []; 
-        $this->form->fill(); // Limpa o formulário visualmente
         $this->dispatch('reset-scanner'); 
     }
 }
