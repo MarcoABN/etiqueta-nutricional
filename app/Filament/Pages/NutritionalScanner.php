@@ -12,8 +12,6 @@ use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
-
-//backup de versão - momento estável
 class NutritionalScanner extends Page implements HasForms
 {
     use InteractsWithForms;
@@ -34,23 +32,39 @@ class NutritionalScanner extends Page implements HasForms
         return $form
             ->schema([
                 FileUpload::make('image_nutritional')
-                    ->hiddenLabel()
+                    ->hidden() // Fica oculto pois o upload agora é controlado via processCroppedImage
                     ->image()
-                    ->imageResizeMode('contain')
-                    ->imageResizeTargetWidth(1280)
-                    ->imageResizeTargetHeight(1280)
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    // Força a câmera traseira no nível do componente
-                    ->extraInputAttributes([
-                        'capture' => 'environment',
-                        'accept' => 'image/*'
-                    ])
-                    ->live() 
-                    ->afterStateUpdated(fn () => $this->dispatch('file-uploaded-callback'))
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
+    }
+
+    /**
+     * Recebe a imagem do Cropper.js (Base64), salva no storage e atualiza o estado.
+     */
+    public function processCroppedImage(string $base64Data)
+    {
+        try {
+            if (preg_match('/^data:image\/(\w+);base64,/', $base64Data, $type)) {
+                $image = substr($base64Data, strpos($base64Data, ',') + 1);
+                $image = base64_decode($image);
+
+                $filename = 'crop_' . uniqid() . '.jpg';
+                $path = 'uploads/nutritional/' . $filename;
+
+                Storage::disk('public')->put($path, $image);
+
+                // Sincroniza com o estado do formulário para o método save() funcionar
+                $this->data['image_nutritional'] = $path;
+                
+                return true;
+            }
+        } catch (\Exception $e) {
+            Notification::make()->title('Erro ao processar imagem')->danger()->send();
+        }
+        return false;
     }
 
     public function handleBarcodeScan($code)
@@ -70,10 +84,13 @@ class NutritionalScanner extends Page implements HasForms
 
     public function save()
     {
-        $state = $this->form->getState();
-        if ($this->foundProduct && !empty($state['image_nutritional'])) {
-            $this->foundProduct->update(['image_nutritional' => $state['image_nutritional']]);
-            Notification::make()->title('Salvo com sucesso!')->success()->send();
+        // Pega o estado atual (que foi preenchido pelo processCroppedImage)
+        if ($this->foundProduct && !empty($this->data['image_nutritional'])) {
+            $this->foundProduct->update([
+                'image_nutritional' => $this->data['image_nutritional']
+            ]);
+
+            Notification::make()->title('Dados salvos com sucesso!')->success()->send();
             $this->resetScanner();
         }
     }

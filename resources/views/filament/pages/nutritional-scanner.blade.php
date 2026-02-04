@@ -1,9 +1,10 @@
 <x-filament-panels::page>
-    
-
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
+        /* Estilos originais preservados */
         .fi-topbar, .fi-header, .fi-breadcrumbs, .fi-sidebar, .fi-footer { display: none !important; }
         .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .fi-page { height: 100dvh; overflow: hidden; background: #000; color: white; }
@@ -32,6 +33,11 @@
         .btn-save { background: #22c55e; flex: 2; height: 55px; border-radius: 12px; color: #000; font-weight: bold; }
         .btn-save:disabled { background: #1a5e32; opacity: 0.5; color: #444; }
         .btn-cancel { background: #374151; flex: 1; height: 55px; border-radius: 12px; color: #fff; }
+
+        /* Estilos Novos para o Crop */
+        #crop-ui { position: fixed; inset: 0; background: #000; z-index: 100; display: none; flex-direction: column; }
+        .crop-container { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        #image-to-crop { max-width: 100%; max-height: 100%; display: block; }
     </style>
 
     <div class="app-container">
@@ -74,6 +80,16 @@
                 </div>
             </div>
         @endif
+
+        <div id="crop-ui">
+            <div class="crop-container">
+                <img id="image-to-crop" src="">
+            </div>
+            <div class="footer-actions">
+                <button onclick="cancelCrop()" class="btn-cancel">CANCELAR</button>
+                <button onclick="applyCrop()" class="btn-save">RECORTAR</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -81,28 +97,73 @@
             let html5QrCode = null;
             let currentCameraId = null;
             let backCameras = [];
+            let cropper = null;
 
             async function loadCameras() {
                 try {
                     const devices = await Html5Qrcode.getCameras();
                     backCameras = devices.filter(d => !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('user'));
                     if (backCameras.length === 0) backCameras = devices;
-
                     currentCameraId = backCameras[0].id;
-                    const wide = backCameras.find(c => c.label.toLowerCase().includes('0') || c.label.toLowerCase().includes('wide'));
-                    if (wide) currentCameraId = wide.id;
                 } catch (e) { console.error(e); }
             }
 
             window.triggerCamera = function() {
                 const fileInput = document.querySelector('.hidden-uploader input[type="file"]');
                 if (fileInput) { 
-                    // REFORÇO: Injeta os atributos de câmera via JS antes de clicar
                     fileInput.setAttribute('capture', 'environment');
                     fileInput.setAttribute('accept', 'image/*');
+                    
+                    // Hook para capturar o arquivo antes do upload automático
+                    fileInput.onchange = (e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => startCropping(event.target.result);
+                            reader.readAsDataURL(file);
+                        }
+                    };
                     fileInput.click(); 
-                    setUIStatus('loading'); 
                 }
+            };
+
+            function startCropping(imgSrc) {
+                const cropUi = document.getElementById('crop-ui');
+                const cropImg = document.getElementById('image-to-crop');
+                
+                cropImg.src = imgSrc;
+                cropUi.style.display = 'flex';
+
+                if (cropper) cropper.destroy();
+
+                cropper = new Cropper(cropImg, {
+                    viewMode: 1,
+                    dragMode: 'move',
+                    autoCropArea: 0.9,
+                    restore: false,
+                    guides: true,
+                    highlight: false,
+                    cropBoxMovable: true,
+                    cropBoxResizable: true,
+                    toggleDragModeOnDblclick: false,
+                });
+            }
+
+            window.cancelCrop = () => {
+                document.getElementById('crop-ui').style.display = 'none';
+                if (cropper) cropper.destroy();
+            };
+
+            window.applyCrop = () => {
+                setUIStatus('loading');
+                const canvas = cropper.getCroppedCanvas({ maxWidth: 1600, maxHeight: 1600 });
+                const base64 = canvas.toDataURL('image/jpeg', 0.85);
+                
+                // Envia a imagem recortada para o servidor via Livewire
+                @this.processCroppedImage(base64).then(() => {
+                    document.getElementById('crop-ui').style.display = 'none';
+                    setUIStatus('success');
+                });
             };
 
             function setUIStatus(status) {
@@ -112,33 +173,23 @@
                 const success = document.getElementById('icon-success');
                 if (!btn) return;
                 [idle, load, success].forEach(i => i?.classList.add('hidden'));
-                if (status === 'loading') { btn.disabled = true; load.classList.remove('hidden'); }
-                else if (status === 'success') { btn.disabled = false; success.classList.remove('hidden'); }
-                else { btn.disabled = true; idle.classList.remove('hidden'); }
+                if (status === 'loading') { btn.disabled = true; load?.classList.remove('hidden'); }
+                else if (status === 'success') { btn.disabled = false; success?.classList.remove('hidden'); }
+                else { btn.disabled = true; idle?.classList.remove('hidden'); }
             }
-
-            window.addEventListener('FilePond:processfile', (e) => { if (!e.detail.error) setUIStatus('success'); });
-            Livewire.on('file-uploaded-callback', () => setUIStatus('success'));
 
             async function startScanner() {
                 if (@json($foundProduct)) return;
                 if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} html5QrCode = null; }
-                document.getElementById('reader').innerHTML = '';
                 if (backCameras.length === 0) await loadCameras();
                 
                 html5QrCode = new Html5Qrcode("reader");
-                const config = { fps: 15, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 };
-
-                html5QrCode.start(currentCameraId, config, (decodedText) => {
-                    html5QrCode.stop().then(() => { 
-                        html5QrCode = null; 
-                        @this.handleBarcodeScan(decodedText); 
-                    });
+                html5QrCode.start(currentCameraId, { fps: 15, qrbox: { width: 250, height: 150 } }, (decodedText) => {
+                    html5QrCode.stop().then(() => { @this.handleBarcodeScan(decodedText); });
                 }).catch(() => {});
             }
 
             document.getElementById('btn-switch')?.addEventListener('click', async () => {
-                if (backCameras.length < 2) return;
                 let index = backCameras.findIndex(c => c.id === currentCameraId);
                 currentCameraId = backCameras[(index + 1) % backCameras.length].id;
                 await startScanner();
