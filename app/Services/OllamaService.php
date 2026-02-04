@@ -23,104 +23,135 @@ class OllamaService
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://100.89.133.69:11434'), '/');
-        // Qwen 30B é ótimo para listar sequências numéricas
+        // Qwen 30B é excelente para seguir listas de texto
         $this->visionModel = env('OLLAMA_VISION_MODEL', 'qwen3-vl:30b'); 
         $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma2:latest');
     }
 
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // PROMPT DE VETORES: Pede todos os números, sem pedir para escolher coluna
+        // PROMPT TEXTO PURO: Mais robusto que JSON.
+        // A IA apenas lista os valores linha por linha.
         $prompt = <<<EOT
-Analise a imagem da Tabela Nutricional.
+Analise a Tabela Nutricional. NÃO USE JSON. NÃO USE MARKDOWN.
+Responda APENAS com as linhas abaixo, preenchendo os dados encontrados.
 
-TAREFA 1: CABEÇALHO DA PORÇÃO
-Extraia o texto exato da linha "Porções por embalagem" e da linha "Porção".
+CABEÇALHO:
+H_PORCOES: <Copie o texto da linha 'Porções por embalagem'>
+H_MEDIDA: <Copie o texto da linha 'Porção' com peso e medida>
 
-TAREFA 2: LINHAS NUTRICIONAIS (VETORES)
-Para cada nutriente listado abaixo, extraia TODOS os números encontrados na mesma linha, lendo da ESQUERDA para a DIREITA.
-Retorne os números em um array (lista). Exemplo: Se a linha for "Carboidratos 30g 10g 4%", retorne ["30", "10", "4"].
+NUTRIENTES (Escreva TODOS os números encontrados na linha, da esquerda para a direita):
+N_CALORIAS: <numeros>
+N_CARBO: <numeros>
+N_ACUCAR_TOTAL: <numeros>
+N_ACUCAR_ADD: <numeros>
+N_PROTEINA: <numeros>
+N_GORDURA_TOTAL: <numeros>
+N_GORDURA_SAT: <numeros>
+N_GORDURA_TRANS: <numeros>
+N_FIBRA: <numeros>
+N_SODIO: <numeros>
+N_COLESTEROL: <numeros>
+N_CALCIO: <numeros>
+N_FERRO: <numeros>
+N_POTASSIO: <numeros>
+N_VIT_A: <numeros>
+N_VIT_C: <numeros>
+N_VIT_D: <numeros>
 
-NUTRIENTES ALVO:
-- Calorias (Valor Energético)
-- Carboidratos
-- Açúcares Totais
-- Açúcares Adicionados
-- Proteínas
-- Gorduras Totais
-- Gorduras Saturadas
-- Gorduras Trans
-- Fibra Alimentar
-- Sódio
-- Colesterol
-- Cálcio, Ferro, Potássio, Vitamina A, C, D (se houver)
-
-JSON ALVO:
-{
-  "header_servings_per_container": "string (texto completo)",
-  "header_serving_info": "string (texto completo ex: 25g 2 1/2 xícaras)",
-  
-  "rows": {
-    "calories": ["num1", "num2"...],
-    "total_carb": ["num1", "num2"...],
-    "total_sugars": [],
-    "added_sugars": [],
-    "sugar_alcohol": [],
-    "protein": [],
-    "total_fat": [],
-    "sat_fat": [],
-    "trans_fat": [],
-    "fiber": [],
-    "sodium": [],
-    "cholesterol": [],
-    "vitamin_d": [],
-    "calcium": [],
-    "iron": [],
-    "potassium": [],
-    "vitamin_a": [],
-    "vitamin_c": []
-  }
-}
+Exemplo de resposta válida:
+H_PORCOES: Cerca de 6
+H_MEDIDA: 30g (2 biscoitos)
+N_CALORIAS: 140 450 7
+N_CARBO: 20 60 4
 EOT;
 
         $response = $this->queryVision($this->visionModel, $prompt, $base64Image, $timeoutSeconds);
 
         if (!$response) return null;
 
-        $jsonData = $this->robustJsonDecode($response);
-        
-        if (!$this->isValidNutritionalData($jsonData)) {
-            Log::warning("Ollama: Retorno inválido ou vazio.");
-            return null;
-        }
+        // Log para Debug: Veja exatamente o que a IA retornou
+        Log::info("Raw Ollama Response:\n" . substr($response, 0, 500));
 
-        return $this->processStrategyRow($jsonData);
+        return $this->parseTextResponse($response);
     }
 
     /**
-     * Lógica de Seleção Inteligente via PHP
+     * Parser Manual de Texto (Infalível contra erros de sintaxe JSON)
      */
-    private function processStrategyRow(array $data): array
+    private function parseTextResponse(string $text): array
     {
-        // 1. Processar Cabeçalho (Porções e Medidas)
-        $servingsRaw = $data['header_servings_per_container'] ?? '';
+        $lines = explode("\n", $text);
+        $data = [];
+
+        // Mapeamento Chave IA -> Chave Banco
+        $keyMap = [
+            'N_CALORIAS' => 'calories',
+            'N_CARBO' => 'total_carb',
+            'N_ACUCAR_TOTAL' => 'total_sugars',
+            'N_ACUCAR_ADD' => 'added_sugars',
+            'N_PROTEINA' => 'protein',
+            'N_GORDURA_TOTAL' => 'total_fat',
+            'N_GORDURA_SAT' => 'sat_fat',
+            'N_GORDURA_TRANS' => 'trans_fat',
+            'N_FIBRA' => 'fiber',
+            'N_SODIO' => 'sodium',
+            'N_COLESTEROL' => 'cholesterol',
+            'N_CALCIO' => 'calcium',
+            'N_FERRO' => 'iron',
+            'N_POTASSIO' => 'potassium',
+            'N_VIT_A' => 'vitamin_a',
+            'N_VIT_C' => 'vitamin_c',
+            'N_VIT_D' => 'vitamin_d',
+        ];
+
+        // 1. Extração Inicial
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (str_starts_with($line, 'H_PORCOES:')) {
+                $data['header_servings'] = trim(substr($line, 10));
+            } elseif (str_starts_with($line, 'H_MEDIDA:')) {
+                $data['header_measure'] = trim(substr($line, 9));
+            } else {
+                foreach ($keyMap as $prefix => $dbKey) {
+                    if (str_starts_with($line, $prefix . ':')) {
+                        // Extrai todos os números da linha (ex: "140 450 7")
+                        $rawNums = substr($line, strlen($prefix) + 1);
+                        // Regex para pegar números inteiros ou decimais (com ponto ou vírgula)
+                        preg_match_all('/[0-9]+([.,][0-9]+)?/', $rawNums, $matches);
+                        
+                        $nums = array_map(function($n) {
+                            return (float) str_replace(',', '.', $n);
+                        }, $matches[0] ?? []);
+                        
+                        $data['rows'][$dbKey] = $nums;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. Processamento Inteligente (Header + Colunas)
+        return $this->processExtractedData($data);
+    }
+
+    private function processExtractedData(array $raw): array
+    {
+        // A. Processa Cabeçalho
+        $servingsRaw = $raw['header_servings'] ?? '';
         preg_match('/[0-9]+([.,][0-9]+)?/', $servingsRaw, $matches);
         $servingsPerContainer = str_replace(',', '.', $matches[0] ?? '1');
 
-        $servingInfoRaw = $data['header_serving_info'] ?? '';
-        // Separa "25g" de "2 1/2 xícaras"
-        preg_match('/(\d+\s*[g|ml|kg|l]+)/i', $servingInfoRaw, $weightMatch);
-        $servingWeight = $weightMatch[0] ?? trim($servingInfoRaw); // Fallback
+        $measureRaw = $raw['header_measure'] ?? '';
+        // Separa "30g" de "(2 biscoitos)"
+        preg_match('/(\d+\s*[g|ml|kg|l]+)/i', $measureRaw, $weightMatch);
+        $servingWeight = $weightMatch[0] ?? '0';
         
-        // Remove o peso para sobrar só a medida caseira
-        $measureText = trim(str_replace($servingWeight, '', $servingInfoRaw));
-        // Limpa parênteses
-        $measureText = trim($measureText, "() ");
-        
+        // Texto da medida caseira
+        $measureText = trim(str_replace($servingWeight, '', $measureRaw));
+        $measureText = trim($measureText, "() -");
         $measureData = $this->parseHouseholdMeasure($measureText);
 
-        // 2. Processar Linhas (A Mágica da Escolha de Coluna)
-        $rows = $data['rows'] ?? [];
         $finalData = [
             'servings_per_container' => $servingsPerContainer,
             'serving_weight' => $servingWeight,
@@ -128,41 +159,31 @@ EOT;
             'serving_size_unit' => $measureData['unit'],
         ];
 
-        foreach ($rows as $key => $values) {
-            // Limpa os valores para garantir que são números
-            $numbers = array_map(function($val) {
-                return (float) str_replace(',', '.', preg_replace('/[^0-9,\.-]/', '', (string)$val));
-            }, $values);
-
-            // Remove zeros vazios ou valores inválidos
-            $numbers = array_values(array_filter($numbers, fn($n) => is_numeric($n)));
-
+        // B. Processa Linhas (Lógica de 3 colunas vs 2 colunas)
+        $rows = $raw['rows'] ?? [];
+        foreach ($rows as $dbKey => $numbers) {
             $count = count($numbers);
-            
-            // LÓGICA DE DECISÃO DE COLUNA
+            $val = 0;
+            $dv = 0;
+
             if ($count >= 3) {
-                // Cenário: [100g, Porção, %VD] -> Ignora o primeiro (index 0)
-                $val = $numbers[1]; // Porção
-                $dv  = $numbers[2]; // %VD
+                // [100g, Porção, %VD] -> Pega Porção (1) e %VD (2)
+                $val = $numbers[1];
+                $dv = $numbers[2];
             } elseif ($count == 2) {
-                // Cenário: [Porção, %VD] -> Pega o primeiro
-                $val = $numbers[0]; // Porção
-                $dv  = $numbers[1]; // %VD
-            } elseif ($count == 1) {
-                // Cenário: Só tem o valor, sem %VD
+                // [Porção, %VD] -> Pega Porção (0) e %VD (1)
                 $val = $numbers[0];
-                $dv  = 0;
-            } else {
-                $val = 0;
-                $dv  = 0;
+                $dv = $numbers[1];
+            } elseif ($count == 1) {
+                // [Porção] -> Pega Porção (0)
+                $val = $numbers[0];
             }
 
-            // Mapeia para o schema do banco
-            $finalData[$key] = (string)$val;
+            $finalData[$dbKey] = (string)$val;
             
-            // Se tiver campo de DV no banco, salva
-            if (in_array($key, ['total_carb', 'added_sugars', 'protein', 'total_fat', 'sat_fat', 'trans_fat', 'fiber', 'sodium', 'cholesterol'])) {
-                $finalData[$key . '_dv'] = (string)$dv;
+            // Campos que têm coluna _dv no banco
+            if (in_array($dbKey, ['total_carb', 'added_sugars', 'protein', 'total_fat', 'sat_fat', 'trans_fat', 'fiber', 'sodium', 'cholesterol'])) {
+                $finalData[$dbKey . '_dv'] = (string)$dv;
             }
         }
 
@@ -189,34 +210,32 @@ EOT;
         return ['qty' => $qty, 'unit' => $translatedUnit];
     }
 
-    // --- Métodos de Suporte ---
-
     private function queryVision(string $model, string $prompt, string $image, int $timeout): ?string
     {
         try {
             $response = Http::timeout($timeout)->connectTimeout(5)->post("{$this->host}/api/chat", [
                 'model' => $model,
                 'messages' => [['role' => 'user', 'content' => $prompt, 'images' => [$image]]],
-                'stream' => false, 'format' => 'json',
+                'stream' => false, 
+                // Removemos 'format' => 'json' para permitir texto livre
                 'options' => ['temperature' => 0.0, 'num_ctx' => 4096]
             ]);
             return $response->successful() ? $response->json('message.content') : null;
-        } catch (\Exception $e) { Log::error($e->getMessage()); return null; }
-    }
-
-    private function robustJsonDecode(string $input): ?array
-    {
-        $clean = preg_replace('/```(?:json)?/i', '', $input);
-        $clean = str_replace(['```', '`'], '', $clean);
-        if (preg_match('/\{[\s\S]*\}/', $clean, $matches)) $clean = $matches[0];
-        $clean = preg_replace('/,\s*}/', '}', $clean);
-        return json_decode($clean, true);
-    }
-
-    private function isValidNutritionalData(?array $data): bool
-    {
-        return isset($data['rows']) || isset($data['header_serving_info']);
+        } catch (\Exception $e) { Log::error("Ollama Exception: " . $e->getMessage()); return null; }
     }
     
-    public function completion(string $prompt, int $timeoutSeconds = 60): ?string { return null; }
+    // Método completion restaurado para tradução
+    public function completion(string $prompt, int $timeoutSeconds = 60): ?string 
+    {
+        try {
+            $payload = [
+                'model' => $this->textModel,
+                'stream' => false,
+                'messages' => [['role' => 'user', 'content' => $prompt]],
+                'options' => ['temperature' => 0.0]
+            ];
+            $response = Http::timeout($timeoutSeconds)->post("{$this->host}/api/chat", $payload);
+            return $response->successful() ? $response->json('message.content') : null;
+        } catch (\Exception $e) { return null; }
+    }
 }
