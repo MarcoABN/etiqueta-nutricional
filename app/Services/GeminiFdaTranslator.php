@@ -7,52 +7,65 @@ use Illuminate\Support\Facades\Log;
 
 class GeminiFdaTranslator
 {
+    protected $ollama; // Serviço Local
     protected $googleKey;
     protected $perplexityKey;
 
-    // MELHOR OPÇÃO GOOGLE: Versão "Lite" (geralmente tem cota maior que a Pro/Flash padrão)
     protected $googleUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-001:generateContent';
-
-    // PERPLEXITY (Fallback rápido e confiável)
     protected $perplexityUrl = 'https://api.perplexity.ai/chat/completions';
 
-    public function __construct()
+    // Injeção de dependência do OllamaService
+    public function __construct(OllamaService $ollama)
     {
+        $this->ollama = $ollama;
         $this->googleKey = env('GEMINI_API_KEY');
         $this->perplexityKey = env('PERPLEXITY_API_KEY');
     }
 
     public function translate(string $productName): ?string
     {
-        // 1. Tenta Google (Grátis)
-        // Se a chave existir, tentamos economizar usando o Google primeiro
-        if (!empty($this->googleKey)) {
-            $result = $this->tryGoogle($productName);
-            if ($result)
-                return $result;
+        // 1. TENTATIVA LOCAL (Prioridade Máxima - Custo Zero)
+        // Se o serviço estiver online via Tailscale, usa ele.
+        $localResult = $this->tryLocal($productName);
+        if ($localResult) {
+            return $localResult;
         }
 
-        // 2. Fallback: Perplexity
-        // Se Google falhar (cota ou erro), ou se não tiver chave Google, usa Perplexity
-        if (!empty($this->perplexityKey)) {
-            // Só loga se realmente tiver tentado o Google antes e falhado
-            if (!empty($this->googleKey)) {
-                Log::info("Google falhou/esgotou. Usando Perplexity para: $productName");
+        // 2. Tenta Google (Grátis, mas com limite de cota)
+        if (!empty($this->googleKey)) {
+            // Log apenas para monitorar se o local está falhando muito
+            Log::info("Fallback para Google: $productName"); 
+            $result = $this->tryGoogle($productName);
+            if ($result) {
+                return $result;
             }
+        }
+
+        // 3. Fallback Final: Perplexity (Pago/Cota)
+        if (!empty($this->perplexityKey)) {
+            Log::info("Fallback para Perplexity: $productName");
             return $this->tryPerplexity($productName);
         }
 
         return null;
     }
 
+    // --- Lógica Local (Ollama) ---
+    protected function tryLocal($productName)
+    {
+        $prompt = $this->getSystemPrompt($productName, 'local');
+        
+        // Chama o novo método completion do OllamaService
+        $text = $this->ollama->completion($prompt);
+        
+        return $this->cleanText($text);
+    }
+
     // --- Lógica do Google ---
     protected function tryGoogle($productName)
     {
         try {
-            // Delay obrigatório para o Free Tier não bloquear por RPM (Requests Per Minute)
-            // 4 segundos = 15 requisições por minuto (limite seguro)
-            usleep(4000000);
-
+            usleep(2000000); // 2s delay para evitar rate limit
             $prompt = $this->getSystemPrompt($productName, 'google');
 
             $response = Http::withOptions(['verify' => false])
@@ -67,9 +80,7 @@ class GeminiFdaTranslator
                 $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
                 return $this->cleanText($text);
             }
-
-            return null; // Qualquer erro (429, 500) retorna null para ativar o fallback
-
+            return null;
         } catch (\Exception $e) {
             return null;
         }
@@ -83,7 +94,7 @@ class GeminiFdaTranslator
                 ->withToken($this->perplexityKey)
                 ->withHeaders(['Content-Type' => 'application/json', 'Accept' => 'application/json'])
                 ->post($this->perplexityUrl, [
-                    'model' => 'sonar', // Modelo rápido (Llama 3.1 based)
+                    'model' => 'sonar',
                     'messages' => [
                         ['role' => 'system', 'content' => $this->getSystemPrompt(null, 'perplexity')],
                         ['role' => 'user', 'content' => "Produto: \"{$productName}\""]
@@ -98,18 +109,16 @@ class GeminiFdaTranslator
                 return $this->cleanText($text);
             }
             return null;
-
         } catch (\Exception $e) {
-            Log::error("Erro Perplexity: " . $e->getMessage());
             return null;
         }
     }
 
     private function cleanText($text)
     {
-        if (!$text)
-            return null;
-        return trim(str_replace(['Saída:', 'Output:', '"', '.', 'Product:'], '', $text));
+        if (!$text) return null;
+        // Limpeza agressiva para garantir que só venha o nome
+        return trim(str_replace(['Saída:', 'Output:', '"', 'Product:', 'Translation:'], '', $text));
     }
 
     private function getSystemPrompt($productName, $type)
@@ -121,13 +130,18 @@ REGRAS:
 2. TRADUZA a descrição (Ex: "Wafer").
 3. NÃO USE BOLD (**), MARKDOWN, OR QUOTES.
 4. MANTENHA o peso no final.
-EXEMPLOS:
-- "Biscoito Trakinas Morango 140g" -> "Trakinas Strawberry Sandwich Cookies 140g"
+5. Retorne APENAS o texto traduzido final. Sem introduções.
+EXEMPLO: "Biscoito Trakinas Morango 140g" -> "Trakinas Strawberry Sandwich Cookies 140g"
 EOT;
 
-        if ($type === 'google') {
-            return $base . "\n\nAGORA TRADUZA APENAS O NOME FINAL:\nEntrada: \"{$productName}\"\nSaída:";
+        if ($type === 'local') {
+             return $base . "\n\nProduto para traduzir: \"{$productName}\"";
         }
-        return $base . "\nRetorne APENAS o nome final traduzido.";
+        
+        if ($type === 'google') {
+            return $base . "\n\nEntrada: \"{$productName}\"\nSaída:";
+        }
+        
+        return $base;
     }
 }
