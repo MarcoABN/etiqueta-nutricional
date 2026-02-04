@@ -10,6 +10,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -33,21 +34,19 @@ class NutritionalScanner extends Page implements HasForms
     {
         return $form
             ->schema([
-                // Este componente fica invisível e serve apenas para validar/salvar o caminho no banco
+                // Componente "fantasma" apenas para estrutura de dados.
+                // A interface real é controlada via AlpineJS e processCroppedImage
                 FileUpload::make('image_nutritional')
                     ->hiddenLabel()
                     ->image()
                     ->directory('uploads/nutritional')
                     ->disk('public')
-                    ->extraAttributes(['class' => '!hidden']) // Garante ocultação visual
+                    ->extraAttributes(['class' => '!hidden']) 
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
     }
 
-    /**
-     * Processa a imagem recortada vinda do JavaScript (Base64)
-     */
     public function processCroppedImage(string $base64Data)
     {
         try {
@@ -56,21 +55,20 @@ class NutritionalScanner extends Page implements HasForms
                 $image = base64_decode($image);
 
                 if ($image === false) {
-                    throw new \Exception('Falha ao decodificar imagem');
+                    throw new \Exception('Falha na decodificação da imagem.');
                 }
 
-                $filename = 'crop_' . time() . '_' . uniqid() . '.jpg';
+                $filename = 'crop_' . time() . '_' . Str::random(10) . '.jpg';
                 $path = 'uploads/nutritional/' . $filename;
 
                 Storage::disk('public')->put($path, $image);
 
-                // Vincula o caminho do arquivo ao estado do formulário
                 $this->data['image_nutritional'] = $path;
                 
                 return true;
             }
         } catch (\Exception $e) {
-            Notification::make()->title('Erro ao processar imagem: ' . $e->getMessage())->danger()->send();
+            Notification::make()->title('Erro ao salvar imagem')->body($e->getMessage())->danger()->send();
         }
         return false;
     }
@@ -82,20 +80,17 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            // Limpa imagem anterior se houver
-            $this->data['image_nutritional'] = null;
+            $this->data['image_nutritional'] = null; // Reseta imagem anterior
         } else {
-            // Produto não encontrado
             $this->foundProduct = null;
             Notification::make()
-                ->title('EAN não cadastrado')
-                ->body("O código $code não foi encontrado.")
-                ->danger()
-                ->duration(3000)
+                ->title('EAN não encontrado')
+                ->body("Código: $code")
+                ->warning()
+                ->seconds(3)
                 ->send();
             
-            // Dispara evento para o frontend reiniciar a câmera
-            $this->dispatch('reset-scanner');
+            $this->dispatch('reset-scanner-ui');
         }
     }
 
@@ -106,10 +101,10 @@ class NutritionalScanner extends Page implements HasForms
                 'image_nutritional' => $this->data['image_nutritional']
             ]);
 
-            Notification::make()->title('Salvo com sucesso!')->success()->send();
+            Notification::make()->title('Produto atualizado!')->success()->send();
             $this->resetScanner();
         } else {
-            Notification::make()->title('Erro: Imagem não capturada')->warning()->send();
+            Notification::make()->title('Tire uma foto antes de salvar.')->warning()->send();
         }
     }
 
@@ -119,6 +114,6 @@ class NutritionalScanner extends Page implements HasForms
         $this->foundProduct = null;
         $this->data = [];
         $this->form->fill();
-        $this->dispatch('reset-scanner'); 
+        $this->dispatch('reset-scanner-ui'); 
     }
 }

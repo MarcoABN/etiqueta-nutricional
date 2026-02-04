@@ -4,59 +4,68 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
-        /* Layout Fullscreen e Reset de Estilos do Filament */
+        /* CSS Reset para Fullscreen */
         .fi-topbar, .fi-header, .fi-breadcrumbs, .fi-sidebar, .fi-footer { display: none !important; }
         .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         .fi-page { height: 100dvh; overflow: hidden; background: #000; color: white; }
-        .app-container { height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; display: flex; flex-direction: column; z-index: 10; }
         
-        /* Scanner Area */
-        #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; overflow: hidden; }
-        #reader { width: 100%; height: 100%; background: #000; }
+        .app-container { height: 100dvh; width: 100%; position: fixed; top: 0; left: 0; display: flex; flex-direction: column; z-index: 10; background: #000; }
+        
+        /* Scanner Visuals */
+        #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; }
+        #reader { width: 100%; height: 100%; }
+        /* Força o video a preencher a tela */
         #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
         
-        /* UI Elements */
+        .scan-frame { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            width: 80%; max-width: 300px; height: 200px; 
+            pointer-events: none; z-index: 30; 
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.7); 
+            border-radius: 16px; border: 2px solid rgba(255,255,255,0.6); 
+        }
+        .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; animation: scanning 2s infinite linear; }
+        @keyframes scanning { 0% {top: 5%;} 50% {top: 95%;} 100% {top: 5%;} }
+
         .btn-switch-camera {
-            position: absolute; top: 25px; right: 25px; z-index: 60;
-            width: 50px; height: 50px; border-radius: 50%;
-            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px);
-            display: flex; align-items: center; justify-content: center;
-            border: 1px solid rgba(255, 255, 255, 0.2); color: white;
+            position: absolute; top: 30px; right: 30px; z-index: 60;
+            width: 48px; height: 48px; border-radius: 50%;
+            background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3);
+            display: flex; align-items: center; justify-content: center; color: white;
             cursor: pointer;
         }
 
-        .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; height: 180px; pointer-events: none; z-index: 30; box-shadow: 0 0 0 9999px rgba(0,0,0,0.7); border-radius: 20px; border: 2px solid rgba(255,255,255,0.5); }
-        .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; box-shadow: 0 0 15px #22c55e; animation: scanning 2s infinite ease-in-out; }
-        @keyframes scanning { 0% {top: 10%;} 50% {top: 90%;} 100% {top: 10%;} }
-
-        /* Photo View */
+        /* Product Found / Photo View */
         #photo-view { position: absolute; inset: 0; z-index: 40; background: #111; display: flex; flex-direction: column; }
-        .product-info { background: #1f2937; padding: 25px 20px; border-bottom: 1px solid #374151; }
-        .btn-capture { background: #22c55e; color: #000; padding: 20px; border-radius: 16px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 12px; width: 85%; margin: 0 auto; }
+        .info-header { padding: 30px 20px; background: #1f2937; border-bottom: 1px solid #374151; }
         
-        /* Footer */
-        .footer-actions { padding: 20px; background: #000; display: flex; gap: 12px; border-top: 1px solid #333; }
-        .btn-save { background: #22c55e; flex: 2; height: 55px; border-radius: 12px; color: #000; font-weight: bold; font-size: 16px; }
-        .btn-save:disabled { background: #1a5e32; opacity: 0.5; color: #555; cursor: not-allowed; }
-        .btn-cancel { background: #374151; flex: 1; height: 55px; border-radius: 12px; color: #fff; font-weight: 600; }
+        .capture-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+        .btn-capture { 
+            background: #22c55e; color: #000; padding: 20px 30px; 
+            border-radius: 50px; font-weight: 800; font-size: 16px;
+            display: flex; align-items: center; gap: 10px; 
+            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+        }
 
-        /* Crop Overlay */
+        .footer-actions { padding: 20px; background: #000; display: flex; gap: 15px; border-top: 1px solid #333; }
+        .btn-base { flex: 1; height: 56px; border-radius: 12px; font-weight: bold; font-size: 16px; }
+        .btn-cancel { background: #374151; color: white; }
+        .btn-save { background: #22c55e; color: black; flex: 2; }
+        .btn-save:disabled { background: #1f4e30; color: #666; opacity: 0.7; }
+
+        /* Crop UI */
         #crop-overlay { position: fixed; inset: 0; background: #000; z-index: 100; display: none; flex-direction: column; }
-        .crop-area { flex: 1; position: relative; width: 100%; background: #000; }
+        .crop-stage { flex: 1; position: relative; overflow: hidden; background: #000; }
         #image-to-crop { display: block; max-width: 100%; }
-        
-        /* Input invisível manual */
-        #manual-camera-input { display: none; }
+
+        /* Inputs invisíveis */
+        #manual-input { display: none; }
     </style>
 
-    <div class="app-container" x-data="scannerApp()" x-init="initApp()">
-        <input type="file" id="manual-camera-input" accept="image/*" capture="environment">
+    <div class="app-container" x-data="scannerApp()" x-init="init()">
+        <input type="file" id="manual-input" accept="image/*" capture="environment">
 
-        <div class="hidden" wire:ignore>
-            {{ $this->form }}
-        </div>
-
-        <div x-show="!$wire.foundProduct" class="btn-switch-camera" @click="switchCamera()">
+        <div x-show="!$wire.foundProduct" class="btn-switch-camera" @click="cycleCamera()">
             <x-heroicon-o-arrow-path class="w-6 h-6" />
         </div>
 
@@ -67,41 +76,39 @@
 
         <template x-if="$wire.foundProduct">
             <div id="photo-view">
-                <div class="product-info">
-                    <div class="flex items-center justify-between mb-1">
-                        <span class="text-green-500 text-xs font-bold tracking-widest uppercase">EAN: <span x-text="$wire.scannedCode"></span></span>
-                    </div>
-                    <h2 class="text-xl font-bold leading-tight text-white" x-text="$wire.foundProduct?.product_name"></h2>
+                <div class="info-header">
+                    <div class="text-green-500 text-xs font-bold uppercase tracking-widest mb-1">EAN: <span x-text="$wire.scannedCode"></span></div>
+                    <h1 class="text-xl font-bold text-white leading-tight" x-text="$wire.foundProduct?.product_name"></h1>
                 </div>
 
-                <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                    <div class="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-8 border border-white/10">
+                <div class="capture-area">
+                    <div class="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
                         <x-heroicon-o-camera x-show="status === 'idle'" class="w-10 h-10 text-gray-400" />
                         <svg x-show="status === 'loading'" class="animate-spin h-10 w-10 text-green-500" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                         <x-heroicon-s-check-circle x-show="status === 'success'" class="w-12 h-12 text-green-500" />
                     </div>
 
-                    <button type="button" @click="triggerCameraInput()" class="btn-capture shadow-lg active:scale-95 transition-transform">
+                    <button @click="triggerInput()" class="btn-capture active:scale-95 transition-transform">
                         <x-heroicon-s-camera class="w-6 h-6" />
-                        TIRAR FOTO DA TABELA
+                        <span>FOTO DA TABELA</span>
                     </button>
-                    <p class="text-gray-500 mt-4 text-xs max-w-[200px]">Use boa iluminação e foque apenas na tabela nutricional.</p>
+                    <p class="text-gray-500 text-xs">Foque bem nos números</p>
                 </div>
 
                 <div class="footer-actions">
-                    <button type="button" @click="resetFlow()" class="btn-cancel">VOLTAR</button>
-                    <button type="button" @click="saveData()" :disabled="status !== 'success'" class="btn-save">SALVAR</button>
+                    <button @click="reset()" class="btn-base btn-cancel">VOLTAR</button>
+                    <button @click="save()" :disabled="status !== 'success'" class="btn-base btn-save">SALVAR</button>
                 </div>
             </div>
         </template>
 
         <div id="crop-overlay">
-            <div class="crop-area">
+            <div class="crop-stage">
                 <img id="image-to-crop" src="">
             </div>
             <div class="footer-actions" style="z-index: 101;">
-                <button type="button" @click="cancelCrop()" class="btn-cancel">CANCELAR</button>
-                <button type="button" @click="confirmCrop()" class="btn-save">RECORTAR</button>
+                <button @click="cancelCrop()" class="btn-base btn-cancel">CANCELAR</button>
+                <button @click="confirmCrop()" class="btn-base btn-save">RECORTAR</button>
             </div>
         </div>
     </div>
@@ -112,152 +119,130 @@
                 status: 'idle',
                 html5QrCode: null,
                 cropper: null,
-                cameraId: null,
-                cameras: [],
-                isScannerRunning: false,
+                selectedCameraId: null, // Armazena ID específico se o usuário trocar
+                allCameras: [],
 
-                initApp() {
-                    // Inicializa o scanner na primeira carga
-                    this.$nextTick(() => {
+                init() {
+                    // Inicia scanner na montagem
+                    this.$nextTick(() => this.startScanner());
+
+                    // Listener para reset vindo do PHP
+                    Livewire.on('reset-scanner-ui', () => {
+                        this.status = 'idle';
                         this.startScanner();
                     });
 
-                    // Escuta o evento de reset vindo do Livewire (PHP)
-                    Livewire.on('reset-scanner', () => {
-                        this.status = 'idle';
-                        this.restartScanner();
-                    });
-
-                    // Configura o input manual de arquivo
-                    const manualInput = document.getElementById('manual-camera-input');
-                    manualInput.addEventListener('change', (e) => {
+                    // Configura o input de arquivo manual
+                    const input = document.getElementById('manual-input');
+                    input.addEventListener('change', (e) => {
                         if (e.target.files && e.target.files[0]) {
                             const reader = new FileReader();
-                            reader.onload = (event) => {
-                                this.openCropUI(event.target.result);
-                                // Limpa o input para permitir selecionar a mesma foto se necessário
-                                manualInput.value = ''; 
-                            };
+                            reader.onload = (evt) => this.openCrop(evt.target.result);
                             reader.readAsDataURL(e.target.files[0]);
+                            input.value = ''; // Reseta para permitir selecionar o mesmo arquivo
                         }
                     });
-                },
-
-                async getCameras() {
-                    try {
-                        const devices = await Html5Qrcode.getCameras();
-                        // Filtra câmeras traseiras
-                        this.cameras = devices.filter(d => 
-                            d.label.toLowerCase().includes('back') || 
-                            d.label.toLowerCase().includes('traseira') || 
-                            d.label.toLowerCase().includes('environment')
-                        );
-                        // Fallback se não achar traseira específica
-                        if (this.cameras.length === 0) this.cameras = devices;
-                        
-                        // Define a primeira câmera se não houver uma selecionada
-                        if (!this.cameraId && this.cameras.length > 0) {
-                            this.cameraId = this.cameras[0].id;
-                        }
-                    } catch (err) {
-                        console.error("Erro ao listar câmeras", err);
-                    }
                 },
 
                 async startScanner() {
-                    // Se já estiver rodando, não faz nada
-                    if (this.isScannerRunning) return;
-                    
-                    // Se o produto já foi encontrado, não inicia o scanner
                     if (this.$wire.foundProduct) return;
-
-                    await this.getCameras();
-
-                    // Cria instância se não existir
-                    if (!this.html5QrCode) {
-                        this.html5QrCode = new Html5Qrcode("reader");
+                    
+                    // Limpa instância anterior
+                    if (this.html5QrCode) {
+                        try { await this.html5QrCode.stop(); } catch(e) {}
+                        this.html5QrCode = null;
                     }
 
-                    const config = {
-                        fps: 10,
-                        qrbox: { width: 250, height: 150 },
-                        aspectRatio: 1.0,
-                        videoConstraints: {
-                            focusMode: 'continuous', // Tenta focar automaticamente
-                        }
+                    this.html5QrCode = new Html5Qrcode("reader");
+
+                    const config = { 
+                        fps: 20, // Mais quadros por segundo ajuda na leitura rápida
+                        qrbox: { width: 250, height: 150 }, // Área de leitura
+                        aspectRatio: 1.0 
                     };
 
                     try {
-                        // Se temos um ID específico, usa ele. Se não, usa 'environment'
-                        const cameraConfig = this.cameraId ? { deviceId: { exact: this.cameraId } } : { facingMode: "environment" };
+                        // ESTRATÉGIA DE INICIALIZAÇÃO:
+                        // 1. Se temos um ID selecionado manualmente, usa ele.
+                        // 2. Se não, usa o modo "environment" (traseira) padrão.
+                        let cameraConfig = this.selectedCameraId 
+                            ? { deviceId: { exact: this.selectedCameraId } }
+                            : { facingMode: "environment" };
 
                         await this.html5QrCode.start(
-                            cameraConfig,
-                            config,
-                            (decodedText) => {
-                                // Sucesso na leitura
-                                this.stopScanner().then(() => {
-                                    this.$wire.handleBarcodeScan(decodedText);
-                                });
+                            cameraConfig, 
+                            config, 
+                            (text) => {
+                                this.stopAndProcess(text);
                             },
-                            (errorMessage) => {
-                                // Ignora erros de leitura frame a frame
-                            }
+                            (err) => { /* Ignora erros de frame vazio */ }
                         );
-                        this.isScannerRunning = true;
                     } catch (err) {
-                        console.error("Erro ao iniciar câmera: ", err);
-                        this.isScannerRunning = false;
-                    }
-                },
-
-                async stopScanner() {
-                    if (this.html5QrCode && this.isScannerRunning) {
-                        try {
-                            await this.html5QrCode.stop();
-                            this.isScannerRunning = false;
-                            this.html5QrCode.clear();
-                        } catch (e) {
-                            console.warn("Erro ao parar scanner:", e);
+                        console.error("Erro ao iniciar câmera:", err);
+                        // Fallback: Se falhar (ex: environment não suportado), tenta qualquer câmera
+                        if (!this.selectedCameraId) {
+                            this.html5QrCode.start({ facingMode: "user" }, config, (text) => this.stopAndProcess(text))
+                                .catch(e => alert("Não foi possível acessar a câmera. Verifique as permissões."));
                         }
                     }
                 },
 
-                // Função segura para reiniciar (stop + start)
-                async restartScanner() {
-                    await this.stopScanner();
-                    // Pequeno delay para liberar o hardware
-                    setTimeout(() => {
-                        this.html5QrCode = null; // Força nova instância
+                async stopAndProcess(text) {
+                    if(this.html5QrCode) {
+                        await this.html5QrCode.stop();
+                        this.html5QrCode.clear();
+                    }
+                    this.$wire.handleBarcodeScan(text);
+                },
+
+                async cycleCamera() {
+                    // 1. Para o scanner atual
+                    if (this.html5QrCode) {
+                        try { await this.html5QrCode.stop(); } catch(e) {}
+                    }
+
+                    // 2. Lista câmeras se ainda não listou
+                    if (this.allCameras.length === 0) {
+                        try {
+                            this.allCameras = await Html5Qrcode.getCameras();
+                        } catch(e) {
+                            alert("Erro ao listar câmeras.");
+                            return;
+                        }
+                    }
+
+                    if (this.allCameras.length < 2) {
+                        alert("Apenas uma câmera detectada.");
                         this.startScanner();
-                    }, 300);
+                        return;
+                    }
+
+                    // 3. Encontra o índice da câmera atual (ou define 0)
+                    let currentIndex = 0;
+                    if (this.selectedCameraId) {
+                        currentIndex = this.allCameras.findIndex(c => c.id === this.selectedCameraId);
+                    }
+
+                    // 4. Pega a próxima câmera
+                    let nextIndex = (currentIndex + 1) % this.allCameras.length;
+                    this.selectedCameraId = this.allCameras[nextIndex].id;
+
+                    // 5. Reinicia com o novo ID
+                    this.startScanner();
                 },
 
-                async switchCamera() {
-                    if (this.cameras.length < 2) return;
-                    
-                    // Encontra o índice atual e vai para o próximo
-                    const currentIndex = this.cameras.findIndex(c => c.id === this.cameraId);
-                    const nextIndex = (currentIndex + 1) % this.cameras.length;
-                    this.cameraId = this.cameras[nextIndex].id;
-
-                    await this.restartScanner();
+                // Lógica de Foto e Crop
+                triggerInput() {
+                    document.getElementById('manual-input').click();
                 },
 
-                // ================== LÓGICA DE FOTO E CROP ==================
-
-                triggerCameraInput() {
-                    document.getElementById('manual-camera-input').click();
-                },
-
-                openCropUI(imageSrc) {
+                openCrop(imgSrc) {
                     const overlay = document.getElementById('crop-overlay');
                     const img = document.getElementById('image-to-crop');
                     
-                    img.src = imageSrc;
+                    img.src = imgSrc;
                     overlay.style.display = 'flex';
 
-                    // Inicializa Cropper
                     if (this.cropper) this.cropper.destroy();
                     
                     this.cropper = new Cropper(img, {
@@ -268,7 +253,7 @@
                         guides: true,
                         center: true,
                         highlight: false,
-                        background: false,
+                        background: false
                     });
                 },
 
@@ -282,31 +267,22 @@
 
                 async confirmCrop() {
                     if (!this.cropper) return;
-
                     this.status = 'loading';
                     
-                    // Obtém imagem recortada em Base64
-                    const canvas = this.cropper.getCroppedCanvas({
-                        maxWidth: 1280,
-                        maxHeight: 1280,
-                        fillColor: '#fff',
-                    });
+                    const canvas = this.cropper.getCroppedCanvas({ maxWidth: 1280, maxHeight: 1280 });
+                    const base64 = canvas.toDataURL('image/jpeg', 0.85);
 
-                    const base64Image = canvas.toDataURL('image/jpeg', 0.85);
-
-                    // Envia para o backend
-                    await this.$wire.processCroppedImage(base64Image);
-
+                    await this.$wire.processCroppedImage(base64);
+                    
                     this.status = 'success';
-                    this.cancelCrop(); // Fecha o modal
+                    this.cancelCrop();
                 },
 
-                resetFlow() {
-                    this.$wire.resetScanner(); // Chama PHP
-                    // O PHP emitirá 'reset-scanner', que chamará restartScanner() aqui
+                reset() {
+                    this.$wire.resetScanner();
                 },
-                
-                saveData() {
+
+                save() {
                     this.$wire.save();
                 }
             }
