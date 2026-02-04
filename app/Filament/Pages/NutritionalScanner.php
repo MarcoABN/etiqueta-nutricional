@@ -37,10 +37,9 @@ class NutritionalScanner extends Page implements HasForms
                     ->image()
                     ->imageEditor()
                     ->imageEditorMode(2)
-                    // Configuração para Crop Livre
+                    // Ativa o CROP LIVRE
                     ->imageCropAspectRatio(null)
                     ->imageEditorAspectRatios([null])
-                    // Otimização para OCR
                     ->imageResizeTargetWidth('2000')
                     ->directory('uploads/nutritional')
                     ->disk('public')
@@ -58,7 +57,7 @@ class NutritionalScanner extends Page implements HasForms
         $state = $this->form->getState();
 
         if (!$this->foundProduct || empty($state['image_nutritional'])) {
-            Notification::make()->title('Erro no envio. Verifique a foto.')->danger()->send();
+            Notification::make()->title('Erro: Tire a foto primeiro.')->danger()->send();
             return;
         }
 
@@ -68,7 +67,7 @@ class NutritionalScanner extends Page implements HasForms
 
         ProcessProductImage::dispatch($this->foundProduct);
 
-        Notification::make()->title('Enviado com sucesso!')->success()->send();
+        Notification::make()->title('Processando via IA...')->success()->send();
         $this->resetScanner();
     }
 
