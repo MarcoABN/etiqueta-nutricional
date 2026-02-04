@@ -12,6 +12,8 @@ use Filament\Pages\Page;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
+
+//backup de versão - momento estável
 class NutritionalScanner extends Page implements HasForms
 {
     use InteractsWithForms;

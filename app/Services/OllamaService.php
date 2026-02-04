@@ -4,7 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-
+//backup de versão - momento estável
 class OllamaService
 {
     protected string $host;
