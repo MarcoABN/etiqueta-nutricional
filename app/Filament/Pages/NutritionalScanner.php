@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Log;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -39,7 +40,7 @@ class NutritionalScanner extends Page implements HasForms
                     ->hiddenLabel()
                     ->image()
                     ->directory('uploads/nutritional')
-                    ->disk('public') // Garante disco público
+                    ->disk('public')
                     ->extraInputAttributes(['capture' => 'environment', 'accept' => 'image/*'])
                     ->statePath('image_nutritional'),
             ])
@@ -49,11 +50,11 @@ class NutritionalScanner extends Page implements HasForms
     public function handleBarcodeScan($code)
     {
         $this->scannedCode = $code;
-        $product = Product::where('barcode', $code)->first();
+        $product = Product::where('barcode', $code)->first(); // Ajuste 'barcode' se o nome da coluna for 'codprod' ou outro
 
         if ($product) {
             $this->foundProduct = $product;
-            $this->data['image_nutritional'] = null; // Limpa para nova foto
+            $this->data['image_nutritional'] = null;
             $this->form->fill($this->data); 
         } else {
             $this->foundProduct = null;
@@ -66,7 +67,6 @@ class NutritionalScanner extends Page implements HasForms
     {
         $state = $this->form->getState();
         
-        // Extrai o caminho da imagem corretamente
         $imagePath = $state['image_nutritional'] ?? null;
         if (is_array($imagePath)) {
             $imagePath = array_values($imagePath)[0];
@@ -74,14 +74,17 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($this->foundProduct && !empty($imagePath)) {
             
-            // 1. Persiste o caminho no banco primeiro
-            $this->foundProduct->update([
+            // BLINDAGEM CONTRA DUPLICIDADE:
+            // Usamos forceFill + saveQuietly para atualizar o banco SEM disparar 
+            // eventos (Observers) que poderiam lançar jobs duplicados automaticamente.
+            $this->foundProduct->forceFill([
                 'image_nutritional' => $imagePath,
                 'ai_status' => 'pending'
-            ]);
+            ])->saveQuietly();
 
-            // 2. Dispara o Job
-            // Usamos dispatchAfterResponse para garantir que o upload terminou
+            Log::info("NutritionalScanner: Imagem salva, disparando Job MANUALMENTE para {$this->foundProduct->id}");
+
+            // Disparo único e manual
             ProcessProductImage::dispatch($this->foundProduct);
 
             Notification::make()

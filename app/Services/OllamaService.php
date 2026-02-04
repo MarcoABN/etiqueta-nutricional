@@ -20,26 +20,25 @@ class OllamaService
     {
         // Prompt otimizado com a ordem informada pelo usuário
         $prompt = <<<EOT
-Analise esta Tabela Nutricional. Extraia os dados seguindo estritamente a ordem padrão.
+Analise esta Tabela Nutricional. 
+Objetivo: Extrair dados numéricos exatos para banco de dados.
 
-ORDEM DOS DADOS NA IMAGEM (Geralmente):
+ORDEM COMUM NA IMAGEM:
 1. Porção (Ex: 30g) e Medida Caseira (Ex: 1 colher).
 2. Valor Energético / Calorias.
 3. Carboidratos.
-4. Açúcares Totais.
-5. Açúcares Adicionados.
-6. Proteínas.
-7. Gorduras Totais.
-8. Gorduras Saturadas.
-9. Gorduras Trans.
-10. Fibra Alimentar.
-11. Sódio.
+4. Açúcares Totais e Adicionados.
+5. Proteínas.
+6. Gorduras (Totais, Saturadas, Trans).
+7. Fibra.
+8. Sódio.
 
-REGRAS DE EXTRAÇÃO:
-- "serving_weight": Apenas o peso/volume numérico (ex: "30g", "200ml").
-- "serving_size_quantity": A quantidade da medida caseira (ex: "1.5", "1").
-- "serving_size_unit": O nome da medida caseira (ex: "xícara", "fatia", "unidade").
-- Se o valor for "Zero", "0", ou traço "-", retorne 0.
+REGRAS:
+- Separe o PESO da porção (serving_weight) da MEDIDA CASEIRA (serving_size_unit/quantity).
+- "serving_weight": Apenas "30g", "200ml", etc.
+- "serving_size_quantity": A quantidade da medida (ex: "1.5", "1", "2").
+- "serving_size_unit": O nome da medida (ex: "fatia", "xícara", "unidade").
+- Se o valor for "Zero", "0", "0g" ou não existir, retorne 0.
 - Retorne APENAS o JSON abaixo.
 
 {
@@ -67,7 +66,7 @@ EOT;
         $jsonData = $this->robustJsonDecode($response);
         
         if (!$jsonData) {
-            Log::error("Ollama: JSON inválido. Raw: " . substr($response, 0, 100) . "...");
+            Log::error("Ollama: JSON inválido. Raw: " . substr($response, 0, 150));
             return null;
         }
 
@@ -78,16 +77,16 @@ EOT;
     {
         try {
             $response = Http::timeout($timeout)
-                ->connectTimeout(10) // Timeout rápido para saber se o server existe
+                ->connectTimeout(5) // Conexão rápida
                 ->post("{$this->host}/api/chat", [
                     'model' => $model,
                     'messages' => [
                         ['role' => 'user', 'content' => $prompt, 'images' => [$image]]
                     ],
                     'stream' => false,
-                    'format' => 'json', // Força saída JSON estruturada
+                    'format' => 'json', // Força JSON
                     'options' => [
-                        'temperature' => 0.0, // Zero criatividade, apenas leitura pura
+                        'temperature' => 0.0, // Precisão máxima
                         'num_ctx' => 4096,
                     ]
                 ]);
@@ -114,18 +113,14 @@ EOT;
             $clean = $matches[0];
         }
         
-        // Correção comum de vírgulas trailing
         $clean = preg_replace('/,\s*}/', '}', $clean);
-
         return json_decode($clean, true);
     }
 
     private function sanitizeData(array $data): array
     {
-        // Garante que números sejam números e strings sejam limpas
         $cleanNum = function($key) use ($data) {
             if (!isset($data[$key])) return '0';
-            // Remove tudo que não for número, ponto ou vírgula
             $val = preg_replace('/[^0-9,\.-]/', '', (string)$data[$key]);
             $val = str_replace(',', '.', $val);
             return is_numeric($val) ? (string)$val : '0';
