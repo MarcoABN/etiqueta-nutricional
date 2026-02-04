@@ -21,18 +21,20 @@ class NutritionalScanner extends Page implements HasForms
     protected static ?string $title = '';
     protected static string $view = 'filament.pages.nutritional-scanner';
 
+    // Propriedades do Fluxo
     public $scannedCode = null;
     public $foundProduct = null;
-    public $photo; // Arquivo temporário
     
-    // NOVO: Controla o estado da tela pelo servidor (confirm | preview)
-    public $viewMode = 'confirm'; 
+    // O arquivo temporário da foto
+    public $photo; 
 
-    public ?array $data = [];
+    // Controle de Etapas: 'scan' | 'confirm' | 'preview'
+    public $step = 'scan'; 
 
     public function mount(): void
     {
-        $this->form->fill();
+        // Se recarregar a página, garante estado limpo
+        $this->step = 'scan';
     }
 
     public function form(Form $form): Form
@@ -47,71 +49,87 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($product) {
             $this->foundProduct = $product;
-            $this->reset('photo');
-            
-            // Se já tem foto no banco, vai direto pro preview. Se não, pede confirmação.
+            $this->reset('photo'); // Limpa foto anterior da memória
+
+            // Se o produto JÁ TEM foto salva, vai para o preview.
+            // Se não tem, vai para a tela de confirmação/câmera.
             if (!empty($product->image_nutritional)) {
-                $this->viewMode = 'preview';
+                $this->step = 'preview';
             } else {
-                $this->viewMode = 'confirm';
+                $this->step = 'confirm';
             }
 
         } else {
             $this->foundProduct = null;
-            $this->viewMode = 'confirm';
+            $this->step = 'scan';
             
             Notification::make()
                 ->title('Produto não encontrado')
                 ->body("EAN: {$code}")
                 ->danger()
-                ->duration(2500)
+                ->duration(3000)
                 ->send();
             
             $this->dispatch('reset-scanner-error');
         }
     }
 
-    // HOOK AUTOMÁTICO DO LIVEWIRE
-    // Disparado assim que o upload da variável $photo termina
+    // GATILHO IMPORTANTE:
+    // O Livewire chama isso automaticamente assim que o upload termina.
     public function updatedPhoto()
     {
-        // Força a mudança para a tela de preview assim que a foto sobe
-        $this->viewMode = 'preview';
+        // Força a mudança de etapa para 'preview'
+        $this->step = 'preview';
     }
 
     public function save()
     {
+        // 1. Validações de Segurança
         if (!$this->foundProduct) return;
 
-        // Se não tiver foto nova E não tiver foto antiga, avisa
+        // Se não tem foto nova E não tem foto velha, erro.
         if (!$this->photo && empty($this->foundProduct->image_nutritional)) {
-            Notification::make()->title('Nenhuma foto para salvar.')->warning()->send();
+            Notification::make()->title('Erro: Nenhuma imagem detectada.')->warning()->send();
             return;
         }
 
         try {
-            // Só faz upload se tiver uma foto NOVA
+            // 2. Processamento do Upload (apenas se houver foto nova)
             if ($this->photo) {
+                
                 $cod = $this->foundProduct->codprod ?? 'SEM_COD';
-                $cod = preg_replace('/[^A-Za-z0-9\-]/', '', $cod);
+                $cod = preg_replace('/[^A-Za-z0-9\-]/', '', $cod); // Sanitiza nome
+                
                 $filename = "{$cod}_nutri_" . time() . '.' . $this->photo->getClientOriginalExtension();
 
+                // Salva no disco
                 $path = $this->photo->storeAs('uploads/nutritional', $filename, 'public');
 
-                // Apaga antiga
+                // Apaga imagem antiga para não lotar o servidor
                 $oldImage = $this->foundProduct->image_nutritional;
-                if ($oldImage && Storage::disk('public')->exists($oldImage)) {
-                    Storage::disk('public')->delete($oldImage);
+                if ($oldImage && $oldImage !== $path) {
+                     if (Storage::disk('public')->exists($oldImage)) {
+                        Storage::disk('public')->delete($oldImage);
+                    }
                 }
 
-                $this->foundProduct->update(['image_nutritional' => $path]);
+                // Atualiza Banco
+                $this->foundProduct->update([
+                    'image_nutritional' => $path
+                ]);
             }
 
-            Notification::make()->title('Salvo com sucesso!')->success()->duration(1500)->send();
+            Notification::make()->title('Imagem Salva!')->success()->duration(1500)->send();
+            
+            // Reinicia o processo
             $this->resetScanner();
 
         } catch (\Exception $e) {
-            Notification::make()->title('Erro')->body($e->getMessage())->danger()->send();
+            Notification::make()
+                ->title('Erro ao salvar')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
         }
     }
 
@@ -120,7 +138,7 @@ class NutritionalScanner extends Page implements HasForms
         $this->scannedCode = null;
         $this->foundProduct = null;
         $this->photo = null;
-        $this->viewMode = 'confirm'; // Reseta estado
+        $this->step = 'scan'; // Volta para o scanner
         $this->dispatch('reset-scanner'); 
     }
 }
