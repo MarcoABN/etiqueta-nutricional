@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Services\OllamaService;
-use App\Services\GeminiFdaTranslator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,81 +21,77 @@ class ProcessProductImage implements ShouldQueue
 
     public function __construct(public Product $product) {}
 
-    public function handle(OllamaService $ollama, GeminiFdaTranslator $translator): void
+    public function handle(OllamaService $ollama): void
     {
         $this->product->update(['ai_status' => 'processing']);
+        Log::info("Iniciando processamento AI para produto: {$this->product->id}");
 
         try {
             $nutritionalData = [];
             
-            // 1. Extração da Imagem (Visão)
+            // 1. Extração da Imagem
             if ($this->product->image_nutritional) {
                 $path = Storage::disk('public')->path($this->product->image_nutritional);
+                
                 if (file_exists($path)) {
-                    $b64 = $this->optimizeImage($path);
-                    $extractedData = $ollama->extractNutritionalData($b64, 180);
+                    // Prepara a imagem preservando qualidade
+                    $b64 = $this->prepareImageForOllama($path);
+                    
+                    // Chama o serviço
+                    $extractedData = $ollama->extractNutritionalData($b64, 240); // Aumentei timeout interno
+                    
                     if ($extractedData) {
                         $nutritionalData = $extractedData;
                     }
+                } else {
+                    throw new \Exception("Arquivo de imagem não encontrado: $path");
                 }
             }
 
-            // 2. Aplicação de Defaults (Zeros Obrigatórios)
-            $mandatoryFields = [
-                'total_fat', 'total_fat_dv',
-                'sat_fat', 'sat_fat_dv',
-                'trans_fat', 'trans_fat_dv',
-                'cholesterol', 'cholesterol_dv',
-                'sodium', 'sodium_dv',
-                'total_carb', 'total_carb_dv',
-                'fiber', 'fiber_dv',
-                'total_sugars', 
-                'added_sugars', 'added_sugars_dv',
-                'protein', 'protein_dv'
-            ];
-
-            foreach ($mandatoryFields as $field) {
-                $nutritionalData[$field] = $nutritionalData[$field] ?? 0;
+            // 2. Validação Mínima (Se tudo veio zero, algo deu errado)
+            if (empty($nutritionalData) || (isset($nutritionalData['calories']) && $nutritionalData['calories'] === 0 && $nutritionalData['sodium'] === 0)) {
+                throw new \Exception("IA retornou dados vazios ou zerados. Verifique a qualidade do recorte.");
             }
 
-            // 3. Tradução do Nome (Se necessário)
-            if (empty($this->product->product_name_en)) {
-                $translatedName = $translator->translate($this->product->product_name);
-                if ($translatedName) {
-                    $nutritionalData['product_name_en'] = $translatedName;
-                }
-            }
-
-            // 4. Salvar
-            if (!empty($nutritionalData)) {
-                $this->product->update(array_merge($nutritionalData, [
-                    'ai_status' => 'completed',
-                    'last_ai_processed_at' => now(),
-                    'ai_error_message' => null
-                ]));
-                Log::info("Produto {$this->product->id} processado com sucesso.");
-            } else {
-                throw new \Exception("Nenhum dado gerado.");
-            }
+            // 3. Salvar
+            $this->product->update(array_merge($nutritionalData, [
+                'ai_status' => 'completed',
+                'last_ai_processed_at' => now(),
+                'ai_error_message' => null
+            ]));
+            
+            Log::info("Sucesso Produto {$this->product->id}");
 
         } catch (\Exception $e) {
             $this->product->update([
                 'ai_status' => 'error',
-                'ai_error_message' => $e->getMessage()
+                'ai_error_message' => substr($e->getMessage(), 0, 250)
             ]);
             Log::error("Erro Job Produto {$this->product->id}: " . $e->getMessage());
         }
     }
 
-    private function optimizeImage($path): string
+    private function prepareImageForOllama($path): string
     {
-        list($width, $height, $type) = getimagesize($path);
-        if ($width <= 1024) return base64_encode(file_get_contents($path));
+        // Se a imagem for pequena (resultado de crop), NÃO REDIMENSIONAR.
+        // Apenas converter para base64 direto para manter a nitidez dos textos pequenos.
+        list($width, $height) = getimagesize($path);
         
-        $newWidth = 1024;
+        // Se for muito grande (foto crua de 4000px), limitamos.
+        // Se for menor que 1500px, mandamos original (provavelmente é o crop).
+        if ($width <= 1500 && $height <= 1500) {
+            $data = file_get_contents($path);
+            return base64_encode($data);
+        }
+        
+        // Lógica de redimensionamento apenas para imagens gigantescas
+        $newWidth = 1500; // Aumentei de 1024 para 1500 para ler letras miúdas
         $newHeight = ($height / $width) * $newWidth;
+        
         $thumb = imagecreatetruecolor($newWidth, $newHeight);
         
+        // Detecta tipo
+        $type = exif_imagetype($path);
         switch ($type) {
             case IMAGETYPE_JPEG: $source = imagecreatefromjpeg($path); break;
             case IMAGETYPE_PNG: $source = imagecreatefrompng($path); break;
@@ -105,11 +100,15 @@ class ProcessProductImage implements ShouldQueue
         }
 
         imagecopyresampled($thumb, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        
         ob_start();
-        imagejpeg($thumb, null, 80);
+        // Qualidade 90 (antes era 80) para garantir leitura de texto pequeno
+        imagejpeg($thumb, null, 90); 
         $data = ob_get_clean();
+        
         imagedestroy($thumb);
         imagedestroy($source);
+        
         return base64_encode($data);
     }
 }

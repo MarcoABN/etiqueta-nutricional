@@ -9,199 +9,121 @@ class OllamaService
 {
     protected string $host;
     protected string $visionModel;
-    protected string $textModel;
 
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:11434'), '/');
-        $this->visionModel = env('OLLAMA_MODEL', 'qwen3-vl:8b');
-        $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma3:4b');
+        // Recomendo models: qwen2.5-vl, llava-llama3 ou minicpm-v
+        $this->visionModel = env('OLLAMA_VISION_MODEL', 'qwen2.5-vl:latest'); 
     }
 
-    /**
-     * MOTOR DE VISÃO: OCR Robusto com Tratamento de Falhas
-     */
-    public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 180): ?array
+    public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 240): ?array
     {
-        // Prompt reforçado com exemplo de estrutura (Few-Shot)
+        // Prompt Especializado para RDC 429/2020 (Padrão Novo com 100g e Porção)
         $prompt = <<<EOT
-Analise a imagem da Tabela Nutricional. Extraia APENAS os números.
-Não invente dados. Se não estiver visível, use null.
+Você é um especialista em OCR de rótulos de alimentos brasileiros (ANVISA).
+Analise esta imagem. O rótulo pode seguir o "Novo Padrão" com colunas separadas para "100g" e "Porção".
 
-Responda ESTRITAMENTE com este formato JSON (sem markdown, sem texto antes):
+REGRAS CRÍTICAS:
+1. FOCO NA COLUNA "PORÇÃO" (Serving Size). Ignore os valores da coluna "100g".
+2. Se a tabela estiver dividida em dois blocos (esquerda/direita), LEIA AMBOS.
+3. Se um valor for "0", "Zero", "Não contém" ou traço, retorne 0.
+4. Para Sódio/Cálcio/Ferro: Se estiver em 'mg', mantenha. Se 'mcg', converta.
 
+Retorne APENAS um JSON válido neste formato:
 {
-  "porcoes_embalagem": "aprox. 8",
-  "tamanho_porcao": "30g (5 biscoitos)",
-  "calorias": 140,
-  "carboidratos": 22,
-  "acucares_totais": 10,
-  "acucares_adicionados": 10,
-  "proteinas": 2.5,
-  "gorduras_totais": 5.0,
-  "gorduras_saturadas": 2.1,
-  "gorduras_trans": 0,
-  "fibra": 1.2,
-  "sodio": 85,
-  "calcio": 0,
-  "ferro": 0,
-  "potassio": 0,
-  "vd_carboidratos": 7,
-  "vd_proteinas": 3,
-  "vd_gorduras_totais": 9,
-  "vd_gorduras_saturadas": 10,
-  "vd_fibra": 5,
-  "vd_sodio": 4
+  "tamanho_porcao": "ex: 30g (3 biscoitos)",
+  "calorias": 0.0,
+  "carboidratos": 0.0,
+  "acucares_totais": 0.0,
+  "acucares_adicionados": 0.0,
+  "proteinas": 0.0,
+  "gorduras_totais": 0.0,
+  "gorduras_saturadas": 0.0,
+  "gorduras_trans": 0.0,
+  "fibra": 0.0,
+  "sodio": 0.0,
+  "calcio": 0.0
 }
-
-Se o valor for "Zero" ou "Não contém", retorne 0.
-Extraia os dados da imagem agora:
 EOT;
 
-        // 1. Consulta a IA
         $rawResponse = $this->query($this->visionModel, $prompt, $base64Image, true, $timeoutSeconds);
 
         if (!$rawResponse) {
-            Log::error("Ollama: Resposta vazia da IA.");
+            Log::error("Ollama: Sem resposta.");
             return null;
         }
 
-        // 2. Sanitização e Decodificação Robusta
         $jsonData = $this->robustJsonDecode($rawResponse);
-
+        
         if (!$jsonData) {
-            Log::error("Ollama: Falha ao decodificar JSON. Raw: " . substr($rawResponse, 0, 500));
+            Log::error("Ollama: JSON inválido. Resposta: " . substr($rawResponse, 0, 100) . "...");
             return null;
         }
 
-        // 3. Mapeamento
-        return $this->mapPortugueseKeysToEnglish($jsonData);
+        return $this->mapData($jsonData);
     }
 
-    /**
-     * MOTOR DE TEXTO
-     */
-    public function completion(string $prompt, int $timeoutSeconds = 30): ?string
-    {
-        return $this->query($this->textModel, $prompt, null, false, $timeoutSeconds);
-    }
-
-    /**
-     * Tenta salvar o JSON mesmo que a IA tenha errado a sintaxe
-     */
     private function robustJsonDecode(string $input): ?array
     {
-        // 1. Remove blocos de código Markdown (```json ... ```)
         $clean = preg_replace('/```(?:json)?/i', '', $input);
-        
-        // 2. Tenta encontrar o primeiro { e o último }
-        if (preg_match('/\{.*\}/s', $clean, $matches)) {
+        if (preg_match('/\{[\s\S]*\}/', $clean, $matches)) {
             $clean = $matches[0];
         }
-
-        // 3. Tenta decodificar direto
-        $decoded = json_decode($clean, true);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            return $decoded;
-        }
-
-        // 4. TENTATIVA DE REPARO (Se falhou)
-        // Remove vírgulas traidoras no final de objetos (ex: "a": 1, })
+        // Remove vírgulas finais erradas (ex: "a":1, })
         $clean = preg_replace('/,\s*}/', '}', $clean);
-        $clean = preg_replace('/,\s*]/', ']', $clean);
         
-        // Tenta decodificar de novo
-        $decoded = json_decode($clean, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            // Log do erro de sintaxe para debug
-            Log::warning("Ollama JSON Syntax Error: " . json_last_error_msg());
-        }
-
-        return $decoded;
+        return json_decode($clean, true);
     }
 
-    private function mapPortugueseKeysToEnglish(array $ptData): array
+    private function mapData(array $ptData): array
     {
-        // Limpa números (aceita 2,5 e 2.5) e remove letras (ex: "25g" vira 25)
-        $cleanNum = function($key) use ($ptData) {
-            if (!isset($ptData[$key])) return null;
-            $val = $ptData[$key];
-            if (is_numeric($val)) return (float) $val;
-            
-            // Remove tudo que não for numero, ponto ou virgula
-            $val = preg_replace('/[^0-9,\.-]/', '', (string)$val);
-            $val = str_replace(',', '.', $val);
-            return (float) $val;
-        };
-
-        // Extração inteligente da unidade/peso
-        $servingInfo = $ptData['tamanho_porcao'] ?? '';
-        $servingWeight = null;
-        
-        // Regex para pegar o primeiro número seguido de g/ml/kg
-        if (preg_match('/(\d+[,.]?\d*)\s*(g|ml|kg|l)/i', $servingInfo, $m)) {
-            $servingWeight = (float) str_replace(',', '.', $m[1]);
-        }
+        $clean = fn($k) => isset($ptData[$k]) 
+            ? (float) str_replace(',', '.', preg_replace('/[^0-9,.]/', '', $ptData[$k])) 
+            : 0;
 
         return [
-            'serving_per_container' => $ptData['porcoes_embalagem'] ?? null,
-            'serving_info'          => $servingInfo,
-            'serving_weight'        => $servingWeight,
-            'serving_size_unit'     => $servingInfo, // Mantém o texto original para referência
-            'serving_size_quantity' => $servingWeight, // Assume a quantidade como o peso principal
-
-            'calories'          => $cleanNum('calorias'),
-            'total_carb'        => $cleanNum('carboidratos'),
-            'total_carb_dv'     => $cleanNum('vd_carboidratos'),
-            'total_sugars'      => $cleanNum('acucares_totais'),
-            'added_sugars'      => $cleanNum('acucares_adicionados'),
-            'added_sugars_dv'   => null,
-            'protein'           => $cleanNum('proteinas'),
-            'protein_dv'        => $cleanNum('vd_proteinas'),
-            'total_fat'         => $cleanNum('gorduras_totais'),
-            'total_fat_dv'      => $cleanNum('vd_gorduras_totais'),
-            'sat_fat'           => $cleanNum('gorduras_saturadas'),
-            'sat_fat_dv'        => $cleanNum('vd_gorduras_saturadas'),
-            'trans_fat'         => $cleanNum('gorduras_trans'),
-            'trans_fat_dv'      => null,
-            'fiber'             => $cleanNum('fibra'),
-            'fiber_dv'          => $cleanNum('vd_fibra'),
-            'sodium'            => $cleanNum('sodio'),
-            'sodium_dv'         => $cleanNum('vd_sodio'),
-            
-            'calcium'           => $cleanNum('calcio'),
-            'iron'              => $cleanNum('ferro'),
-            'potassium'         => $cleanNum('potassio'),
+            'serving_info'      => $ptData['tamanho_porcao'] ?? 'Porção não detectada',
+            'calories'          => $clean('calorias'),
+            'total_carb'        => $clean('carboidratos'),
+            'total_sugars'      => $clean('acucares_totais'),
+            'added_sugars'      => $clean('acucares_adicionados'),
+            'protein'           => $clean('proteinas'),
+            'total_fat'         => $clean('gorduras_totais'),
+            'sat_fat'           => $clean('gorduras_saturadas'),
+            'trans_fat'         => $clean('gorduras_trans'),
+            'fiber'             => $clean('fibra'),
+            'sodium'            => $clean('sodio'),
+            'calcium'           => $clean('calcio'),
         ];
     }
 
-    private function query(string $model, string $prompt, ?string $image, bool $json, int $timeout)
+    private function query(string $model, string $prompt, string $image, bool $json, int $timeout)
     {
         try {
             $payload = [
                 'model' => $model,
                 'stream' => false,
-                'messages' => [['role' => 'user', 'content' => $prompt]],
+                'messages' => [
+                    [
+                        'role' => 'user', 
+                        'content' => $prompt,
+                        'images' => [$image]
+                    ]
+                ],
                 'options' => [
-                    'temperature' => 0.0, // Força determinismo máximo
-                    'num_ctx' => 4096
+                    'temperature' => 0.1, // Baixa criatividade para focar nos números
+                    'num_ctx' => 4096     // Contexto maior para imagens grandes
                 ]
             ];
 
-            if ($image) $payload['messages'][0]['images'] = [$image];
             if ($json) $payload['format'] = 'json';
 
-            $response = Http::timeout($timeout)->connectTimeout(5)->post("{$this->host}/api/chat", $payload);
+            $response = Http::timeout($timeout)->post("{$this->host}/api/chat", $payload);
 
-            if ($response->successful()) {
-                return $response->json('message.content');
-            }
-
-            Log::error("Ollama Error: " . $response->body());
-            return null;
+            return $response->json('message.content');
         } catch (\Exception $e) {
-            Log::error("Ollama Exception: " . $e->getMessage());
+            Log::error("Ollama Connect Error: " . $e->getMessage());
             return null;
         }
     }

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Jobs\ProcessProductImage; // Importar o Job
 use App\Models\Product;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -9,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Storage;
 
 class NutritionalScanner extends Page implements HasForms
 {
@@ -23,7 +25,6 @@ class NutritionalScanner extends Page implements HasForms
     public $foundProduct = null;
     public ?array $data = [];
 
-    // Listener para resetar via JS se necessário
     protected $listeners = ['reset-scanner-ui' => 'resetScanner'];
 
     public function mount(): void 
@@ -38,17 +39,13 @@ class NutritionalScanner extends Page implements HasForms
                 FileUpload::make('image_nutritional')
                     ->hiddenLabel()
                     ->image()
-                    ->imageResizeMode('contain')
-                    ->imageResizeTargetWidth(1280)
-                    ->imageResizeTargetHeight(1280)
+                    // REMOVIDO o resize no upload para preservar a qualidade do Crop feito no JS
                     ->directory('uploads/nutritional')
                     ->disk('public')
                     ->extraInputAttributes([
                         'capture' => 'environment',
                         'accept' => 'image/*'
                     ])
-                    // REMOVIDO ->live() para evitar refresh da tela
-                    // REMOVIDO ->afterStateUpdated() pois controlamos via JS
                     ->statePath('image_nutritional'),
             ])
             ->statePath('data');
@@ -74,16 +71,24 @@ class NutritionalScanner extends Page implements HasForms
     {
         $state = $this->form->getState();
         
-        // Verifica se a imagem chegou (pode vir como array ou string dependendo do adapter)
-        $image = $state['image_nutritional'] ?? null;
-        if (is_array($image)) {
-            $image = array_values($image)[0];
+        $imagePath = $state['image_nutritional'] ?? null;
+        if (is_array($imagePath)) {
+            $imagePath = array_values($imagePath)[0];
         }
 
-        if ($this->foundProduct && !empty($image)) {
-            $this->foundProduct->update(['image_nutritional' => $image]);
+        if ($this->foundProduct && !empty($imagePath)) {
+            // 1. Atualiza o produto com o caminho da imagem
+            $this->foundProduct->update([
+                'image_nutritional' => $imagePath,
+                'ai_status' => 'pending' // Marca como pendente para feedback visual
+            ]);
             
-            Notification::make()->title('Salvo com sucesso!')->success()->send();
+            // 2. DISPARA O JOB IMEDIATAMENTE (Correção Vital)
+            ProcessProductImage::dispatch($this->foundProduct);
+
+            Notification::make()->title('Processamento iniciado!')->success()->send();
+            
+            // Opcional: Não resetar imediatamente para o usuário ver que foi enviado
             $this->resetScanner();
         } else {
             Notification::make()->title('Erro: Nenhuma imagem detectada')->warning()->send();
