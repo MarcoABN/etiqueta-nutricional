@@ -16,8 +16,8 @@ class GeminiFdaTranslator
     public function translate(string $productName): ?string
     {
         try {
-            // Aumentado para 60s para garantir o 'cold start' da GPU
             $prompt = $this->getSystemPrompt($productName);
+            // Timeout de 60s para garantir
             $result = $this->ollama->completion($prompt, 60);
             
             return $this->cleanText($result);
@@ -27,31 +27,59 @@ class GeminiFdaTranslator
         }
     }
 
+    /**
+     * Limpeza robusta para extrair apenas o nome final e evitar estouro de campo
+     */
     private function cleanText(?string $text): ?string
     {
         if (empty($text)) return null;
-        $text = str_replace(['```json', '```'], '', $text);
-        // Remove prefixos comuns de resposta de IA
-        $text = preg_replace('/^(Output|Translation|Answer|Identity Statement|EN|English):\s*/i', '', $text);
-        return trim($text, " \t\n\r\0\x0B\"'");
+
+        // 1. Remove blocos de código e formatação
+        $text = str_replace(['```json', '```', '**'], '', $text);
+
+        // 2. Busca pelo marcador de saída (Se a IA explicar antes)
+        if (preg_match('/(Final Output|Output|Result|OUT|SAÍDA|Translation)[:\s*-]*(.*)$/is', $text, $matches)) {
+            $text = trim($matches[2]);
+        }
+
+        // 3. Fallback: Se ainda houver várias linhas, pega a última não vazia
+        $lines = array_filter(explode("\n", $text), fn($l) => !empty(trim($l)));
+        if (count($lines) > 0) {
+            $text = trim(end($lines));
+        }
+
+        // 4. Limpeza final
+        $text = trim($text, " \t\n\r\0\x0B\"'*");
+
+        // 5. TRAVA DE SEGURANÇA: Corta em 255 chars para evitar erro SQL
+        return substr($text, 0, 255);
     }
 
     private function getSystemPrompt(string $productName): string
     {
         return <<<EOT
-You are an expert in **FDA Food Labeling** and **Commercial Product Identity**.
-Your task is to decode Brazilian ERP abbreviations and generate a compliant English Identity Statement.
+You are an expert in FDA Food Labeling and Commercial Product Identity.
+Task: Decode Brazilian ERP abbreviations and generate a compliant English Identity Statement.
 
-### 1. DECODE TABLE (ERP -> ENGLISH CONCEPT):
+### 1. COMPREHENSIVE DICTIONARY (ERP -> ENGLISH):
+**Common Prefixes:**
 - "SALG", "SALGADINHO" -> "Snack"
 - "BISC", "BISCOITO" -> "Cookies" (Sweet) or "Crackers" (Savory) or "Wafer"
 - "CHOC", "CHOCOLATE" -> "Chocolate"
 - "PIR", "PIRULITO" -> "Lollipop"
 - "DROPS", "BALA" -> "Hard Candy"
+- "REFR", "REFRIG" -> "Soda"
+- "BEB", "BEBIDA" -> "Beverage"
+
+**Cleaning & Non-Food:**
 - "SABAO PO" -> "Powder Laundry Detergent"
 - "SABAO LIQ" -> "Liquid Laundry Detergent"
 - "AMAC", "AMACIANTE" -> "Fabric Softener"
 - "DESINF" -> "Disinfectant"
+- "SHAMP" -> "Shampoo"
+- "COND" -> "Conditioner"
+
+**Packaging & Materials:**
 - "SACO", "SACOLA" -> "Bag"
 - "PLAST" -> "Plastic"
 - "PRATO" -> "Plate"
@@ -59,40 +87,29 @@ Your task is to decode Brazilian ERP abbreviations and generate a compliant Engl
 - "BD" -> "Low Density (LDPE)"
 - "PP" -> "Polypropylene"
 - "SANF" -> "Gusseted"
+- "ZPP", "ZIP" -> "Zipper"
 
-### 2. RULES BY CATEGORY:
-**A) FOOD (FDA Rules):**
-- **Flavor:** Use "Flavored" for artificial flavors (e.g., "Presunto" -> "Ham Flavored", "Morango" -> "Strawberry Flavored").
-- **Real Ingredient:** Use direct name only if it's a main ingredient (e.g., "Amendoim" -> "Peanuts").
+### 2. RULES:
+A. **Format:** [Brand] + [Flavor/Material/Feature] + [Common Name] + [Qty]
+B. **Flavor (Food):** Use "Flavored" for artificial flavors (e.g., "Presunto" -> "Ham Flavored").
+C. **Scent (Cleaning):** Use "Scent" for cleaning products (e.g., "Coco" -> "Coconut Scent").
+D. **Material (Pkg):** Material comes before the item name (e.g., "Styrofoam Plate").
 
-**B) CLEANING/NON-FOOD:**
-- **Scent:** Use "Scent" instead of "Flavor" (e.g., "Lavanda" -> "Lavender Scent").
-- **Material:** List material before the item (e.g., "Prato Isopor" -> "Styrofoam Plate").
+### 3. EXAMPLES:
+IN: "SALG SKINY PRESUNTO 60G"
+OUT: "Skiny Ham Flavored Snack 60g"
 
-### 3. STRUCTURE:
-[Brand] + [Feature/Flavor/Material] + [Common Name] + [Qty/Pack]
+IN: "SACO PLAST ZPP BD SANF 50X80CM 12MM KG"
+OUT: "Zipper Low Density Gusseted Plastic Bag 50x80cm 12mm"
 
-### 4. EXAMPLES FROM YOUR DATABASE:
-- IN: "SALG SKINY PRESUNTO 60G"
-  OUT: "Skiny Ham Flavored Snack 60g"
-
-- IN: "SABAO PO OMO LAVAGEM PERFEITA 800G"
-  OUT: "OMO Perfect Wash Powder Laundry Detergent 800g"
-
-- IN: "SACO PLAST ZPP BD SANF 50X80CM 12MM KG"
-  OUT: "Zipper Low Density Gusseted Plastic Bag 50x80cm 12mm"
-
-- IN: "CHOC LACTA BIS OREO 100,8G"
-  OUT: "Lacta Bis Oreo Flavored Wafer 100.8g"
-
-- IN: "PRATO ISOPOR COPOBRAS BCO FUND 15CM"
-  OUT: "Copobras White Deep Styrofoam Plate 15cm"
+IN: "SABAO LIQ OMO COCO 900ML"
+OUT: "OMO Coconut Scent Liquid Laundry Detergent 900ml"
 
 ### INPUT PRODUCT:
 "{$productName}"
 
-### OUTPUT:
-Return ONLY the final string.
+### INSTRUCTION:
+Output ONLY the final string. Do not explain logic.
 EOT;
     }
 }
