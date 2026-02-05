@@ -4,14 +4,14 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-//Commit estável 2
+
 class OllamaService
 {
     protected string $host;
     protected string $visionModel;
     protected string $textModel;
 
-    // Mapeamento de Chaves da IA para o Banco de Dados
+    // Mapeamento Chave IA -> Chave Banco
     protected array $keyMap = [
         'VAL_CALORIAS' => 'calories',
         'VAL_CARBO' => 'total_carb',
@@ -31,7 +31,10 @@ class OllamaService
         'VAL_SODIO' => 'sodium',
         'VAL_SODIO_VD' => 'sodium_dv',
         'VAL_COLESTEROL' => 'cholesterol',
-        // Adicione micros se necessário
+        // Micros essenciais
+        'VAL_CALCIO' => 'calcium',
+        'VAL_FERRO' => 'iron',
+        'VAL_POTASSIO' => 'potassium',
     ];
 
     protected array $unitMap = [
@@ -45,27 +48,28 @@ class OllamaService
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://100.89.133.69:11434'), '/');
+        // O modelo 30b é mandatório para essa lógica semântica funcionar bem
         $this->visionModel = env('OLLAMA_VISION_MODEL', 'qwen3-vl:30b'); 
         $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma2:latest');
     }
 
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // PROMPT SEMÂNTICO "CAÇA-PALAVRAS"
-        // Instruímos a IA a achar o rótulo onde quer que esteja e pegar o valor da PORÇÃO.
+        // PROMPT "UNIVERSAL" REFINADO
         $prompt = <<<EOT
-Analise esta Tabela Nutricional. Ela pode estar no formato VERTICAL, HORIZONTAL ou QUEBRADO (duas colunas).
-Sua missão é encontrar o valor correspondente à PORÇÃO (Serving) para cada item.
+Analise esta Tabela Nutricional (pode ser Vertical, Horizontal ou Linear).
+Sua missão: Encontrar o valor da PORÇÃO (Serving Size) para cada nutriente.
 
-REGRAS VISUAIS:
-1. Ignore valores da coluna "100g" ou "100ml". Queremos apenas o valor da PORÇÃO.
-2. O valor pode estar AO LADO (direita) ou ABAIXO do nome do nutriente.
-3. Se houver dois números na mesma célula (ex: "VD 5%"), separe o valor absoluto do %VD.
+REGRAS DE OURO:
+1. IGNORE a coluna/referência "100g" ou "100ml". Foque apenas na PORÇÃO.
+2. Em tabelas HORIZONTAIS, o valor está logo após o nome (ex: "Carboidratos 10g").
+3. O %VD pode estar em coluna separada OU entre parênteses (ex: "Sódio 50mg (2%)").
+4. Se o valor for "Zero", "Não contém" ou "-", retorne 0.
 
-Retorne APENAS as linhas abaixo preenchidas (Formato Texto):
+Preencha o gabarito abaixo com os valores encontrados (apenas números e sufixos):
 
-HEADER_PORCAO_EMB: <Texto exato de Porções por embalagem>
-HEADER_MEDIDA: <Texto exato da medida caseira e peso>
+HEADER_PORCAO_EMB: <Texto de Porções por embalagem>
+HEADER_MEDIDA: <Texto da medida caseira ex: 30g (2 biscoitos)>
 
 VAL_CALORIAS: <valor>
 VAL_CARBO: <valor> | VD: <vd>
@@ -78,13 +82,16 @@ VAL_GORDURA_TRANS: <valor>
 VAL_FIBRA: <valor> | VD: <vd>
 VAL_SODIO: <valor> | VD: <vd>
 VAL_COLESTEROL: <valor> | VD: <vd>
+VAL_CALCIO: <valor>
+VAL_FERRO: <valor>
+VAL_POTASSIO: <valor>
 
-Exemplo de Saída:
-HEADER_PORCAO_EMB: Cerca de 6
-HEADER_MEDIDA: 30g (2 biscoitos)
-VAL_CALORIAS: 140
-VAL_CARBO: 18g | VD: 6
-VAL_GORDURA_TOTAL: 4.2g | VD: 8
+Exemplo de Saída Esperada:
+HEADER_PORCAO_EMB: Aprox. 5
+HEADER_MEDIDA: 25g (1 unidade)
+VAL_CALORIAS: 130
+VAL_CARBO: 15g | VD: 5
+VAL_GORDURA_TOTAL: 3.5g | VD: 6
 EOT;
 
         $response = $this->queryVision($this->visionModel, $prompt, $base64Image, $timeoutSeconds);
@@ -105,7 +112,7 @@ EOT;
             $line = trim($line);
             if (empty($line)) continue;
 
-            // 1. Processa Cabeçalhos
+            // 1. Processa Cabeçalhos de Porção
             if (str_starts_with($line, 'HEADER_PORCAO_EMB:')) {
                 $raw = trim(substr($line, 18));
                 preg_match('/[0-9]+([.,][0-9]+)?/', $raw, $matches);
@@ -114,10 +121,11 @@ EOT;
             
             elseif (str_starts_with($line, 'HEADER_MEDIDA:')) {
                 $raw = trim(substr($line, 14));
-                // Separa peso (30g) de medida (2 biscoitos)
+                // Extrai peso métrico (ex: 30g, 200ml)
                 preg_match('/(\d+\s*[g|ml|kg|l]+)/i', $raw, $weightMatch);
                 $finalData['serving_weight'] = $weightMatch[0] ?? '';
                 
+                // O restante é a medida caseira (remove o peso encontrado)
                 $measureText = trim(str_replace($finalData['serving_weight'], '', $raw));
                 $measureText = trim($measureText, "() -");
                 $measureData = $this->parseHouseholdMeasure($measureText);
@@ -130,27 +138,33 @@ EOT;
             else {
                 foreach ($this->keyMap as $aiKey => $dbKey) {
                     if (str_starts_with($line, $aiKey . ':')) {
-                        // Remove a chave para processar o conteúdo
+                        // Remove o prefixo da chave para processar o conteúdo
                         $content = trim(substr($line, strlen($aiKey) + 1));
                         
-                        // Verifica se tem pipe "|" separando o VD
+                        // Divide valor principal e VD pelo pipe "|"
                         $parts = explode('|', $content);
                         $mainValueRaw = $parts[0];
+                        
+                        // Busca VD na segunda parte OU tenta achar padrão "(XX%)" na primeira parte
                         $dvValueRaw = $parts[1] ?? '';
+                        if (empty($dvValueRaw) && preg_match('/\(\s*(\d+)\s*%\s*\)/', $mainValueRaw, $dvMatch)) {
+                            $dvValueRaw = $dvMatch[1]; // Pega o valor dentro do parênteses
+                        }
 
-                        // Limpa Valor Principal
+                        // Sanitiza e salva
                         $finalData[$dbKey] = $this->extractNumber($mainValueRaw);
 
-                        // Limpa Valor VD (se o banco tiver coluna _dv para este item)
-                        if (str_contains($dbKey, '_dv')) {
-                            // Se a chave já for _dv, pega direto
-                             $finalData[$dbKey] = $this->extractNumber($mainValueRaw);
-                        } elseif (isset($this->keyMap[$aiKey . '_VD'])) {
-                             // Lógica para pegar o VD da parte separada por pipe (VD: x)
-                             // Mas meu prompt pede "VAL_CARBO: x | VD: y"
-                             // Então preciso popular o campo total_carb_dv
-                             $dvDbKey = $dbKey . '_dv'; // Convenção: total_carb -> total_carb_dv
-                             $finalData[$dvDbKey] = $this->extractNumber($dvValueRaw);
+                        // Se tiver campo de DV no banco
+                        $dvDbKey = $dbKey . '_dv'; // Padrão
+                        if (isset($this->keyMap[$aiKey . '_VD'])) {
+                             // Caso exista mapeamento explicito (raro com essa logica)
+                             // mas mantemos o fallback
+                             continue; 
+                        }
+                        
+                        // Verifica se essa coluna _dv existe no Schema mentalmente (macros principais)
+                        if (in_array($dbKey, ['total_carb', 'added_sugars', 'protein', 'total_fat', 'sat_fat', 'trans_fat', 'fiber', 'sodium', 'cholesterol'])) {
+                            $finalData[$dvDbKey] = $this->extractNumber($dvValueRaw);
                         }
                         break;
                     }
@@ -161,12 +175,22 @@ EOT;
         return $finalData;
     }
 
+    /**
+     * Extrai apenas números de strings sujas (ex: "10 g" -> "10", "2,5%" -> "2.5")
+     */
     private function extractNumber(string $str): string
     {
-        // Remove tudo que não é número, ponto ou vírgula
+        // Remove unidades comuns para evitar confusão
+        $str = preg_replace('/(kcal|cal|mg|mcg|g|ml|%)/i', '', $str);
+        
+        // Mantém apenas números, ponto, vírgula e traço
         $val = preg_replace('/[^0-9,\.-]/', '', $str);
         $val = str_replace(',', '.', $val);
-        return ($val === '' || $val === '.') ? '0' : $val;
+        
+        // Se for string vazia, ponto ou traço isolado, vira 0
+        if ($val === '' || $val === '.' || $val === '-') return '0';
+        
+        return $val;
     }
 
     private function parseHouseholdMeasure(string $text): array
