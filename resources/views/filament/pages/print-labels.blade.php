@@ -108,47 +108,62 @@
                                 <tbody class="divide-y divide-gray-300">
                                     <tr>
                                         <td class="py-1"><span class="font-bold">Total Fat</span> {{ $this->product->total_fat }}g</td>
-                                        <td class="text-right font-bold">{{ $this->product->total_fat_dv }}%</td>
+                                        <td class="text-right font-bold">{{ $this->product->total_fat_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="pl-4 py-1">Saturated Fat {{ $this->product->sat_fat }}g</td>
-                                        <td class="text-right font-bold">{{ $this->product->sat_fat_dv }}%</td>
+                                        <td class="text-right font-bold">{{ $this->product->sat_fat_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="pl-4 py-1">Trans Fat {{ $this->product->trans_fat }}g</td>
-                                        <td class="text-right"></td>
+                                        <td class="text-right font-bold">{{ $this->product->trans_fat_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="py-1"><span class="font-bold">Cholesterol</span> {{ $this->product->cholesterol }}mg</td>
-                                        <td class="text-right font-bold">{{ $this->product->cholesterol_dv }}%</td>
+                                        <td class="text-right font-bold">{{ $this->product->cholesterol_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="py-1"><span class="font-bold">Sodium</span> {{ $this->product->sodium }}mg</td>
-                                        <td class="text-right font-bold">{{ $this->product->sodium_dv }}%</td>
+                                        <td class="text-right font-bold">{{ $this->product->sodium_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="py-1"><span class="font-bold">Total Carbohydrate</span> {{ $this->product->total_carb }}g</td>
-                                        <td class="text-right font-bold">{{ $this->product->total_carb_dv }}%</td>
+                                        <td class="text-right font-bold">{{ $this->product->total_carb_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="pl-4 py-1">Dietary Fiber {{ $this->product->fiber }}g</td>
-                                        <td class="text-right font-bold">{{ $this->product->fiber_dv }}%</td>
+                                        <td class="text-right font-bold">{{ $this->product->fiber_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="pl-4 py-1">
                                             Total Sugars {{ $this->product->total_sugars }}g
                                             <div class="pl-2 text-xs">Includes {{ $this->product->added_sugars }}g Added Sugars</div>
                                         </td>
-                                        <td class="text-right align-bottom font-bold">{{ $this->product->added_sugars_dv }}%</td>
+                                        <td class="text-right align-bottom font-bold">{{ $this->product->added_sugars_dv ?? '0' }}%</td>
                                     </tr>
                                     <tr>
                                         <td class="py-1 border-t-4 border-black"><span class="font-bold">Protein</span> {{ $this->product->protein }}g</td>
-                                        <td class="text-right border-t-4 border-black"></td>
+                                        <td class="text-right border-t-4 border-black">{{ $this->product->protein_dv ?? '0' }}%</td>
                                     </tr>
                                 </tbody>
                             </table>
-                            <div class="border-t border-black pt-1 text-[10px] leading-tight mt-1">
-                                Vitamin D {{ $this->product->vitamin_d }} • Calcium {{ $this->product->calcium }} • Iron {{ $this->product->iron }} • Potassium {{ $this->product->potassium }}
+
+                            <div class="border-t border-black pt-1 text-[10px] leading-tight mt-1 flex flex-wrap gap-x-1">
+                                @if($this->product->vitamin_d && $this->product->vitamin_d != '0')
+                                    <span>Vitamin D {{ $this->product->vitamin_d }} •</span>
+                                @endif
+                                
+                                @if($this->product->calcium && $this->product->calcium != '0')
+                                    <span>Calcium {{ $this->product->calcium }} •</span>
+                                @endif
+                                
+                                @if($this->product->iron && $this->product->iron != '0')
+                                    <span>Iron {{ $this->product->iron }} •</span>
+                                @endif
+                                
+                                @if($this->product->potassium && $this->product->potassium != '0')
+                                    <span>Potassium {{ $this->product->potassium }}</span>
+                                @endif
                             </div>
                         </div>
 
