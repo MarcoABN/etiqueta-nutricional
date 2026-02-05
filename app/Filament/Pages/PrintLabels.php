@@ -5,12 +5,13 @@ namespace App\Filament\Pages;
 use App\Models\Product;
 use Filament\Pages\Page;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
-// use Illuminate\Contracts\View\View; // Pode remover se não for usar em outros lugares
+use Illuminate\Support\HtmlString;
 
 class PrintLabels extends Page implements HasForms
 {
@@ -26,24 +27,21 @@ class PrintLabels extends Page implements HasForms
     public int $quantity = 1;
     public ?Product $product = null;
 
-    // --- CORREÇÃO AQUI ---
-    // Em vez de render(), usamos getViewData() para passar variáveis para o Blade
-    // mantendo o layout do Filament.
     protected function getViewData(): array
     {
         return [
             'settings' => \App\Models\LabelSetting::firstOrCreate(['id' => 1]),
         ];
     }
-    // ---------------------
 
     public function form(Form $form): Form
     {
         return $form
             ->schema([
+                // 1. Campo de Busca (2 Colunas)
                 TextInput::make('search_code')
                     ->label('Pesquisar Cód. WinThor')
-                    ->placeholder('Bipe aqui...')
+                    ->placeholder('Bipe ou digite...')
                     ->autofocus()
                     ->required()
                     ->suffixAction(
@@ -52,10 +50,31 @@ class PrintLabels extends Page implements HasForms
                             ->action(fn () => $this->searchProduct())
                     )
                     ->extraInputAttributes(['wire:keydown.enter' => 'searchProduct'])
-                    ->columnSpan(3), 
+                    ->columnSpan(2), 
 
+                // 2. Visualização do Status (1 Coluna - NOVO)
+                Placeholder::make('status_display')
+                    ->label('Status do Produto')
+                    ->content(function () {
+                        if (!$this->product) return '-';
+                        
+                        $status = $this->product->import_status ?? 'Indefinido';
+                        $color = match ($status) {
+                            'Liberado' => 'text-green-500',
+                            'Processado (IA)' => 'text-blue-400', // Azul para destacar IA
+                            'Em Análise' => 'text-yellow-500',
+                            'Bloqueado' => 'text-red-500',
+                            default => 'text-gray-400',
+                        };
+
+                        // Retorna HTML colorido e negrito
+                        return new HtmlString("<span class='text-xl font-black {$color}'>{$status}</span>");
+                    })
+                    ->columnSpan(1),
+
+                // 3. Quantidade (1 Coluna)
                 TextInput::make('quantity')
-                    ->label('Qtd.')
+                    ->label('Qtd. Etiquetas')
                     ->numeric()
                     ->default(1)
                     ->minValue(1)
@@ -63,7 +82,7 @@ class PrintLabels extends Page implements HasForms
                     ->required()
                     ->live()
                     ->columnSpan(1),
-            ])->columns(4);
+            ])->columns(4); // Grid total de 4 colunas
     }
 
     public function searchProduct()

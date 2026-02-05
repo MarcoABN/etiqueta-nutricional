@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources;
 
-
 use App\Filament\Resources\ProductResource\Pages;
 use App\Models\Product;
 use App\Services\GeminiFdaTranslator;
@@ -261,6 +260,7 @@ class ProductResource extends Resource
                     ->badge()
                     ->color(fn($state) => match ($state) {
                         'Liberado' => 'success',
+                        'Processado (IA)' => 'info', // CORREÇÃO: Cor adicionada para visualização correta
                         'Em Análise' => 'warning',
                         'Bloqueado' => 'danger',
                         default => 'gray',
@@ -289,6 +289,7 @@ class ProductResource extends Resource
                     ->label('Status de Importação')
                     ->options([
                         'Liberado' => 'Liberado',
+                        'Processado (IA)' => 'Processado (IA)', // CORREÇÃO: Opção adicionada ao filtro
                         'Em Análise' => 'Em Análise',
                         'Bloqueado' => 'Bloqueado',
                     ]),
