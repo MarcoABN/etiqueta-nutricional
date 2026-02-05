@@ -1,5 +1,6 @@
 <?php
 
+
 namespace App\Jobs;
 
 use App\Models\Product;

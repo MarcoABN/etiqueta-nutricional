@@ -63,6 +63,7 @@ class NutritionalScanner extends Page implements HasForms
         }
     }
 
+    
     public function save()
     {
         $state = $this->form->getState();

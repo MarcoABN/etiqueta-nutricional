@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+
 use App\Filament\Resources\ProductResource\Pages;
 use App\Models\Product;
 use App\Services\GeminiFdaTranslator;
