@@ -91,11 +91,6 @@ class ProductResource extends Resource
                                 TextInput::make('product_name_en')
                                     ->label('Nome (Inglês - Tradução)')
                                     ->columnSpan(12),
-
-                                TextInput::make('imported_by')
-                                    ->label('Importado Por')
-                                    ->placeholder('Nome da empresa importadora')
-                                    ->columnSpan(12),
                             ]),
 
                         Forms\Components\Grid::make(6)
@@ -125,8 +120,6 @@ class ProductResource extends Resource
                                         TextInput::make('added_sugars')->label('Açúcares Add (g)')->columnSpan(3),
                                         TextInput::make('added_sugars_dv')->label('%VD')->columnSpan(1),
 
-                                        TextInput::make('sugar_alcohol')->label('Álcool de Açúcar (g)')->columnSpan(4),
-
                                         TextInput::make('protein')->label('Proteínas (g)')->columnSpan(3),
                                         TextInput::make('protein_dv')->label('%VD')->columnSpan(1),
                                     ]),
@@ -142,9 +135,6 @@ class ProductResource extends Resource
 
                                         TextInput::make('trans_fat')->label('Gord. Trans (g)')->columnSpan(3),
                                         TextInput::make('trans_fat_dv')->label('%VD')->columnSpan(1),
-
-                                        TextInput::make('poly_fat')->label('Gord. Poli (g)')->columnSpan(4),
-                                        TextInput::make('mono_fat')->label('Gord. Mono (g)')->columnSpan(4),
 
                                         TextInput::make('fiber')->label('Fibras (g)')->columnSpan(3),
                                         TextInput::make('fiber_dv')->label('%VD')->columnSpan(1),
@@ -222,12 +212,10 @@ class ProductResource extends Resource
                             ->image()
                             ->imageEditor()
                             ->directory('uploads/nutritional')
-                            // --- RENOMEAÇÃO PERSONALIZADA (RESOURCE) ---
                             ->getUploadedFileNameForStorageUsing(function (TemporaryUploadedFile $file, $get) {
                                 $cod = $get('codprod') ?? 'SEM_COD';
                                 return "{$cod}_nutri_" . time() . '.' . $file->getClientOriginalExtension();
                             })
-                            // ------------------------------------------
                             ->visibility('public')
                             ->openable()
                             ->downloadable()
@@ -376,7 +364,6 @@ class ProductResource extends Resource
                         ->requiresConfirmation()
                         ->modalHeading('Tradução Inteligente')
                         ->action(function (Collection $records) {
-                            // CORREÇÃO AQUI: Usando o container para injetar dependências
                             $service = app(GeminiFdaTranslator::class);
                             $processed = 0;
                             set_time_limit(300);
