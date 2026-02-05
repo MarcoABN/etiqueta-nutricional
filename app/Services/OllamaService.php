@@ -25,7 +25,7 @@ class OllamaService
         'VAL_GORDURA_TOTAL_VD' => 'total_fat_dv',
         'VAL_GORDURA_SAT' => 'sat_fat',
         'VAL_GORDURA_SAT_VD' => 'sat_fat_dv',
-        'VAL_GORDURA_TRANS' => 'trans_fat',
+        'VAL_GORDURA_TRANS' => 'trans_fat', // O Prompt agora pedirá VD aqui também
         'VAL_FIBRA' => 'fiber',
         'VAL_FIBRA_VD' => 'fiber_dv',
         'VAL_SODIO' => 'sodium',
@@ -41,20 +41,21 @@ class OllamaService
         'VAL_VIT_D' => 'vitamin_d',
     ];
 
-    // ORDEM IMPORTA: Termos específicos primeiro, genéricos por último
+    // ORDEM OTIMIZADA: Termos curtos e agressivos primeiro
     protected array $unitMap = [
-        '/x[ií]caras?/i'    => 'Cup',        // Prioridade alta
+        '/x[ií]c/i'         => 'Cup',        // Pega "xícara", "xic", "xicaras"
+        '/copo/i'           => 'Cup',
         '/colher.*sopa/i'   => 'Tablespoon',
         '/colher.*ch[aá]/i' => 'Teaspoon',
-        '/copo/i'           => 'Cup',
+        '/colher/i'         => 'Tablespoon', // Fallback se ler só "colher"
         '/fatia/i'          => 'Slice',
         '/pote/i'           => 'Container',
         '/garrafa/i'        => 'Bottle',
         '/lata/i'           => 'Can',
         '/biscoito/i'       => 'Cookie',
         '/barra/i'          => 'Bar',
-        '/unidade/i'        => 'Piece',      // Genérico (Deixar pro final)
-        '/embalagem/i'      => 'Package',    // Genérico
+        '/unidade/i'        => 'Piece',      
+        '/embalagem/i'      => 'Package',
     ];
 
     public function __construct()
@@ -66,7 +67,7 @@ class OllamaService
 
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // Prompt Semântico Refinado
+        // CORREÇÃO NO PROMPT: Adicionado "| VD:" na linha da Gordura Trans
         $prompt = <<<EOT
 Analise esta Tabela Nutricional (Vertical, Horizontal ou Linear).
 Encontre o valor da PORÇÃO (Serving Size) para cada item e o %VD (Percentual Diário).
@@ -87,7 +88,7 @@ VAL_ACUCAR_ADD: <valor> | VD: <vd>
 VAL_PROTEINA: <valor> | VD: <vd>
 VAL_GORDURA_TOTAL: <valor> | VD: <vd>
 VAL_GORDURA_SAT: <valor> | VD: <vd>
-VAL_GORDURA_TRANS: <valor>
+VAL_GORDURA_TRANS: <valor> | VD: <vd>
 VAL_FIBRA: <valor> | VD: <vd>
 VAL_SODIO: <valor> | VD: <vd>
 VAL_COLESTEROL: <valor> | VD: <vd>
@@ -98,6 +99,7 @@ VAL_VIT_D: <valor> | VD: <vd>
 
 Exemplo:
 VAL_CARBO: 15g | VD: 5
+VAL_GORDURA_TRANS: 0.2g | VD: 
 VAL_SODIO: 100mg (2%) | VD: 2
 EOT;
 
@@ -138,39 +140,37 @@ EOT;
                 $finalData['serving_size_unit'] = $measureData['unit'];
             }
             
-            // 2. Nutrientes (Parser Híbrido: Pipe ou Regex)
+            // 2. Nutrientes
             else {
                 foreach ($this->keyMap as $aiKey => $dbKey) {
                     if (str_starts_with($line, $aiKey . ':')) {
                         $content = trim(substr($line, strlen($aiKey) + 1));
                         
-                        // A. Tenta extrair Valor Principal
-                        // Pega o primeiro número que aparecer
-                        $mainValue = $this->extractNumber(strtok($content, '|'));
-                        $finalData[$dbKey] = $mainValue;
+                        // Separa Valor Principal e VD
+                        $parts = explode('|', $content);
+                        $mainValueRaw = $parts[0];
+                        
+                        $dvValue = '0';
+                        $parts[1] = $parts[1] ?? '';
 
-                        // B. Tenta extrair %VD (Mais robusto agora)
-                        // Verifica se existe coluna _dv mapeada para este nutriente no banco (mentalmente)
+                        // Busca VD depois do Pipe
+                        if (!empty($parts[1])) {
+                             $dvValue = $this->extractNumber($parts[1]);
+                        }
+                        
+                        // Fallback: Busca padrão "(XX%)" na linha toda se o pipe falhou
+                        if ($dvValue === '0' || $dvValue === '') {
+                             if (preg_match('/(VD:?|%)\s*(\d+[.,]?\d*)/i', $content, $matches)) {
+                                $dvValue = str_replace(',', '.', $matches[2]);
+                            } elseif (preg_match('/\(\s*(\d+[.,]?\d*)\s*%\s*\)/', $content, $matches)) {
+                                $dvValue = str_replace(',', '.', $matches[1]);
+                            }
+                        }
+
+                        $finalData[$dbKey] = $this->extractNumber($mainValueRaw);
+
+                        // Garante que tentamos salvar o VD para todos os campos que suportam, inclusive trans_fat
                         if (in_array($dbKey, ['total_carb', 'added_sugars', 'protein', 'total_fat', 'sat_fat', 'trans_fat', 'fiber', 'sodium', 'cholesterol', 'calcium', 'iron', 'potassium', 'vitamin_d'])) {
-                            
-                            $dvValue = '0';
-                            
-                            // Estratégia 1: Procura depois do Pipe "|"
-                            $parts = explode('|', $content);
-                            if (isset($parts[1])) {
-                                $dvValue = $this->extractNumber($parts[1]);
-                            }
-                            
-                            // Estratégia 2: Se falhar, procura por padrão "VD" ou "%" na linha toda
-                            if ($dvValue === '0' || $dvValue === '') {
-                                // Procura "VD: 5" ou "5%" ou "(5)" no final
-                                if (preg_match('/(VD:?|%)\s*(\d+[.,]?\d*)/i', $content, $matches)) {
-                                    $dvValue = str_replace(',', '.', $matches[2]);
-                                } elseif (preg_match('/\(\s*(\d+[.,]?\d*)\s*%\s*\)/', $content, $matches)) {
-                                    $dvValue = str_replace(',', '.', $matches[1]);
-                                }
-                            }
-
                             $finalData[$dbKey . '_dv'] = $dvValue;
                         }
                         break;
@@ -192,7 +192,7 @@ EOT;
 
     private function parseHouseholdMeasure(string $text): array
     {
-        if (empty($text)) return ['qty' => '1', 'unit' => 'Unit'];
+        if (empty($text)) return ['qty' => '1', 'unit' => 'Unit']; // Fallback padrão
 
         $translatedUnit = 'Unit'; 
         foreach ($this->unitMap as $regex => $englishUnit) {
@@ -223,7 +223,6 @@ EOT;
         } catch (\Exception $e) { Log::error($e->getMessage()); return null; }
     }
     
-    // MÉTODO REATIVADO: Crucial para a tradução de nomes
     public function completion(string $prompt, int $timeoutSeconds = 60): ?string 
     {
         try {
