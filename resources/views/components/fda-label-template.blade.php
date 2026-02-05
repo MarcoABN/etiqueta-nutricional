@@ -132,7 +132,7 @@
                 font-size: 9pt; 
                 margin-bottom: 4px; 
                 text-transform: uppercase; 
-                line-height: 1.0; 
+                line-height: 1.1; 
                 display: block;
                 word-wrap: break-word;
             ">
@@ -182,44 +182,38 @@
             });
         }
 
-        // --- NOVA LÓGICA DE RESIZING DO TÍTULO ---
+        // --- NOVA LÓGICA DE 2 LINHAS ---
         function fitTwoLines(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
 
             elements.forEach(el => {
-                // 1. Reseta restrições para medir o tamanho REAL do texto
+                // 1. Garante CSS base para o cálculo
+                el.style.lineHeight = '1.1';
                 el.style.maxHeight = 'none';
-                el.style.overflow = 'visible';
                 
-                let currentFontSize = parseFloat(window.getComputedStyle(el).fontSize);
+                // Pega o tamanho atual em PX
+                let currentSizePx = parseFloat(window.getComputedStyle(el).fontSize);
                 
-                // Função auxiliar para calcular a altura de 2 linhas na fonte atual
-                const getMaxAllowedHeight = () => {
-                    const lineHeight = parseFloat(window.getComputedStyle(el).lineHeight);
-                    // 2 linhas + pequena tolerância (0.1) para renderização de subpixel
-                    return lineHeight * 2.1; 
+                // 2. Loop de Redução
+                // Calcula matematicamente quanto seria a altura de 2 linhas:
+                // Size * LineHeight(1.1) * 2 linhas * tolerancia(1.05)
+                const checkFits = (size) => {
+                    const maxAllowedHeight = size * 1.1 * 2.1;
+                    return el.scrollHeight <= maxAllowedHeight;
                 };
 
-                // 2. Loop de redução agressivo
-                // Enquanto a altura real do texto for maior que a altura permitida para 2 linhas...
-                while (el.scrollHeight > getMaxAllowedHeight() && currentFontSize > minPx) {
-                    currentFontSize -= 0.2; // Reduz de 0.2px em 0.2px
-                    el.style.fontSize = currentFontSize + 'px';
+                while (!checkFits(currentSizePx) && currentSizePx > minPx) {
+                    currentSizePx -= 0.5; // Redução agressiva (meio pixel por vez)
+                    el.style.fontSize = currentSizePx + 'px';
                 }
-
-                // 3. Trava de segurança final
-                el.style.overflow = 'hidden';
-                // Define altura fixa baseada no resultado final para garantir alinhamento
-                el.style.maxHeight = (parseFloat(window.getComputedStyle(el).lineHeight) * 2.1) + 'px';
             });
         }
         
         setTimeout(() => {
-            // Permite descer até 3pt (muito pequeno) para garantir que cabe
+            // Mínimo de 3pt para forçar textos longos a caberem
             fitTwoLines('.product-title-fit', 3.0); 
-            
             fitTextGeneric('.auto-fit-ingredients', 4.5);
-        }, 100);
+        }, 200); // Aumentei levemente o delay para garantir renderização
     })();
 </script>
