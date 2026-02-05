@@ -13,7 +13,7 @@
 
     $scale = $settings->font_scale / 100;
 
-    // Lista de Micronutrientes - CORREÇÃO DE FILTRO
+    // Lista de Micronutrientes
     $micronutrients = collect([
         ['Vitamin D', $product->vitamin_d],
         ['Calcium', $product->calcium],
@@ -44,8 +44,6 @@
     ->filter(function($item) {
         $val = $item[1];
         if (blank($val)) return false;
-        
-        // Limpa unidades (mg, mcg, g) para verificar se o número é realmente > 0
         $numeric = (float) preg_replace('/[^0-9.]/', '', $val);
         return $numeric > 0;
     }) 
@@ -61,8 +59,6 @@
         height: 100%; 
         font-family: Helvetica, Arial, sans-serif; 
         box-sizing: border-box; 
-        
-        /* Margens Dinâmicas */
         padding-top: {{ $settings->padding_top }}mm;
         padding-bottom: {{ $settings->padding_bottom }}mm;
         padding-left: {{ $settings->padding_left }}mm;
@@ -101,26 +97,16 @@
                 <div style="text-align: right; border-bottom: 1px solid black; font-size: 6pt; font-weight: bold;">% Daily Value*</div>
             </div>
 
-            {{-- 
-               ARRAY DE NUTRIENTES:
-               [0] Label, [1] Valor+Unidade, [2] %VD, [3] Negrito?, [4] Indentação? 
-            --}}
             @foreach([
                 ['Total Fat', $product->total_fat.'g', $product->total_fat_dv ?? '0', true],
                 ['Saturated Fat', $product->sat_fat.'g', $product->sat_fat_dv ?? '0', false, true],
-                
-                // CORREÇÃO: Trans Fat agora recebe '0' se null para forçar exibição
                 ['Trans Fat', $product->trans_fat.'g', $product->trans_fat_dv ?? '0', false, true],
-                
                 ['Cholesterol', $product->cholesterol.'mg', $product->cholesterol_dv ?? '0', true],
                 ['Sodium', $product->sodium.'mg', $product->sodium_dv ?? '0', true],
                 ['Total Carb.', $product->total_carb.'g', $product->total_carb_dv ?? '0', true],
                 ['Dietary Fiber', $product->fiber.'g', $product->fiber_dv ?? '0', false, true],
-                
-                // CORREÇÃO: Total Sugars e Added Sugars forçando VD
                 ['Total Sugars', $product->total_sugars.'g', $product->total_sugars_dv ?? '', false, true], 
                 ['Incl. Added Sugars', $product->added_sugars.'g', $product->added_sugars_dv ?? '0', false, true],
-                
                 ['Protein', $product->protein.'g', $product->protein_dv, true],
             ] as $nutri)
                 <div style="border-top: 1px solid #000; display: flex; justify-content: space-between; {{ isset($nutri[4]) ? 'padding-left: 8px;' : '' }}">
@@ -128,7 +114,6 @@
                         @if($nutri[3]) <strong>{{ $nutri[0] }}</strong> @else {{ $nutri[0] }} @endif 
                         {{ $nutri[1] }}
                     </span>
-                    {{-- CORREÇÃO: Verifica se não é estritamente vazio, aceitando '0' como válido --}}
                     @if($nutri[2] !== '' && $nutri[2] !== null) 
                         <strong>{{ $nutri[2] }}%</strong> 
                     @endif
@@ -151,7 +136,8 @@
         </div>
 
         <div style="font-size: 7pt; display: flex; flex-direction: column; overflow: hidden; padding-left: 2px;">
-            <div class="auto-fit" style="font-weight: bold; font-size: 9pt; margin-bottom: 4px; text-transform: uppercase; max-height: 32px; overflow: hidden; line-height: 1.1;">
+            
+            <div class="product-title-fit" style="font-weight: bold; font-size: 9pt; margin-bottom: 4px; text-transform: uppercase; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
                 {{ $product->product_name_en ?? $product->product_name }}
             </div>
 
@@ -182,26 +168,49 @@
 
 <script>
     (function() {
-        function fitText(selector, minSize = 5) {
+        const scaleFactor = {{ $scale }};
+
+        // Função Genérica (ingredientes)
+        function fitTextGeneric(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
-            const scaleFactor = {{ $scale }};
-            
+            const minPx = minSizePt * 1.33 * scaleFactor;
+
             elements.forEach(el => {
                 let size = parseFloat(window.getComputedStyle(el).fontSize);
-                const localMin = minSize * scaleFactor;
-
-                // Loop de segurança: reduz a fonte até caber
-                while (el.offsetHeight > 0 && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) && size > localMin) {
+                while (el.offsetHeight > 0 && (el.scrollHeight > el.clientHeight) && size > minPx) {
                     size -= 0.2;
                     el.style.fontSize = size + 'px';
                 }
             });
         }
+
+        // Função para travar em 2 Linhas SEM Reticências
+        function fitTwoLines(selector, minSizePt) {
+            const elements = document.querySelectorAll(selector);
+            const minPx = minSizePt * 1.33 * scaleFactor;
+
+            elements.forEach(el => {
+                let currentFontSize = parseFloat(window.getComputedStyle(el).fontSize);
+                
+                const checkOverflow = () => {
+                    const lineHeight = parseFloat(window.getComputedStyle(el).lineHeight);
+                    // Tolerância mínima de 2.05 para garantir que a 2ª linha caiba
+                    const maxAllowedHeight = (lineHeight * 2.05); 
+                    return el.scrollHeight > maxAllowedHeight;
+                };
+
+                // Reduz agressivamente até caber ou atingir o limite mínimo
+                while (checkOverflow() && currentFontSize > minPx) {
+                    currentFontSize -= 0.1; // Passo fino para aproveitar todo espaço
+                    el.style.fontSize = currentFontSize + 'px';
+                }
+            });
+        }
         
         setTimeout(() => {
-            const scale = {{ $scale }};
-            fitText('.auto-fit', 6 * scale); 
-            fitText('.auto-fit-ingredients', 4.5 * scale);
+            // Limite de 3.5pt para garantir que textos longos apareçam inteiros
+            fitTwoLines('.product-title-fit', 3.5); 
+            fitTextGeneric('.auto-fit-ingredients', 4.5);
         }, 100);
     })();
 </script>
