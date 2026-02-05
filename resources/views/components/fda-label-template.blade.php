@@ -137,7 +137,7 @@
 
         <div style="font-size: 7pt; display: flex; flex-direction: column; overflow: hidden; padding-left: 2px;">
             
-            <div class="product-title-fit" style="font-weight: bold; font-size: 9pt; margin-bottom: 4px; text-transform: uppercase; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+            <div class="product-title-fit" style="font-weight: bold; font-size: 9pt; margin-bottom: 4px; text-transform: uppercase; line-height: 1.1; display: block; overflow: visible;">
                 {{ $product->product_name_en ?? $product->product_name }}
             </div>
 
@@ -170,7 +170,6 @@
     (function() {
         const scaleFactor = {{ $scale }};
 
-        // Função Genérica (ingredientes)
         function fitTextGeneric(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
@@ -184,7 +183,6 @@
             });
         }
 
-        // Função para travar em 2 Linhas SEM Reticências
         function fitTwoLines(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
@@ -192,23 +190,31 @@
             elements.forEach(el => {
                 let currentFontSize = parseFloat(window.getComputedStyle(el).fontSize);
                 
-                const checkOverflow = () => {
-                    const lineHeight = parseFloat(window.getComputedStyle(el).lineHeight);
-                    // Tolerância mínima de 2.05 para garantir que a 2ª linha caiba
-                    const maxAllowedHeight = (lineHeight * 2.05); 
-                    return el.scrollHeight > maxAllowedHeight;
-                };
-
-                // Reduz agressivamente até caber ou atingir o limite mínimo
-                while (checkOverflow() && currentFontSize > minPx) {
-                    currentFontSize -= 0.1; // Passo fino para aproveitar todo espaço
+                // Reduz até a altura real do conteúdo ser menor ou igual a 2.1x a altura da linha
+                while (currentFontSize > minPx) {
+                    const style = window.getComputedStyle(el);
+                    const lineHeight = parseFloat(style.lineHeight);
+                    // Altura máxima = 2 linhas com pequena folga
+                    const maxAllowedHeight = lineHeight * 2.1;
+                    
+                    if (el.scrollHeight <= maxAllowedHeight) {
+                        break; // Cabe!
+                    }
+                    
+                    currentFontSize -= 0.2;
                     el.style.fontSize = currentFontSize + 'px';
                 }
+                
+                // Trava final para evitar qualquer vazamento
+                el.style.overflow = 'hidden';
+                el.style.display = '-webkit-box';
+                el.style.webkitLineClamp = '2';
+                el.style.webkitBoxOrient = 'vertical';
             });
         }
         
         setTimeout(() => {
-            // Limite de 3.5pt para garantir que textos longos apareçam inteiros
+            // Fonte mínima 3.5pt para garantir que cabe tudo
             fitTwoLines('.product-title-fit', 3.5); 
             fitTextGeneric('.auto-fit-ingredients', 4.5);
         }, 100);
