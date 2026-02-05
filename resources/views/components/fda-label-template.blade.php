@@ -13,7 +13,7 @@
 
     $scale = $settings->font_scale / 100;
 
-    // Lista de Micronutrientes
+    // Lista de Micronutrientes - CORREÇÃO DE FILTRO
     $micronutrients = collect([
         ['Vitamin D', $product->vitamin_d],
         ['Calcium', $product->calcium],
@@ -40,7 +40,15 @@
         ['Chromium', $product->chromium],
         ['Molybdenum', $product->molybdenum],
         ['Chloride', $product->chloride],
-    ])->filter(fn($item) => filled($item[1])) 
+    ])
+    ->filter(function($item) {
+        $val = $item[1];
+        if (blank($val)) return false;
+        
+        // Limpa unidades (mg, mcg, g) para verificar se o número é realmente > 0
+        $numeric = (float) preg_replace('/[^0-9.]/', '', $val);
+        return $numeric > 0;
+    }) 
     ->map(fn($item) => "{$item[0]} {$item[1]}")
     ->implode(', ');
 
@@ -52,9 +60,9 @@
         width: 100%; 
         height: 100%; 
         font-family: Helvetica, Arial, sans-serif; 
-        box-sizing: border-box; /* Garante que o padding não estoure o tamanho */
+        box-sizing: border-box; 
         
-        /* Margens Dinâmicas (Controladas pelo Banco) */
+        /* Margens Dinâmicas */
         padding-top: {{ $settings->padding_top }}mm;
         padding-bottom: {{ $settings->padding_bottom }}mm;
         padding-left: {{ $settings->padding_left }}mm;
@@ -72,7 +80,6 @@
         gap: {{ $settings->gap_width }}mm; 
         height: 100%;
     ">
-        
         <div class="nutrition-facts" style="font-size: 7.5pt; line-height: 1.1; display: flex; flex-direction: column;">
             
             <div>
@@ -94,16 +101,26 @@
                 <div style="text-align: right; border-bottom: 1px solid black; font-size: 6pt; font-weight: bold;">% Daily Value*</div>
             </div>
 
+            {{-- 
+               ARRAY DE NUTRIENTES:
+               [0] Label, [1] Valor+Unidade, [2] %VD, [3] Negrito?, [4] Indentação? 
+            --}}
             @foreach([
-                ['Total Fat', $product->total_fat.'g', $product->total_fat_dv, true],
-                ['Saturated Fat', $product->sat_fat.'g', $product->sat_fat_dv, false, true],
-                ['Trans Fat', $product->trans_fat.'g', '', false, true],
-                ['Cholesterol', $product->cholesterol.'mg', $product->cholesterol_dv, true],
-                ['Sodium', $product->sodium.'mg', $product->sodium_dv, true],
-                ['Total Carb.', $product->total_carb.'g', $product->total_carb_dv, true],
-                ['Dietary Fiber', $product->fiber.'g', $product->fiber_dv, false, true],
-                ['Total Sugars', $product->total_sugars.'g', '', false, true],
-                ['Incl. Added Sugars', $product->added_sugars.'g', $product->added_sugars_dv, false, true],
+                ['Total Fat', $product->total_fat.'g', $product->total_fat_dv ?? '0', true],
+                ['Saturated Fat', $product->sat_fat.'g', $product->sat_fat_dv ?? '0', false, true],
+                
+                // CORREÇÃO: Trans Fat agora recebe '0' se null para forçar exibição
+                ['Trans Fat', $product->trans_fat.'g', $product->trans_fat_dv ?? '0', false, true],
+                
+                ['Cholesterol', $product->cholesterol.'mg', $product->cholesterol_dv ?? '0', true],
+                ['Sodium', $product->sodium.'mg', $product->sodium_dv ?? '0', true],
+                ['Total Carb.', $product->total_carb.'g', $product->total_carb_dv ?? '0', true],
+                ['Dietary Fiber', $product->fiber.'g', $product->fiber_dv ?? '0', false, true],
+                
+                // CORREÇÃO: Total Sugars e Added Sugars forçando VD
+                ['Total Sugars', $product->total_sugars.'g', $product->total_sugars_dv ?? '', false, true], 
+                ['Incl. Added Sugars', $product->added_sugars.'g', $product->added_sugars_dv ?? '0', false, true],
+                
                 ['Protein', $product->protein.'g', $product->protein_dv, true],
             ] as $nutri)
                 <div style="border-top: 1px solid #000; display: flex; justify-content: space-between; {{ isset($nutri[4]) ? 'padding-left: 8px;' : '' }}">
@@ -111,7 +128,10 @@
                         @if($nutri[3]) <strong>{{ $nutri[0] }}</strong> @else {{ $nutri[0] }} @endif 
                         {{ $nutri[1] }}
                     </span>
-                    @if($nutri[2]) <strong>{{ $nutri[2] }}%</strong> @endif
+                    {{-- CORREÇÃO: Verifica se não é estritamente vazio, aceitando '0' como válido --}}
+                    @if($nutri[2] !== '' && $nutri[2] !== null) 
+                        <strong>{{ $nutri[2] }}%</strong> 
+                    @endif
                 </div>
             @endforeach
             
@@ -184,4 +204,4 @@
             fitText('.auto-fit-ingredients', 4.5 * scale);
         }, 100);
     })();
-</script>s
+</script>
