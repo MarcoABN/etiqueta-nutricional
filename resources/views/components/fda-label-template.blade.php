@@ -137,7 +137,16 @@
 
         <div style="font-size: 7pt; display: flex; flex-direction: column; overflow: hidden; padding-left: 2px;">
             
-            <div class="product-title-fit" style="font-weight: bold; font-size: 9pt; margin-bottom: 4px; text-transform: uppercase; line-height: 1.1; display: block; overflow: visible;">
+            <div class="product-title-fit" style="
+                font-weight: bold; 
+                font-size: 9pt; 
+                margin-bottom: 4px; 
+                text-transform: uppercase; 
+                line-height: 1.1; 
+                max-height: 2.25em; 
+                display: block; 
+                overflow: hidden;
+            ">
                 {{ $product->product_name_en ?? $product->product_name }}
             </div>
 
@@ -170,12 +179,14 @@
     (function() {
         const scaleFactor = {{ $scale }};
 
+        // Função para Ingredientes (Preenche o espaço restante)
         function fitTextGeneric(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
 
             elements.forEach(el => {
                 let size = parseFloat(window.getComputedStyle(el).fontSize);
+                // Enquanto o conteúdo for maior que a caixa, diminui
                 while (el.offsetHeight > 0 && (el.scrollHeight > el.clientHeight) && size > minPx) {
                     size -= 0.2;
                     el.style.fontSize = size + 'px';
@@ -183,6 +194,7 @@
             });
         }
 
+        // Função Específica para Título (2 Linhas Rígidas)
         function fitTwoLines(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
@@ -190,32 +202,22 @@
             elements.forEach(el => {
                 let currentFontSize = parseFloat(window.getComputedStyle(el).fontSize);
                 
-                // Reduz até a altura real do conteúdo ser menor ou igual a 2.1x a altura da linha
-                while (currentFontSize > minPx) {
-                    const style = window.getComputedStyle(el);
-                    const lineHeight = parseFloat(style.lineHeight);
-                    // Altura máxima = 2 linhas com pequena folga
-                    const maxAllowedHeight = lineHeight * 2.1;
-                    
-                    if (el.scrollHeight <= maxAllowedHeight) {
-                        break; // Cabe!
-                    }
-                    
-                    currentFontSize -= 0.2;
+                // A lógica agora é simples: como definimos max-height: 2.25em no CSS,
+                // se o scrollHeight for maior que o offsetHeight, significa que
+                // o texto está tentando ocupar mais que o espaço permitido (3+ linhas).
+                
+                while (el.scrollHeight > el.offsetHeight && currentFontSize > minPx) {
+                    currentFontSize -= 0.1; // Redução fina
                     el.style.fontSize = currentFontSize + 'px';
                 }
-                
-                // Trava final para evitar qualquer vazamento
-                el.style.overflow = 'hidden';
-                el.style.display = '-webkit-box';
-                el.style.webkitLineClamp = '2';
-                el.style.webkitBoxOrient = 'vertical';
             });
         }
         
         setTimeout(() => {
-            // Fonte mínima 3.5pt para garantir que cabe tudo
+            // Título: Minimo 3.5pt para garantir que caiba em 2 linhas
             fitTwoLines('.product-title-fit', 3.5); 
+            
+            // Ingredientes: Minimo 4.5pt
             fitTextGeneric('.auto-fit-ingredients', 4.5);
         }, 100);
     })();
