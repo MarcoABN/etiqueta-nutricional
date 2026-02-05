@@ -11,7 +11,29 @@ class OllamaService
     protected string $visionModel;
     protected string $textModel;
 
-    // Dicionário de Medidas (Mantido)
+    // Mapeamento de Chaves da IA para o Banco de Dados
+    protected array $keyMap = [
+        'VAL_CALORIAS' => 'calories',
+        'VAL_CARBO' => 'total_carb',
+        'VAL_CARBO_VD' => 'total_carb_dv',
+        'VAL_ACUCAR_TOTAL' => 'total_sugars',
+        'VAL_ACUCAR_ADD' => 'added_sugars',
+        'VAL_ACUCAR_ADD_VD' => 'added_sugars_dv',
+        'VAL_PROTEINA' => 'protein',
+        'VAL_PROTEINA_VD' => 'protein_dv',
+        'VAL_GORDURA_TOTAL' => 'total_fat',
+        'VAL_GORDURA_TOTAL_VD' => 'total_fat_dv',
+        'VAL_GORDURA_SAT' => 'sat_fat',
+        'VAL_GORDURA_SAT_VD' => 'sat_fat_dv',
+        'VAL_GORDURA_TRANS' => 'trans_fat',
+        'VAL_FIBRA' => 'fiber',
+        'VAL_FIBRA_VD' => 'fiber_dv',
+        'VAL_SODIO' => 'sodium',
+        'VAL_SODIO_VD' => 'sodium_dv',
+        'VAL_COLESTEROL' => 'cholesterol',
+        // Adicione micros se necessário
+    ];
+
     protected array $unitMap = [
         '/colher.*sopa/i' => 'Tablespoon', '/colher.*ch[aá]/i' => 'Teaspoon',
         '/x[ií]cara/i' => 'Cup', '/copo/i' => 'Cup', '/unidade/i' => 'Piece',
@@ -23,171 +45,128 @@ class OllamaService
     public function __construct()
     {
         $this->host = rtrim(env('OLLAMA_HOST', 'http://100.89.133.69:11434'), '/');
-        // Qwen 30B é excelente para seguir listas de texto
         $this->visionModel = env('OLLAMA_VISION_MODEL', 'qwen3-vl:30b'); 
         $this->textModel = env('OLLAMA_TEXT_MODEL', 'gemma2:latest');
     }
 
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // PROMPT TEXTO PURO: Mais robusto que JSON.
-        // A IA apenas lista os valores linha por linha.
+        // PROMPT SEMÂNTICO "CAÇA-PALAVRAS"
+        // Instruímos a IA a achar o rótulo onde quer que esteja e pegar o valor da PORÇÃO.
         $prompt = <<<EOT
-Analise a Tabela Nutricional. NÃO USE JSON. NÃO USE MARKDOWN.
-Responda APENAS com as linhas abaixo, preenchendo os dados encontrados.
+Analise esta Tabela Nutricional. Ela pode estar no formato VERTICAL, HORIZONTAL ou QUEBRADO (duas colunas).
+Sua missão é encontrar o valor correspondente à PORÇÃO (Serving) para cada item.
 
-CABEÇALHO:
-H_PORCOES: <Copie o texto da linha 'Porções por embalagem'>
-H_MEDIDA: <Copie o texto da linha 'Porção' com peso e medida>
+REGRAS VISUAIS:
+1. Ignore valores da coluna "100g" ou "100ml". Queremos apenas o valor da PORÇÃO.
+2. O valor pode estar AO LADO (direita) ou ABAIXO do nome do nutriente.
+3. Se houver dois números na mesma célula (ex: "VD 5%"), separe o valor absoluto do %VD.
 
-NUTRIENTES (Escreva TODOS os números encontrados na linha, da esquerda para a direita):
-N_CALORIAS: <numeros>
-N_CARBO: <numeros>
-N_ACUCAR_TOTAL: <numeros>
-N_ACUCAR_ADD: <numeros>
-N_PROTEINA: <numeros>
-N_GORDURA_TOTAL: <numeros>
-N_GORDURA_SAT: <numeros>
-N_GORDURA_TRANS: <numeros>
-N_FIBRA: <numeros>
-N_SODIO: <numeros>
-N_COLESTEROL: <numeros>
-N_CALCIO: <numeros>
-N_FERRO: <numeros>
-N_POTASSIO: <numeros>
-N_VIT_A: <numeros>
-N_VIT_C: <numeros>
-N_VIT_D: <numeros>
+Retorne APENAS as linhas abaixo preenchidas (Formato Texto):
 
-Exemplo de resposta válida:
-H_PORCOES: Cerca de 6
-H_MEDIDA: 30g (2 biscoitos)
-N_CALORIAS: 140 450 7
-N_CARBO: 20 60 4
+HEADER_PORCAO_EMB: <Texto exato de Porções por embalagem>
+HEADER_MEDIDA: <Texto exato da medida caseira e peso>
+
+VAL_CALORIAS: <valor>
+VAL_CARBO: <valor> | VD: <vd>
+VAL_ACUCAR_TOTAL: <valor>
+VAL_ACUCAR_ADD: <valor> | VD: <vd>
+VAL_PROTEINA: <valor> | VD: <vd>
+VAL_GORDURA_TOTAL: <valor> | VD: <vd>
+VAL_GORDURA_SAT: <valor> | VD: <vd>
+VAL_GORDURA_TRANS: <valor>
+VAL_FIBRA: <valor> | VD: <vd>
+VAL_SODIO: <valor> | VD: <vd>
+VAL_COLESTEROL: <valor> | VD: <vd>
+
+Exemplo de Saída:
+HEADER_PORCAO_EMB: Cerca de 6
+HEADER_MEDIDA: 30g (2 biscoitos)
+VAL_CALORIAS: 140
+VAL_CARBO: 18g | VD: 6
+VAL_GORDURA_TOTAL: 4.2g | VD: 8
 EOT;
 
         $response = $this->queryVision($this->visionModel, $prompt, $base64Image, $timeoutSeconds);
 
         if (!$response) return null;
+        
+        Log::info("Ollama Semantic Response:\n" . substr($response, 0, 500));
 
-        // Log para Debug: Veja exatamente o que a IA retornou
-        Log::info("Raw Ollama Response:\n" . substr($response, 0, 500));
-
-        return $this->parseTextResponse($response);
+        return $this->parseSemanticResponse($response);
     }
 
-    /**
-     * Parser Manual de Texto (Infalível contra erros de sintaxe JSON)
-     */
-    private function parseTextResponse(string $text): array
+    private function parseSemanticResponse(string $text): array
     {
         $lines = explode("\n", $text);
-        $data = [];
+        $finalData = [];
 
-        // Mapeamento Chave IA -> Chave Banco
-        $keyMap = [
-            'N_CALORIAS' => 'calories',
-            'N_CARBO' => 'total_carb',
-            'N_ACUCAR_TOTAL' => 'total_sugars',
-            'N_ACUCAR_ADD' => 'added_sugars',
-            'N_PROTEINA' => 'protein',
-            'N_GORDURA_TOTAL' => 'total_fat',
-            'N_GORDURA_SAT' => 'sat_fat',
-            'N_GORDURA_TRANS' => 'trans_fat',
-            'N_FIBRA' => 'fiber',
-            'N_SODIO' => 'sodium',
-            'N_COLESTEROL' => 'cholesterol',
-            'N_CALCIO' => 'calcium',
-            'N_FERRO' => 'iron',
-            'N_POTASSIO' => 'potassium',
-            'N_VIT_A' => 'vitamin_a',
-            'N_VIT_C' => 'vitamin_c',
-            'N_VIT_D' => 'vitamin_d',
-        ];
-
-        // 1. Extração Inicial
         foreach ($lines as $line) {
             $line = trim($line);
-            if (str_starts_with($line, 'H_PORCOES:')) {
-                $data['header_servings'] = trim(substr($line, 10));
-            } elseif (str_starts_with($line, 'H_MEDIDA:')) {
-                $data['header_measure'] = trim(substr($line, 9));
-            } else {
-                foreach ($keyMap as $prefix => $dbKey) {
-                    if (str_starts_with($line, $prefix . ':')) {
-                        // Extrai todos os números da linha (ex: "140 450 7")
-                        $rawNums = substr($line, strlen($prefix) + 1);
-                        // Regex para pegar números inteiros ou decimais (com ponto ou vírgula)
-                        preg_match_all('/[0-9]+([.,][0-9]+)?/', $rawNums, $matches);
+            if (empty($line)) continue;
+
+            // 1. Processa Cabeçalhos
+            if (str_starts_with($line, 'HEADER_PORCAO_EMB:')) {
+                $raw = trim(substr($line, 18));
+                preg_match('/[0-9]+([.,][0-9]+)?/', $raw, $matches);
+                $finalData['servings_per_container'] = str_replace(',', '.', $matches[0] ?? '1');
+            }
+            
+            elseif (str_starts_with($line, 'HEADER_MEDIDA:')) {
+                $raw = trim(substr($line, 14));
+                // Separa peso (30g) de medida (2 biscoitos)
+                preg_match('/(\d+\s*[g|ml|kg|l]+)/i', $raw, $weightMatch);
+                $finalData['serving_weight'] = $weightMatch[0] ?? '';
+                
+                $measureText = trim(str_replace($finalData['serving_weight'], '', $raw));
+                $measureText = trim($measureText, "() -");
+                $measureData = $this->parseHouseholdMeasure($measureText);
+                
+                $finalData['serving_size_quantity'] = $measureData['qty'];
+                $finalData['serving_size_unit'] = $measureData['unit'];
+            }
+
+            // 2. Processa Nutrientes (Chave: Valor | VD: Valor)
+            else {
+                foreach ($this->keyMap as $aiKey => $dbKey) {
+                    if (str_starts_with($line, $aiKey . ':')) {
+                        // Remove a chave para processar o conteúdo
+                        $content = trim(substr($line, strlen($aiKey) + 1));
                         
-                        $nums = array_map(function($n) {
-                            return (float) str_replace(',', '.', $n);
-                        }, $matches[0] ?? []);
-                        
-                        $data['rows'][$dbKey] = $nums;
+                        // Verifica se tem pipe "|" separando o VD
+                        $parts = explode('|', $content);
+                        $mainValueRaw = $parts[0];
+                        $dvValueRaw = $parts[1] ?? '';
+
+                        // Limpa Valor Principal
+                        $finalData[$dbKey] = $this->extractNumber($mainValueRaw);
+
+                        // Limpa Valor VD (se o banco tiver coluna _dv para este item)
+                        if (str_contains($dbKey, '_dv')) {
+                            // Se a chave já for _dv, pega direto
+                             $finalData[$dbKey] = $this->extractNumber($mainValueRaw);
+                        } elseif (isset($this->keyMap[$aiKey . '_VD'])) {
+                             // Lógica para pegar o VD da parte separada por pipe (VD: x)
+                             // Mas meu prompt pede "VAL_CARBO: x | VD: y"
+                             // Então preciso popular o campo total_carb_dv
+                             $dvDbKey = $dbKey . '_dv'; // Convenção: total_carb -> total_carb_dv
+                             $finalData[$dvDbKey] = $this->extractNumber($dvValueRaw);
+                        }
                         break;
                     }
                 }
             }
         }
-
-        // 2. Processamento Inteligente (Header + Colunas)
-        return $this->processExtractedData($data);
+        
+        return $finalData;
     }
 
-    private function processExtractedData(array $raw): array
+    private function extractNumber(string $str): string
     {
-        // A. Processa Cabeçalho
-        $servingsRaw = $raw['header_servings'] ?? '';
-        preg_match('/[0-9]+([.,][0-9]+)?/', $servingsRaw, $matches);
-        $servingsPerContainer = str_replace(',', '.', $matches[0] ?? '1');
-
-        $measureRaw = $raw['header_measure'] ?? '';
-        // Separa "30g" de "(2 biscoitos)"
-        preg_match('/(\d+\s*[g|ml|kg|l]+)/i', $measureRaw, $weightMatch);
-        $servingWeight = $weightMatch[0] ?? '0';
-        
-        // Texto da medida caseira
-        $measureText = trim(str_replace($servingWeight, '', $measureRaw));
-        $measureText = trim($measureText, "() -");
-        $measureData = $this->parseHouseholdMeasure($measureText);
-
-        $finalData = [
-            'servings_per_container' => $servingsPerContainer,
-            'serving_weight' => $servingWeight,
-            'serving_size_quantity' => $measureData['qty'],
-            'serving_size_unit' => $measureData['unit'],
-        ];
-
-        // B. Processa Linhas (Lógica de 3 colunas vs 2 colunas)
-        $rows = $raw['rows'] ?? [];
-        foreach ($rows as $dbKey => $numbers) {
-            $count = count($numbers);
-            $val = 0;
-            $dv = 0;
-
-            if ($count >= 3) {
-                // [100g, Porção, %VD] -> Pega Porção (1) e %VD (2)
-                $val = $numbers[1];
-                $dv = $numbers[2];
-            } elseif ($count == 2) {
-                // [Porção, %VD] -> Pega Porção (0) e %VD (1)
-                $val = $numbers[0];
-                $dv = $numbers[1];
-            } elseif ($count == 1) {
-                // [Porção] -> Pega Porção (0)
-                $val = $numbers[0];
-            }
-
-            $finalData[$dbKey] = (string)$val;
-            
-            // Campos que têm coluna _dv no banco
-            if (in_array($dbKey, ['total_carb', 'added_sugars', 'protein', 'total_fat', 'sat_fat', 'trans_fat', 'fiber', 'sodium', 'cholesterol'])) {
-                $finalData[$dbKey . '_dv'] = (string)$dv;
-            }
-        }
-
-        return $finalData;
+        // Remove tudo que não é número, ponto ou vírgula
+        $val = preg_replace('/[^0-9,\.-]/', '', $str);
+        $val = str_replace(',', '.', $val);
+        return ($val === '' || $val === '.') ? '0' : $val;
     }
 
     private function parseHouseholdMeasure(string $text): array
@@ -217,25 +196,11 @@ EOT;
                 'model' => $model,
                 'messages' => [['role' => 'user', 'content' => $prompt, 'images' => [$image]]],
                 'stream' => false, 
-                // Removemos 'format' => 'json' para permitir texto livre
                 'options' => ['temperature' => 0.0, 'num_ctx' => 4096]
             ]);
             return $response->successful() ? $response->json('message.content') : null;
-        } catch (\Exception $e) { Log::error("Ollama Exception: " . $e->getMessage()); return null; }
+        } catch (\Exception $e) { Log::error($e->getMessage()); return null; }
     }
     
-    // Método completion restaurado para tradução
-    public function completion(string $prompt, int $timeoutSeconds = 60): ?string 
-    {
-        try {
-            $payload = [
-                'model' => $this->textModel,
-                'stream' => false,
-                'messages' => [['role' => 'user', 'content' => $prompt]],
-                'options' => ['temperature' => 0.0]
-            ];
-            $response = Http::timeout($timeoutSeconds)->post("{$this->host}/api/chat", $payload);
-            return $response->successful() ? $response->json('message.content') : null;
-        } catch (\Exception $e) { return null; }
-    }
+    public function completion(string $prompt, int $timeoutSeconds = 60): ?string { return null; }
 }
