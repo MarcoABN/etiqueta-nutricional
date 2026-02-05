@@ -100,6 +100,10 @@ class ProcessProductImage implements ShouldQueue
                 }
 
                 $updates['ai_status'] = 'completed';
+
+                $updates['import_status'] = 'Processado (IA)';
+
+                
                 $updates['last_ai_processed_at'] = now();
                 $updates['ai_error_message'] = empty($errors) ? null : implode(" | ", $errors);
                 

@@ -77,6 +77,7 @@ class ProductResource extends Resource
                                     ->label('Status Importação')
                                     ->options([
                                         'Bloqueado' => 'Bloqueado',
+                                        'Processado (IA)' => 'Processado (IA)',
                                         'Em Análise' => 'Em Análise',
                                         'Liberado' => 'Liberado',
                                     ])
