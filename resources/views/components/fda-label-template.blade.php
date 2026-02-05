@@ -38,13 +38,7 @@
         ['Chromium', $product->chromium],
         ['Molybdenum', $product->molybdenum],
         ['Chloride', $product->chloride],
-    ])
-    ->filter(function($item) {
-        $val = $item[1];
-        if (blank($val)) return false;
-        $numeric = (float) preg_replace('/[^0-9.]/', '', $val);
-        return $numeric > 0;
-    }) 
+    ])->filter(fn($item) => filled($item[1])) 
     ->map(fn($item) => "{$item[0]} {$item[1]}")
     ->implode(', ');
 
@@ -96,15 +90,15 @@
             </div>
 
             @foreach([
-                ['Total Fat', $product->total_fat.'g', $product->total_fat_dv ?? '0', true],
-                ['Saturated Fat', $product->sat_fat.'g', $product->sat_fat_dv ?? '0', false, true],
-                ['Trans Fat', $product->trans_fat.'g', $product->trans_fat_dv ?? '0', false, true],
-                ['Cholesterol', $product->cholesterol.'mg', $product->cholesterol_dv ?? '0', true],
-                ['Sodium', $product->sodium.'mg', $product->sodium_dv ?? '0', true],
-                ['Total Carb.', $product->total_carb.'g', $product->total_carb_dv ?? '0', true],
-                ['Dietary Fiber', $product->fiber.'g', $product->fiber_dv ?? '0', false, true],
-                ['Total Sugars', $product->total_sugars.'g', $product->total_sugars_dv ?? '', false, true], 
-                ['Incl. Added Sugars', $product->added_sugars.'g', $product->added_sugars_dv ?? '0', false, true],
+                ['Total Fat', $product->total_fat.'g', $product->total_fat_dv, true],
+                ['Saturated Fat', $product->sat_fat.'g', $product->sat_fat_dv, false, true],
+                ['Trans Fat', $product->trans_fat.'g', '', false, true],
+                ['Cholesterol', $product->cholesterol.'mg', $product->cholesterol_dv, true],
+                ['Sodium', $product->sodium.'mg', $product->sodium_dv, true],
+                ['Total Carb.', $product->total_carb.'g', $product->total_carb_dv, true],
+                ['Dietary Fiber', $product->fiber.'g', $product->fiber_dv, false, true],
+                ['Total Sugars', $product->total_sugars.'g', '', false, true],
+                ['Incl. Added Sugars', $product->added_sugars.'g', $product->added_sugars_dv, false, true],
                 ['Protein', $product->protein.'g', $product->protein_dv, true],
             ] as $nutri)
                 <div style="border-top: 1px solid #000; display: flex; justify-content: space-between; {{ isset($nutri[4]) ? 'padding-left: 8px;' : '' }}">
@@ -112,9 +106,7 @@
                         @if($nutri[3]) <strong>{{ $nutri[0] }}</strong> @else {{ $nutri[0] }} @endif 
                         {{ $nutri[1] }}
                     </span>
-                    @if($nutri[2] !== '' && $nutri[2] !== null) 
-                        <strong>{{ $nutri[2] }}%</strong> 
-                    @endif
+                    @if($nutri[2]) <strong>{{ $nutri[2] }}%</strong> @endif
                 </div>
             @endforeach
             
@@ -141,10 +133,8 @@
                 margin-bottom: 4px; 
                 text-transform: uppercase; 
                 line-height: 1.0; 
-                max-height: 2.1em; 
-                display: block; 
-                overflow: hidden;
-                word-break: break-word;
+                display: block;
+                word-wrap: break-word;
             ">
                 {{ $product->product_name_en ?? $product->product_name }}
             </div>
@@ -178,6 +168,7 @@
     (function() {
         const scaleFactor = {{ $scale }};
 
+        // Função Genérica (Ingredientes)
         function fitTextGeneric(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
@@ -191,26 +182,43 @@
             });
         }
 
+        // --- NOVA LÓGICA DE RESIZING DO TÍTULO ---
         function fitTwoLines(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
-            // Convertemos minSizePt para Pixels
             const minPx = minSizePt * 1.33 * scaleFactor;
 
             elements.forEach(el => {
+                // 1. Reseta restrições para medir o tamanho REAL do texto
+                el.style.maxHeight = 'none';
+                el.style.overflow = 'visible';
+                
                 let currentFontSize = parseFloat(window.getComputedStyle(el).fontSize);
                 
-                // Verifica overflow. Se scrollHeight > clientHeight, tem coisa escondida.
-                // Reduz a fonte até caber tudo.
-                while (el.scrollHeight > el.clientHeight && currentFontSize > minPx) {
-                    currentFontSize -= 0.1; 
+                // Função auxiliar para calcular a altura de 2 linhas na fonte atual
+                const getMaxAllowedHeight = () => {
+                    const lineHeight = parseFloat(window.getComputedStyle(el).lineHeight);
+                    // 2 linhas + pequena tolerância (0.1) para renderização de subpixel
+                    return lineHeight * 2.1; 
+                };
+
+                // 2. Loop de redução agressivo
+                // Enquanto a altura real do texto for maior que a altura permitida para 2 linhas...
+                while (el.scrollHeight > getMaxAllowedHeight() && currentFontSize > minPx) {
+                    currentFontSize -= 0.2; // Reduz de 0.2px em 0.2px
                     el.style.fontSize = currentFontSize + 'px';
                 }
+
+                // 3. Trava de segurança final
+                el.style.overflow = 'hidden';
+                // Define altura fixa baseada no resultado final para garantir alinhamento
+                el.style.maxHeight = (parseFloat(window.getComputedStyle(el).lineHeight) * 2.1) + 'px';
             });
         }
         
         setTimeout(() => {
-            // Reduzi o mínimo para 3pt para garantir que textos longos apareçam completos
+            // Permite descer até 3pt (muito pequeno) para garantir que cabe
             fitTwoLines('.product-title-fit', 3.0); 
+            
             fitTextGeneric('.auto-fit-ingredients', 4.5);
         }, 100);
     })();
