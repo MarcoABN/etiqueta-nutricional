@@ -1,7 +1,6 @@
 @props(['product', 'settings'])
 
 @php
-    // Configurações de Fallback
     $settings = $settings ?? new \App\Models\LabelSetting([
         'padding_top' => 2,
         'padding_left' => 2,
@@ -13,7 +12,6 @@
 
     $scale = $settings->font_scale / 100;
 
-    // Lista de Micronutrientes
     $micronutrients = collect([
         ['Vitamin D', $product->vitamin_d],
         ['Calcium', $product->calcium],
@@ -142,10 +140,11 @@
                 font-size: 9pt; 
                 margin-bottom: 4px; 
                 text-transform: uppercase; 
-                line-height: 1.1; 
-                max-height: 2.25em; 
+                line-height: 1.0; 
+                max-height: 2.1em; 
                 display: block; 
                 overflow: hidden;
+                word-break: break-word;
             ">
                 {{ $product->product_name_en ?? $product->product_name }}
             </div>
@@ -179,14 +178,12 @@
     (function() {
         const scaleFactor = {{ $scale }};
 
-        // Função para Ingredientes (Preenche o espaço restante)
         function fitTextGeneric(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
 
             elements.forEach(el => {
                 let size = parseFloat(window.getComputedStyle(el).fontSize);
-                // Enquanto o conteúdo for maior que a caixa, diminui
                 while (el.offsetHeight > 0 && (el.scrollHeight > el.clientHeight) && size > minPx) {
                     size -= 0.2;
                     el.style.fontSize = size + 'px';
@@ -194,30 +191,26 @@
             });
         }
 
-        // Função Específica para Título (2 Linhas Rígidas)
         function fitTwoLines(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
+            // Convertemos minSizePt para Pixels
             const minPx = minSizePt * 1.33 * scaleFactor;
 
             elements.forEach(el => {
                 let currentFontSize = parseFloat(window.getComputedStyle(el).fontSize);
                 
-                // A lógica agora é simples: como definimos max-height: 2.25em no CSS,
-                // se o scrollHeight for maior que o offsetHeight, significa que
-                // o texto está tentando ocupar mais que o espaço permitido (3+ linhas).
-                
-                while (el.scrollHeight > el.offsetHeight && currentFontSize > minPx) {
-                    currentFontSize -= 0.1; // Redução fina
+                // Verifica overflow. Se scrollHeight > clientHeight, tem coisa escondida.
+                // Reduz a fonte até caber tudo.
+                while (el.scrollHeight > el.clientHeight && currentFontSize > minPx) {
+                    currentFontSize -= 0.1; 
                     el.style.fontSize = currentFontSize + 'px';
                 }
             });
         }
         
         setTimeout(() => {
-            // Título: Minimo 3.5pt para garantir que caiba em 2 linhas
-            fitTwoLines('.product-title-fit', 3.5); 
-            
-            // Ingredientes: Minimo 4.5pt
+            // Reduzi o mínimo para 3pt para garantir que textos longos apareçam completos
+            fitTwoLines('.product-title-fit', 3.0); 
             fitTextGeneric('.auto-fit-ingredients', 4.5);
         }, 100);
     })();
