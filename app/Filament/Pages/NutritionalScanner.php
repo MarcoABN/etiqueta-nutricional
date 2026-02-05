@@ -25,6 +25,7 @@ class NutritionalScanner extends Page implements HasForms
     public $foundProduct = null;
     public ?array $data = [];
 
+    // Listener para resetar via frontend se necessário
     protected $listeners = ['reset-scanner-ui' => 'resetScanner'];
 
     public function mount(): void 
@@ -41,6 +42,7 @@ class NutritionalScanner extends Page implements HasForms
                     ->image()
                     ->directory('uploads/nutritional')
                     ->disk('public')
+                    // Capture environment força a câmera traseira em mobiles no input file
                     ->extraInputAttributes(['capture' => 'environment', 'accept' => 'image/*'])
                     ->statePath('image_nutritional'),
             ])
@@ -50,7 +52,8 @@ class NutritionalScanner extends Page implements HasForms
     public function handleBarcodeScan($code)
     {
         $this->scannedCode = $code;
-        $product = Product::where('barcode', $code)->first(); // Ajuste 'barcode' se o nome da coluna for 'codprod' ou outro
+        // Ajuste conforme sua coluna real no banco (ex: 'barcode', 'ean', 'codprod')
+        $product = Product::where('barcode', $code)->first(); 
 
         if ($product) {
             $this->foundProduct = $product;
@@ -59,11 +62,12 @@ class NutritionalScanner extends Page implements HasForms
         } else {
             $this->foundProduct = null;
             Notification::make()->title('EAN não cadastrado')->danger()->send();
+            
+            // Dispara evento para reabrir a câmera no frontend
             $this->dispatch('reset-scanner');
         }
     }
 
-    
     public function save()
     {
         $state = $this->form->getState();
@@ -75,9 +79,6 @@ class NutritionalScanner extends Page implements HasForms
 
         if ($this->foundProduct && !empty($imagePath)) {
             
-            // BLINDAGEM CONTRA DUPLICIDADE:
-            // Usamos forceFill + saveQuietly para atualizar o banco SEM disparar 
-            // eventos (Observers) que poderiam lançar jobs duplicados automaticamente.
             $this->foundProduct->forceFill([
                 'image_nutritional' => $imagePath,
                 'ai_status' => 'pending'
@@ -85,7 +86,6 @@ class NutritionalScanner extends Page implements HasForms
 
             Log::info("NutritionalScanner: Imagem salva, disparando Job MANUALMENTE para {$this->foundProduct->id}");
 
-            // Disparo único e manual
             ProcessProductImage::dispatch($this->foundProduct);
 
             Notification::make()
@@ -106,6 +106,8 @@ class NutritionalScanner extends Page implements HasForms
         $this->foundProduct = null;
         $this->data = [];
         $this->form->fill();
+        
+        // Comando para o frontend reiniciar a câmera
         $this->dispatch('reset-scanner'); 
     }
 }

@@ -1,6 +1,5 @@
 <x-filament-panels::page>
 
-
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
@@ -15,8 +14,11 @@
         .hidden-uploader { display: none; } 
 
         /* Scanner */
-        #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; }
+        #scanner-view { position: absolute; inset: 0; z-index: 20; background: #000; transition: opacity 0.3s ease; }
+        #scanner-view.hidden { opacity: 0; pointer-events: none; z-index: -1; }
+        
         #reader { width: 100%; height: 100%; object-fit: cover; }
+        
         .btn-switch-camera { position: absolute; top: 25px; right: 25px; z-index: 50; width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, 0.3); color: white; }
         .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 160px; pointer-events: none; z-index: 30; box-shadow: 0 0 0 9999px rgba(0,0,0,0.75); border-radius: 20px; border: 2px solid rgba(255,255,255,0.4); }
         .scan-line { position: absolute; width: 100%; height: 2px; background: #22c55e; box-shadow: 0 0 15px #22c55e; animation: scanning 2s infinite ease-in-out; }
@@ -127,6 +129,7 @@
             let currentCameraId = null;
             let backCameras = [];
             let cropper = null;
+            let isScanning = false;
 
             // --- UI FUNCTIONS ---
             
@@ -157,7 +160,7 @@
                 }
             }
 
-            // --- CAMERA & CROP ---
+            // --- CAMERA FOTO & CROP (Lógica de arquivo) ---
 
             window.triggerCamera = function() {
                 document.getElementById('temp-camera-input').click();
@@ -175,7 +178,6 @@
 
                         if(cropper) cropper.destroy();
                         
-                        // Inicializa Cropper
                         cropper = new Cropper(img, {
                             viewMode: 1,
                             dragMode: 'move',
@@ -188,7 +190,7 @@
                             cropBoxResizable: true,
                             toggleDragModeOnDblclick: false,
                         });
-                        e.target.value = ''; // Reset input
+                        e.target.value = '';
                     }
                     reader.readAsDataURL(file);
                 }
@@ -199,44 +201,38 @@
                 if(cropper) { cropper.destroy(); cropper = null; }
             });
 
-            // --- AQUI ESTÁ A CORREÇÃO DE QUALIDADE ---
             document.getElementById('btn-crop-confirm').addEventListener('click', function() {
                 if (!cropper) return;
 
                 document.getElementById('crop-modal').classList.remove('active');
-                setUploadState(true); // Bloqueia UI e mostra loading
+                setUploadState(true);
 
-                // Gera o Canvas com alta qualidade e resolução aumentada
                 cropper.getCroppedCanvas({
-                    maxWidth: 1600,   // Limite aumentado para preservar detalhes de texto
+                    maxWidth: 1600,
                     maxHeight: 1600,
                     imageSmoothingEnabled: true,
                     imageSmoothingQuality: 'high',
                 }).toBlob((blob) => {
-                    
                     const url = URL.createObjectURL(blob);
                     showPreview(url);
 
-                    // Cria arquivo com qualidade JPEG máxima (1.0)
                     const file = new File([blob], "nutritional_label.jpg", { type: "image/jpeg" });
 
-                    // Upload manual Livewire
                     @this.upload('data.image_nutritional', file, (uploadedFilename) => {
-                        // SUCCESS
-                        setUploadState(false); // Libera botão de salvar
+                        setUploadState(false);
                         if(cropper) { cropper.destroy(); cropper = null; }
                     }, () => {
-                        // ERROR
                         alert('Erro ao enviar imagem. Tente novamente.');
                         setUploadState(false);
                         document.getElementById('btn-submit').disabled = true; 
                         if(cropper) { cropper.destroy(); cropper = null; }
                     });
 
-                }, 'image/jpeg', 0.9); // 1.0 = Qualidade Máxima (Sem compressão extra)
+                }, 'image/jpeg', 0.9);
             });
 
-            // --- SCANNER LOGIC (Barcode) ---
+            // --- SCANNER LOGIC (Barcode) - CORREÇÃO DE CICLO DE VIDA ---
+
             async function loadCameras() {
                 try {
                     const devices = await Html5Qrcode.getCameras();
@@ -244,47 +240,83 @@
                     if (backCameras.length === 0) backCameras = devices;
 
                     currentCameraId = backCameras[0].id;
-                    // Tenta achar câmera "wide" ou "0" (principal)
                     const wide = backCameras.find(c => c.label.toLowerCase().includes('0') || c.label.toLowerCase().includes('wide'));
                     if (wide) currentCameraId = wide.id;
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error("Erro ao carregar câmeras", e); }
+            }
+
+            // Função robusta para parar a câmera e limpar a instância
+            async function stopScanner() {
+                if (html5QrCode) {
+                    try {
+                        if(isScanning) {
+                            await html5QrCode.stop();
+                        }
+                        html5QrCode.clear(); // Limpa o DOM do reader
+                    } catch(e) { 
+                        console.log("Scanner já estava parado ou erro ao parar:", e); 
+                    }
+                    html5QrCode = null;
+                    isScanning = false;
+                }
             }
 
             async function startScanner() {
-                // Se já achou produto, não liga scanner
-                if (@json($foundProduct)) return;
+                // 1. Garante que tudo anterior foi limpo antes de tentar iniciar
+                await stopScanner();
                 
-                if (html5QrCode) { try { await html5QrCode.stop(); } catch(e) {} html5QrCode = null; }
-                document.getElementById('reader').innerHTML = '';
+                // 2. Reseta o container visualmente
+                const readerElem = document.getElementById('reader');
+                if(readerElem) readerElem.innerHTML = '';
                 
                 if (backCameras.length === 0) await loadCameras();
                 
+                // 3. Cria nova instância
                 html5QrCode = new Html5Qrcode("reader");
                 const config = { fps: 15, qrbox: { width: 250, height: 150 }, aspectRatio: 1.77 };
 
-                html5QrCode.start(currentCameraId, config, (decodedText) => {
-                    html5QrCode.stop().then(() => { 
-                        html5QrCode = null; 
-                        @this.handleBarcodeScan(decodedText); 
+                try {
+                    // 4. Inicia
+                    await html5QrCode.start(currentCameraId, config, (decodedText) => {
+                        // SUCESSO NO SCAN:
+                        // Para imediatamente a câmera para liberar hardware antes de processar
+                        stopScanner().then(() => {
+                            @this.handleBarcodeScan(decodedText); 
+                        });
                     });
-                }).catch(() => {});
+                    isScanning = true;
+                } catch (err) {
+                    console.error("Erro ao iniciar scanner:", err);
+                    isScanning = false;
+                }
             }
 
             document.getElementById('btn-switch')?.addEventListener('click', async () => {
                 if (backCameras.length < 2) return;
                 let index = backCameras.findIndex(c => c.id === currentCameraId);
                 currentCameraId = backCameras[(index + 1) % backCameras.length].id;
-                await startScanner();
+                await startScanner(); // startScanner já chama stopScanner internamente
             });
 
+            // Listener do Livewire
             Livewire.on('reset-scanner', () => { 
-                document.getElementById('empty-state').style.display = 'flex';
-                document.getElementById('preview-container').style.display = 'none';
-                document.getElementById('btn-submit').disabled = true;
-                setTimeout(startScanner, 600); 
+                // Reset visual da UI da foto
+                const emptyState = document.getElementById('empty-state');
+                const previewCont = document.getElementById('preview-container');
+                const btnSubmit = document.getElementById('btn-submit');
+
+                if(emptyState) emptyState.style.display = 'flex';
+                if(previewCont) previewCont.style.display = 'none';
+                if(btnSubmit) btnSubmit.disabled = true;
+
+                // Pequeno delay para garantir que o Livewire terminou de atualizar o DOM
+                // e removeu a classe 'hidden' do #scanner-view
+                setTimeout(() => {
+                    startScanner(); 
+                }, 500); 
             });
             
-            // Inicia ao carregar
+            // Inicia ao carregar a página pela primeira vez
             startScanner();
         });
     </script>
