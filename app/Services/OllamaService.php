@@ -4,7 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-
+//Commit estável 2
 class OllamaService
 {
     protected string $host;
