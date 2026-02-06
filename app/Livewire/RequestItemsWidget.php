@@ -24,7 +24,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     public Request $requestRecord;
 
     // Controle de Edição
-    public ?string $editingItemId = null; // Armazena o ID se estivermos editando
+    public ?string $editingItemId = null;
 
     // Dados do formulário
     public $product_id;
@@ -54,8 +54,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->placeholder('Digite Nome, Cód ou EAN')
                                     ->searchable()
                                     ->live()
-                                    // Desabilita busca durante edição para evitar inconsistência (opcional, mas recomendado)
-                                    // ->disabled(fn () => $this->editingItemId !== null) 
                                     ->getSearchResultsUsing(function (string $search) {
                                         return Product::query()
                                             ->where(function ($query) use ($search) {
@@ -108,16 +106,14 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->required()
                                     ->columnSpan(1),
 
-                                // 3. BOTÕES DE AÇÃO (SALVAR / CANCELAR)
+                                // 3. BOTÕES DE AÇÃO
                                 Forms\Components\Actions::make([
-                                    // Botão Salvar / Atualizar
                                     Forms\Components\Actions\Action::make('save')
                                         ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
                                         ->icon(fn () => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
                                         ->color(fn () => $this->editingItemId ? 'warning' : 'primary')
                                         ->action(fn () => $this->saveItem()),
 
-                                    // Botão Cancelar (Só aparece editando)
                                     Forms\Components\Actions\Action::make('cancel')
                                         ->label('CANCELAR')
                                         ->icon('heroicon-m-x-mark')
@@ -126,7 +122,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                         ->visible(fn () => $this->editingItemId !== null),
                                 ])
                                 ->columnSpan(2)
-                                ->extraAttributes(['class' => 'mt-6 gap-2']) // gap-2 separa os botões
+                                ->extraAttributes(['class' => 'mt-6 gap-2'])
                                 ->alignCenter(),
                             ]),
                             
@@ -142,12 +138,11 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         $data = $this->form->getState();
         $prodId = $data['product_id'] ?? null;
 
-        // --- VALIDAÇÃO DE DUPLICIDADE ---
-        // Apenas se tiver produto vinculado E não estivermos editando o mesmo item
+        // VALIDAÇÃO DE DUPLICIDADE
         if ($prodId) {
             $exists = RequestItem::where('request_id', $this->requestRecord->id)
                 ->where('product_id', $prodId)
-                ->when($this->editingItemId, fn ($q) => $q->where('id', '!=', $this->editingItemId)) // Ignora o próprio item se estiver editando
+                ->when($this->editingItemId, fn ($q) => $q->where('id', '!=', $this->editingItemId))
                 ->exists();
 
             if ($exists) {
@@ -161,7 +156,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         }
 
         if ($this->editingItemId) {
-            // --- ATUALIZAÇÃO ---
             $item = RequestItem::find($this->editingItemId);
             $item->update([
                 'product_id' => $data['product_id'],
@@ -173,9 +167,8 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 'winthor_code' => Product::find($prodId)?->codprod,
             ]);
             
-            Notification::make()->title('Item atualizado com sucesso')->success()->send();
+            Notification::make()->title('Item atualizado')->success()->send();
         } else {
-            // --- CRIAÇÃO ---
             RequestItem::create([
                 'request_id' => $this->requestRecord->id,
                 'product_id' => $prodId,
@@ -193,15 +186,12 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         $this->resetInput();
     }
 
-    // Carrega os dados da tabela para o formulário
     public function editItem($itemId)
     {
         $item = RequestItem::find($itemId);
-        
         if (!$item) return;
 
         $this->editingItemId = $itemId;
-        
         $this->form->fill([
             'product_id' => $item->product_id,
             'product_name' => $item->product_name,
@@ -241,21 +231,16 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->weight('bold')
                     ->wrap(),
                 
-                Tables\Columns\TextColumn::make('quantity')
-                    ->label('Qtd')
-                    ->alignCenter(),
-                
+                Tables\Columns\TextColumn::make('quantity')->label('Qtd')->alignCenter(),
                 Tables\Columns\TextColumn::make('packaging')->label('Emb'),
-                
                 Tables\Columns\TextColumn::make('shipping_type')
                     ->label('Envio')
                     ->badge()
                     ->color(fn ($state) => $state === 'Aereo' ? 'warning' : 'info'),
-
                 Tables\Columns\TextColumn::make('observation')->label('Obs')->limit(20),
             ])
             ->actions([
-                // 1. BOTÃO EDITAR
+                // Botão Editar (Customizado)
                 Tables\Actions\Action::make('edit_line')
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
@@ -263,33 +248,20 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->tooltip('Editar este item')
                     ->action(fn (RequestItem $record) => $this->editItem($record->id)),
 
-                // 2. BOTÃO EXCLUIR (Com Confirmação e Force Delete)
-                Tables\Actions\Action::make('delete_item')
-                    ->label('')
-                    ->icon('heroicon-m-trash')
-                    ->color('danger')
-                    ->tooltip('Excluir item')
-                    
-                    // --- AQUI ESTÁ O RETORNO DA CONFIRMAÇÃO ---
-                    ->requiresConfirmation() 
-                    ->modalHeading('Excluir Item')
-                    ->modalDescription('Tem certeza que deseja excluir este item permanentemente?')
-                    ->modalSubmitActionLabel('Sim, excluir')
-                    // ------------------------------------------
-
-                    ->action(function (RequestItem $record) {
-                        // Se estiver editando este item, cancela a edição para não dar erro
+                // --- BOTÃO DE EXCLUIR NATIVO (CORRIGIDO) ---
+                Tables\Actions\DeleteAction::make()
+                    ->tooltip('Excluir item permanentemente')
+                    ->before(function (RequestItem $record) {
+                        // Cancela edição se for o item sendo excluído
                         if ($this->editingItemId === $record->id) {
                             $this->resetInput();
                         }
-
-                        // Executa a exclusão definitiva (SQL DELETE)
+                    })
+                    ->action(function (RequestItem $record) {
+                        // Sobrescreve o comportamento padrão (Soft) pelo Force Delete
                         $record->forceDelete();
-
-                        Notification::make()
-                            ->title('Item excluído')
-                            ->success()
-                            ->send();
+                        
+                        Notification::make()->title('Item excluído')->success()->send();
                     }),
             ])
             ->paginated(false);
