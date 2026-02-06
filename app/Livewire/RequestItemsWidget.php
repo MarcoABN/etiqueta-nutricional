@@ -23,7 +23,10 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
 
     public Request $requestRecord;
 
-    // Propriedades do Formulário
+    // Controle de Edição
+    public ?string $editingItemId = null; // Armazena o ID se estivermos editando
+
+    // Dados do formulário
     public $product_id;
     public $product_name;
     public $quantity = 1;
@@ -40,7 +43,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Adicionar Item')
+                Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Item')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(12)
@@ -51,51 +54,39 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->placeholder('Digite Nome, Cód ou EAN')
                                     ->searchable()
                                     ->live()
-                                    // --- INÍCIO DA MELHORIA DA PESQUISA ---
+                                    // Desabilita busca durante edição para evitar inconsistência (opcional, mas recomendado)
+                                    // ->disabled(fn () => $this->editingItemId !== null) 
                                     ->getSearchResultsUsing(function (string $search) {
                                         return Product::query()
                                             ->where(function ($query) use ($search) {
-                                                // 1. Busca por NOME (Aceita palavras fora de ordem)
                                                 $query->where(function ($subQuery) use ($search) {
-                                                    // Quebra a busca em palavras (ex: "top meio" -> ["top", "meio"])
                                                     $terms = array_filter(explode(' ', $search));
-
                                                     foreach ($terms as $term) {
-                                                        // O produto deve conter ESTA palavra (AND)
-                                                        // 'ilike' garante que não diferencia maiúscula/minúscula no Postgres
                                                         $subQuery->where('product_name', 'ilike', "%{$term}%");
                                                     }
                                                 });
-
-                                                // 2. OU busca por Cód. WinThor (Convertendo para texto para evitar erro no Postgres)
                                                 $query->orWhereRaw("CAST(codprod AS TEXT) ILIKE ?", ["%{$search}%"]);
-
-                                                // 3. OU busca por Código de Barras
                                                 $query->orWhere('barcode', 'ilike', "%{$search}%");
                                             })
-                                            ->limit(50) // Aumentei o limite para facilitar
+                                            ->limit(50)
                                             ->get()
-                                            ->mapWithKeys(fn($p) => [$p->id => "{$p->codprod} - {$p->product_name}"]);
+                                            ->mapWithKeys(fn ($p) => [$p->id => "{$p->codprod} - {$p->product_name}"]);
                                     })
-                                    // --- FIM DA MELHORIA ---
-                                    ->getOptionLabelUsing(fn($value): ?string => Product::find($value)?->product_name)
+                                    ->getOptionLabelUsing(fn ($value): ?string => Product::find($value)?->product_name)
                                     ->afterStateUpdated(function ($state, Forms\Set $set) {
                                         if ($product = Product::find($state)) {
                                             $set('product_name', $product->product_name);
                                             $set('packaging', $product->serving_size_unit ?? 'UN');
-                                            // Garante que o código WinThor seja salvo no item oculto (se existir no seu form)
-                                            // $set('winthor_code', $product->codprod); 
                                         }
                                     })
                                     ->columnSpan(4),
 
-                                // 2. NOME DO ITEM
+                                // 2. DADOS DO ITEM
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
                                     ->columnSpan(3),
 
-                                // 3. DADOS QUANTITATIVOS
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
@@ -105,65 +96,133 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
 
                                 Forms\Components\Select::make('packaging')
                                     ->label('Emb')
-                                    ->options(['CX' => 'CX', 'UN' => 'UN', 'DP' => 'DP', 'PCT' => 'PCT', 'FD' => 'FD'])
+                                    ->options(['CX'=>'CX', 'UN'=>'UN', 'DP'=>'DP', 'PCT'=>'PCT', 'FD'=>'FD'])
                                     ->default('UN')
                                     ->required()
                                     ->columnSpan(1),
 
                                 Forms\Components\Select::make('shipping_type')
                                     ->label('Envio')
-                                    ->options(['Maritimo' => 'Mar', 'Aereo' => 'Aér'])
+                                    ->options(['Maritimo'=>'Mar', 'Aereo'=>'Aér'])
                                     ->default('Maritimo')
                                     ->required()
                                     ->columnSpan(1),
 
-                                // 4. BOTÃO INCLUIR (Dentro de um container Actions para alinhar)
+                                // 3. BOTÕES DE AÇÃO (SALVAR / CANCELAR)
                                 Forms\Components\Actions::make([
-                                    Forms\Components\Actions\Action::make('add')
-                                        ->label('INCLUIR')
-                                        ->icon('heroicon-m-plus')
-                                        ->color('primary')
-                                        ->action(fn() => $this->addItem())
-                                ])
-                                    ->columnSpan(2)
-                                    ->extraAttributes(['class' => 'mt-6']) // Alinhamento vertical com inputs
-                                    ->alignCenter(),
-                            ]),
+                                    // Botão Salvar / Atualizar
+                                    Forms\Components\Actions\Action::make('save')
+                                        ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
+                                        ->icon(fn () => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
+                                        ->color(fn () => $this->editingItemId ? 'warning' : 'primary')
+                                        ->action(fn () => $this->saveItem()),
 
+                                    // Botão Cancelar (Só aparece editando)
+                                    Forms\Components\Actions\Action::make('cancel')
+                                        ->label('CANCELAR')
+                                        ->icon('heroicon-m-x-mark')
+                                        ->color('gray')
+                                        ->action(fn () => $this->resetInput())
+                                        ->visible(fn () => $this->editingItemId !== null),
+                                ])
+                                ->columnSpan(2)
+                                ->extraAttributes(['class' => 'mt-6 gap-2']) // gap-2 separa os botões
+                                ->alignCenter(),
+                            ]),
+                            
                         Forms\Components\TextInput::make('observation')
-                            ->label('Observação (Opcional)')
-                            ->placeholder('Detalhes adicionais...')
+                            ->label('Observação')
                             ->columnSpanFull(),
                     ])
             ]);
     }
 
-    public function addItem()
+    public function saveItem()
     {
         $data = $this->form->getState();
+        $prodId = $data['product_id'] ?? null;
 
-        // Criação Segura e Imediata
-        RequestItem::create([
-            'request_id' => $this->requestRecord->id,
-            'product_id' => $data['product_id'] ?? null,
-            'product_name' => $data['product_name'],
-            'quantity' => $data['quantity'],
-            'packaging' => $data['packaging'],
-            'shipping_type' => $data['shipping_type'],
-            'observation' => $data['observation'],
-            'winthor_code' => Product::find($data['product_id'] ?? null)?->codprod,
+        // --- VALIDAÇÃO DE DUPLICIDADE ---
+        // Apenas se tiver produto vinculado E não estivermos editando o mesmo item
+        if ($prodId) {
+            $exists = RequestItem::where('request_id', $this->requestRecord->id)
+                ->where('product_id', $prodId)
+                ->when($this->editingItemId, fn ($q) => $q->where('id', '!=', $this->editingItemId)) // Ignora o próprio item se estiver editando
+                ->exists();
+
+            if ($exists) {
+                Notification::make()
+                    ->title('Item Duplicado')
+                    ->body('Este produto já foi adicionado a este pedido.')
+                    ->warning()
+                    ->send();
+                return;
+            }
+        }
+
+        if ($this->editingItemId) {
+            // --- ATUALIZAÇÃO ---
+            $item = RequestItem::find($this->editingItemId);
+            $item->update([
+                'product_id' => $data['product_id'],
+                'product_name' => $data['product_name'],
+                'quantity' => $data['quantity'],
+                'packaging' => $data['packaging'],
+                'shipping_type' => $data['shipping_type'],
+                'observation' => $data['observation'],
+                'winthor_code' => Product::find($prodId)?->codprod,
+            ]);
+            
+            Notification::make()->title('Item atualizado com sucesso')->success()->send();
+        } else {
+            // --- CRIAÇÃO ---
+            RequestItem::create([
+                'request_id' => $this->requestRecord->id,
+                'product_id' => $prodId,
+                'product_name' => $data['product_name'],
+                'quantity' => $data['quantity'],
+                'packaging' => $data['packaging'],
+                'shipping_type' => $data['shipping_type'],
+                'observation' => $data['observation'],
+                'winthor_code' => Product::find($prodId)?->codprod,
+            ]);
+
+            Notification::make()->title('Item incluído')->success()->send();
+        }
+
+        $this->resetInput();
+    }
+
+    // Carrega os dados da tabela para o formulário
+    public function editItem($itemId)
+    {
+        $item = RequestItem::find($itemId);
+        
+        if (!$item) return;
+
+        $this->editingItemId = $itemId;
+        
+        $this->form->fill([
+            'product_id' => $item->product_id,
+            'product_name' => $item->product_name,
+            'quantity' => $item->quantity,
+            'packaging' => $item->packaging,
+            'shipping_type' => $item->shipping_type,
+            'observation' => $item->observation,
         ]);
+    }
 
-        // Reset do Formulário
+    public function resetInput()
+    {
+        $this->editingItemId = null;
         $this->form->fill([
             'product_id' => null,
             'product_name' => '',
             'quantity' => 1,
             'packaging' => 'UN',
+            'shipping_type' => 'Maritimo',
             'observation' => '',
         ]);
-
-        Notification::make()->title('Item adicionado')->success()->send();
     }
 
     public function table(Table $table): Table
@@ -173,53 +232,44 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 RequestItem::query()
                     ->where('request_id', $this->requestRecord->id)
                     ->orderBy('created_at', 'desc')
-                    ->withTrashed() // Exibe itens excluídos para permitir restauração
+                    // Removemos withTrashed() pois o usuário quer Excluir em Definitivo nesta tela
             )
             ->heading('Itens Gravados')
             ->columns([
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
-                    ->description(fn($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
+                    ->description(fn ($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
                     ->weight('bold')
                     ->wrap(),
-
+                
                 Tables\Columns\TextColumn::make('quantity')
                     ->label('Qtd')
                     ->alignCenter(),
-
-                Tables\Columns\TextColumn::make('packaging')
-                    ->label('Emb'),
-
+                
+                Tables\Columns\TextColumn::make('packaging')->label('Emb'),
+                
                 Tables\Columns\TextColumn::make('shipping_type')
                     ->label('Envio')
                     ->badge()
-                    ->color(fn($state) => $state === 'Aereo' ? 'warning' : 'info'),
+                    ->color(fn ($state) => $state === 'Aereo' ? 'warning' : 'info'),
 
-                Tables\Columns\TextColumn::make('observation')
-                    ->label('Obs')
-                    ->limit(30),
-
-                // Badge de Excluído
-                Tables\Columns\TextColumn::make('deleted_at')
-                    ->label('Status')
-                    ->badge()
-                    ->color('danger')
-                    ->formatStateUsing(fn($state) => $state ? 'LIXEIRA' : null)
-                    ->getStateUsing(fn($record) => $record->deleted_at),
+                Tables\Columns\TextColumn::make('observation')->label('Obs')->limit(20),
             ])
             ->actions([
-                // Excluir (Soft Delete)
-                Tables\Actions\DeleteAction::make()
+                // BOTÃO EDITAR (Sobe os dados para o form)
+                Tables\Actions\Action::make('edit_line')
                     ->label('')
-                    ->tooltip('Excluir item'),
+                    ->icon('heroicon-m-pencil-square')
+                    ->color('warning')
+                    ->tooltip('Editar este item')
+                    ->action(fn (RequestItem $record) => $this->editItem($record->id)),
 
-                // Restaurar (Aparece apenas se excluído)
-                Tables\Actions\RestoreAction::make()
-                    ->label('Desfazer')
-                    ->button()
-                    ->size('xs'),
+                // BOTÃO EXCLUIR EM DEFINITIVO (Force Delete)
+                Tables\Actions\ForceDeleteAction::make()
+                    ->label('')
+                    ->tooltip('Excluir permanentemente'),
             ])
-            ->paginated(false); // Lista fluida sem paginação
+            ->paginated(false);
     }
 
     public function render()
