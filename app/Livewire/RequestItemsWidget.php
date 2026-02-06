@@ -30,7 +30,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     public $product_id;
     public $product_name;
     public $quantity = 1;
-    public $packaging = 'CX'; // Padrão mantido como CX
+    public $packaging = 'CX';
     public $shipping_type = 'Maritimo';
     public $observation;
 
@@ -46,11 +46,12 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Item')
                     ->compact()
                     ->schema([
-                        Forms\Components\Grid::make(12)
+                        // TRUQUE: Aumentamos o Grid para 24 para permitir "meias colunas" (ex: 3/24 = 1.5/12)
+                        Forms\Components\Grid::make(24)
                             ->schema([
-                                // LINHA 1: PRODUTO E DETALHES (Total 12 colunas)
+                                // LINHA 1: Total 24 colunas
                                 
-                                // 1. Busca (Reduzido para 3 colunas)
+                                // 1. Busca (7 colunas - um pouco menos que 1/3)
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
                                     ->placeholder('Nome/Cód')
@@ -76,47 +77,48 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->afterStateUpdated(function ($state, Forms\Set $set) {
                                         if ($product = Product::find($state)) {
                                             $set('product_name', $product->product_name);
-                                            // Prioriza a unidade do produto, senão usa CX como fallback
                                             $set('packaging', $product->serving_size_unit ?? 'CX');
                                         }
                                     })
-                                    ->columnSpan(3), // Reduzido de 5 para 3
+                                    ->columnSpan(7),
 
-                                // 2. Nome do Item (Reduzido para 3 colunas)
+                                // 2. Nome do Item (8 colunas - 1/3 da tela)
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
-                                    ->columnSpan(3), // Reduzido de 4 para 3
+                                    ->columnSpan(8),
 
-                                // 3. Campos Menores (Aumentados para 2 colunas cada)
+                                // 3. Campos Menores (3 colunas cada = 12.5% cada)
+                                // Isso equivale a "1.5" na escala de 12 colunas
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
                                     ->default(1)
                                     ->required()
-                                    ->columnSpan(2), // Aumentado de 1 para 2
+                                    ->columnSpan(3),
 
                                 Forms\Components\Select::make('packaging')
                                     ->label('Emb')
                                     ->options(['CX'=>'CX', 'UN'=>'UN', 'DP'=>'DP', 'PCT'=>'PCT', 'FD'=>'FD'])
                                     ->default('CX')
                                     ->required()
-                                    ->columnSpan(2), // Aumentado de 1 para 2
+                                    ->columnSpan(3),
 
                                 Forms\Components\Select::make('shipping_type')
                                     ->label('Envio')
                                     ->options(['Maritimo'=>'Mar', 'Aereo'=>'Aér'])
                                     ->default('Maritimo')
                                     ->required()
-                                    ->columnSpan(2), // Aumentado de 1 para 2
+                                    ->columnSpan(3),
 
-                                // LINHA 2: OBSERVAÇÃO E AÇÕES
-                                // Observação (Mantido 9 colunas)
+                                // LINHA 2: OBSERVAÇÃO E AÇÕES (Total 24 colunas)
+                                
+                                // Observação (18 colunas = 75%)
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação')
-                                    ->columnSpan(9),
+                                    ->columnSpan(18),
 
-                                // Botões de Ação (Mantido 3 colunas)
+                                // Botões (6 colunas = 25%)
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
                                         ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
@@ -131,7 +133,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                         ->action(fn () => $this->resetInput())
                                         ->visible(fn () => $this->editingItemId !== null),
                                 ])
-                                ->columnSpan(3)
+                                ->columnSpan(6)
                                 ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2']) 
                                 ->alignRight(),
                             ]),
