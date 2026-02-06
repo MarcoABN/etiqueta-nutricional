@@ -43,7 +43,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     {
         return $form
             ->schema([
-                Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Item')
+                Forms\Components\Section::make(fn() => $this->editingItemId ? 'Editar Item' : 'Adicionar Item')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(12)
@@ -68,9 +68,9 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                             })
                                             ->limit(50)
                                             ->get()
-                                            ->mapWithKeys(fn ($p) => [$p->id => "{$p->codprod} - {$p->product_name}"]);
+                                            ->mapWithKeys(fn($p) => [$p->id => "{$p->codprod} - {$p->product_name}"]);
                                     })
-                                    ->getOptionLabelUsing(fn ($value): ?string => Product::find($value)?->product_name)
+                                    ->getOptionLabelUsing(fn($value): ?string => Product::find($value)?->product_name)
                                     ->afterStateUpdated(function ($state, Forms\Set $set) {
                                         if ($product = Product::find($state)) {
                                             $set('product_name', $product->product_name);
@@ -94,14 +94,14 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
 
                                 Forms\Components\Select::make('packaging')
                                     ->label('Emb')
-                                    ->options(['CX'=>'CX', 'UN'=>'UN', 'DP'=>'DP', 'PCT'=>'PCT', 'FD'=>'FD'])
+                                    ->options(['CX' => 'CX', 'UN' => 'UN', 'DP' => 'DP', 'PCT' => 'PCT', 'FD' => 'FD'])
                                     ->default('UN')
                                     ->required()
                                     ->columnSpan(1),
 
                                 Forms\Components\Select::make('shipping_type')
                                     ->label('Envio')
-                                    ->options(['Maritimo'=>'Mar', 'Aereo'=>'Aér'])
+                                    ->options(['Maritimo' => 'Mar', 'Aereo' => 'Aér'])
                                     ->default('Maritimo')
                                     ->required()
                                     ->columnSpan(1),
@@ -109,23 +109,23 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                 // 3. BOTÕES DE AÇÃO
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
-                                        ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
-                                        ->icon(fn () => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
-                                        ->color(fn () => $this->editingItemId ? 'warning' : 'primary')
-                                        ->action(fn () => $this->saveItem()),
+                                        ->label(fn() => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
+                                        ->icon(fn() => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
+                                        ->color(fn() => $this->editingItemId ? 'warning' : 'primary')
+                                        ->action(fn() => $this->saveItem()),
 
                                     Forms\Components\Actions\Action::make('cancel')
                                         ->label('CANCELAR')
                                         ->icon('heroicon-m-x-mark')
                                         ->color('gray')
-                                        ->action(fn () => $this->resetInput())
-                                        ->visible(fn () => $this->editingItemId !== null),
+                                        ->action(fn() => $this->resetInput())
+                                        ->visible(fn() => $this->editingItemId !== null),
                                 ])
-                                ->columnSpan(2)
-                                ->extraAttributes(['class' => 'mt-6 gap-2'])
-                                ->alignCenter(),
+                                    ->columnSpan(2)
+                                    ->extraAttributes(['class' => 'mt-6 gap-2'])
+                                    ->alignCenter(),
                             ]),
-                            
+
                         Forms\Components\TextInput::make('observation')
                             ->label('Observação')
                             ->columnSpanFull(),
@@ -142,7 +142,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         if ($prodId) {
             $exists = RequestItem::where('request_id', $this->requestRecord->id)
                 ->where('product_id', $prodId)
-                ->when($this->editingItemId, fn ($q) => $q->where('id', '!=', $this->editingItemId))
+                ->when($this->editingItemId, fn($q) => $q->where('id', '!=', $this->editingItemId))
                 ->exists();
 
             if ($exists) {
@@ -166,7 +166,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 'observation' => $data['observation'],
                 'winthor_code' => Product::find($prodId)?->codprod,
             ]);
-            
+
             Notification::make()->title('Item atualizado')->success()->send();
         } else {
             RequestItem::create([
@@ -227,41 +227,48 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
             ->columns([
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
-                    ->description(fn ($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
+                    ->description(fn($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
                     ->weight('bold')
                     ->wrap(),
-                
-                Tables\Columns\TextColumn::make('quantity')->label('Qtd')->alignCenter(),
-                Tables\Columns\TextColumn::make('packaging')->label('Emb'),
+
+                Tables\Columns\TextColumn::make('quantity')
+                    ->label('Qtd')
+                    ->alignCenter(),
+
+                Tables\Columns\TextColumn::make('packaging')
+                    ->label('Emb'),
+
                 Tables\Columns\TextColumn::make('shipping_type')
                     ->label('Envio')
                     ->badge()
-                    ->color(fn ($state) => $state === 'Aereo' ? 'warning' : 'info'),
-                Tables\Columns\TextColumn::make('observation')->label('Obs')->limit(20),
+                    ->color(fn($state) => $state === 'Aereo' ? 'warning' : 'info'),
+
+                Tables\Columns\TextColumn::make('observation')
+                    ->label('Obs')
+                    ->limit(20),
             ])
             ->actions([
-                // Botão Editar (Customizado)
+                // 1. Botão Editar (Customizado)
                 Tables\Actions\Action::make('edit_line')
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
                     ->color('warning')
                     ->tooltip('Editar este item')
-                    ->action(fn (RequestItem $record) => $this->editItem($record->id)),
+                    ->action(fn(RequestItem $record) => $this->editItem($record->id)),
 
-                // --- BOTÃO DE EXCLUIR NATIVO (CORRIGIDO) ---
+                // 2. Botão Excluir Nativo (Com comportamento ajustado)
                 Tables\Actions\DeleteAction::make()
                     ->tooltip('Excluir item permanentemente')
                     ->before(function (RequestItem $record) {
-                        // Cancela edição se for o item sendo excluído
+                        // Se estivermos editando o item que será excluído, limpa o formulário
                         if ($this->editingItemId === $record->id) {
                             $this->resetInput();
                         }
                     })
-                    ->action(function (RequestItem $record) {
-                        // Sobrescreve o comportamento padrão (Soft) pelo Force Delete
+                    // O método 'using' customiza APENAS a execução da exclusão
+                    // mantendo todo o resto (modal, notificação, refresh) funcionando padrão.
+                    ->using(function (RequestItem $record) {
                         $record->forceDelete();
-                        
-                        Notification::make()->title('Item excluído')->success()->send();
                     }),
             ])
             ->paginated(false);
