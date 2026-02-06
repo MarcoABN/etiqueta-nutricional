@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ProductResource\Pages;
 use App\Models\Product;
 use App\Services\GeminiFdaTranslator;
+use App\Services\OpenFoodFactsService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Components\Group;
@@ -13,6 +14,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Actions\Action;
+use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -58,10 +61,46 @@ class ProductResource extends Resource
                                     ->numeric()
                                     ->unique(ignoreRecord: true)
                                     ->columnSpan(2),
+                                
+                                // --- CORREÇÃO AQUI NO ACTION ---
                                 TextInput::make('barcode')
                                     ->label('Cód. Barras')
                                     ->unique(ignoreRecord: true)
-                                    ->columnSpan(3),
+                                    ->columnSpan(3)
+                                    ->suffixAction(
+                                        Action::make('searchApi')
+                                            ->icon('heroicon-o-cloud-arrow-down')
+                                            ->tooltip('Buscar dados na Open Food Facts')
+                                            ->color('info')
+                                            ->action(function ($state, Set $set) {
+                                                if (!$state) {
+                                                    Notification::make()->title('Preencha o código de barras primeiro')->warning()->send();
+                                                    return;
+                                                }
+
+                                                $service = new OpenFoodFactsService();
+                                                $data = $service->fetchProductData($state);
+
+                                                if (!$data) {
+                                                    Notification::make()->title('Produto não encontrado na API')->danger()->send();
+                                                    return;
+                                                }
+
+                                                // Preencher os campos automaticamente
+                                                foreach ($data as $key => $value) {
+                                                    if ($value !== null) {
+                                                        // FIX: O FileUpload exige um array no estado do formulário
+                                                        if ($key === 'image_nutritional') {
+                                                            $set($key, [$value]);
+                                                        } else {
+                                                            $set($key, $value);
+                                                        }
+                                                    }
+                                                }
+
+                                                Notification::make()->title('Dados importados com sucesso!')->success()->send();
+                                            })
+                                    ),
 
                                 Select::make('curve')
                                     ->label('Curva')
@@ -73,9 +112,10 @@ class ProductResource extends Resource
                                     ->columnSpan(2),
 
                                 Select::make('import_status')
-                                    ->label('Status Importação')
+                                    ->label('Status')
                                     ->options([
                                         'Bloqueado' => 'Bloqueado',
+                                        'Dados via API' => 'Dados via API',
                                         'Processado (IA)' => 'Processado (IA)',
                                         'Em Análise' => 'Em Análise',
                                         'Liberado' => 'Liberado',
@@ -153,11 +193,33 @@ class ProductResource extends Resource
                 Section::make('Rotulagem e Ingredientes')
                     ->compact()
                     ->schema([
-                        Forms\Components\Grid::make(3)->schema([
-                            Textarea::make('ingredients')->label('Lista de Ingredientes (Inglês)')->rows(4)->columnSpan(2),
+                        Forms\Components\Grid::make(2)->schema([
+                            // Lado Esquerdo: PT-BR
                             Group::make()->schema([
-                                TextInput::make('allergens_contains')->label('CONTÉM (Alérgicos)'),
-                                TextInput::make('allergens_may_contain')->label('PODE CONTER'),
+                                Textarea::make('ingredients_pt')
+                                    ->label('Lista de Ingredientes (PT-BR)')
+                                    ->placeholder('Ingredientes em português...')
+                                    ->rows(5),
+                                
+                                TextInput::make('allergens_contains_pt')
+                                    ->label('CONTÉM (PT-BR)'),
+                                
+                                TextInput::make('allergens_may_contain_pt')
+                                    ->label('PODE CONTER (PT-BR)'),
+                            ])->columnSpan(1),
+
+                            // Lado Direito: EN
+                            Group::make()->schema([
+                                Textarea::make('ingredients')
+                                    ->label('Lista de Ingredientes (Original/EN)')
+                                    ->placeholder('Ingredientes originais ou em inglês...')
+                                    ->rows(5),
+                                
+                                TextInput::make('allergens_contains')
+                                    ->label('CONTÉM (EN)'),
+                                
+                                TextInput::make('allergens_may_contain')
+                                    ->label('PODE CONTER (EN)'),
                             ])->columnSpan(1),
                         ]),
                     ]),
@@ -168,37 +230,37 @@ class ProductResource extends Resource
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(4)->schema([
-                            TextInput::make('vitamin_d')->label('Vit D'),
-                            TextInput::make('calcium')->label('Cálcio'),
-                            TextInput::make('iron')->label('Ferro'),
-                            TextInput::make('potassium')->label('Potássio'),
+                            TextInput::make('vitamin_d')->label('Vit D (mcg)'),
+                            TextInput::make('calcium')->label('Cálcio (mg)'),
+                            TextInput::make('iron')->label('Ferro (mg)'),
+                            TextInput::make('potassium')->label('Potássio (mg)'),
 
-                            TextInput::make('vitamin_a')->label('Vit A'),
-                            TextInput::make('vitamin_c')->label('Vit C'),
-                            TextInput::make('vitamin_e')->label('Vit E'),
-                            TextInput::make('vitamin_k')->label('Vit K'),
+                            TextInput::make('vitamin_a')->label('Vit A (mcg)'),
+                            TextInput::make('vitamin_c')->label('Vit C (mg)'),
+                            TextInput::make('vitamin_e')->label('Vit E (mg)'),
+                            TextInput::make('vitamin_k')->label('Vit K (mcg)'),
 
-                            TextInput::make('thiamin')->label('Tiamina (B1)'),
-                            TextInput::make('riboflavin')->label('Riboflavina (B2)'),
-                            TextInput::make('niacin')->label('Niacina (B3)'),
-                            TextInput::make('vitamin_b6')->label('Vit B6'),
+                            TextInput::make('thiamin')->label('Tiamina B1 (mg)'),
+                            TextInput::make('riboflavin')->label('Riboflavina B2 (mg)'),
+                            TextInput::make('niacin')->label('Niacina B3 (mg)'),
+                            TextInput::make('vitamin_b6')->label('Vit B6 (mg)'),
 
-                            TextInput::make('folate')->label('Folato'),
-                            TextInput::make('vitamin_b12')->label('Vit B12'),
-                            TextInput::make('biotin')->label('Biotina'),
-                            TextInput::make('pantothenic_acid')->label('Ác. Pantotênico'),
+                            TextInput::make('folate')->label('Folato (mcg)'),
+                            TextInput::make('vitamin_b12')->label('Vit B12 (mcg)'),
+                            TextInput::make('biotin')->label('Biotina (mcg)'),
+                            TextInput::make('pantothenic_acid')->label('Ác. Pantotênico (mg)'),
 
-                            TextInput::make('phosphorus')->label('Fósforo'),
-                            TextInput::make('iodine')->label('Iodo'),
-                            TextInput::make('magnesium')->label('Magnésio'),
-                            TextInput::make('zinc')->label('Zinco'),
+                            TextInput::make('phosphorus')->label('Fósforo (mg)'),
+                            TextInput::make('iodine')->label('Iodo (mcg)'),
+                            TextInput::make('magnesium')->label('Magnésio (mg)'),
+                            TextInput::make('zinc')->label('Zinco (mg)'),
 
-                            TextInput::make('selenium')->label('Selênio'),
-                            TextInput::make('copper')->label('Cobre'),
-                            TextInput::make('manganese')->label('Manganês'),
-                            TextInput::make('chromium')->label('Cromo'),
+                            TextInput::make('selenium')->label('Selênio (mcg)'),
+                            TextInput::make('copper')->label('Cobre (mcg)'),
+                            TextInput::make('manganese')->label('Manganês (mg)'),
+                            TextInput::make('chromium')->label('Cromo (mcg)'),
 
-                            TextInput::make('molybdenum')->label('Molibdênio'),
+                            TextInput::make('molybdenum')->label('Molibdênio (mcg)'),
                             TextInput::make('chloride')->label('Cloreto'),
                         ]),
                     ]),
@@ -260,7 +322,8 @@ class ProductResource extends Resource
                     ->badge()
                     ->color(fn($state) => match ($state) {
                         'Liberado' => 'success',
-                        'Processado (IA)' => 'info', // CORREÇÃO: Cor adicionada para visualização correta
+                        'Dados via API' => 'info',
+                        'Processado (IA)' => 'primary',
                         'Em Análise' => 'warning',
                         'Bloqueado' => 'danger',
                         default => 'gray',
@@ -286,10 +349,11 @@ class ProductResource extends Resource
                     ]),
 
                 SelectFilter::make('import_status')
-                    ->label('Status de Importação')
+                    ->label('Status')
                     ->options([
                         'Liberado' => 'Liberado',
-                        'Processado (IA)' => 'Processado (IA)', // CORREÇÃO: Opção adicionada ao filtro
+                        'Dados via API' => 'Dados via API',
+                        'Processado (IA)' => 'Processado (IA)',
                         'Em Análise' => 'Em Análise',
                         'Bloqueado' => 'Bloqueado',
                     ]),
@@ -336,6 +400,42 @@ class ProductResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
+                    BulkAction::make('sync_api')
+                        ->label('Buscar Dados na API (Lote)')
+                        ->icon('heroicon-o-cloud-arrow-down')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->modalHeading('Atenção')
+                        ->modalDescription('Isso irá buscar dados na OpenFoodFacts para os itens selecionados. Dados existentes podem ser sobrescritos.')
+                        ->action(function (Collection $records) {
+                            $service = new OpenFoodFactsService();
+                            $count = 0;
+                            $failed = 0;
+
+                            foreach ($records as $record) {
+                                if (!$record->barcode) {
+                                    continue;
+                                }
+
+                                $data = $service->fetchProductData($record->barcode);
+                                
+                                if ($data) {
+                                    $record->update($data);
+                                    $count++;
+                                    usleep(200000); 
+                                } else {
+                                    $failed++;
+                                }
+                            }
+
+                            Notification::make()
+                                ->title("Processamento Finalizado")
+                                ->body("{$count} atualizados. {$failed} não encontrados ou sem código.")
+                                ->success()
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
+
                     BulkAction::make('export_csv')
                         ->label('Exportar CSV Selecionados')
                         ->icon('heroicon-o-arrow-down-tray')
@@ -344,7 +444,7 @@ class ProductResource extends Resource
                             return response()->streamDownload(function () use ($records) {
                                 echo "\xEF\xBB\xBF";
                                 $handle = fopen('php://output', 'w');
-                                fputcsv($handle, ['Cod. WinThor', 'Produto', 'Traducao', 'EAN', 'Curva', 'Status Importacao'], ';');
+                                fputcsv($handle, ['Cod. WinThor', 'Produto', 'Traducao', 'EAN', 'Curva', 'Status'], ';');
                                 foreach ($records as $record) {
                                     fputcsv($handle, [
                                         $record->codprod,
@@ -363,7 +463,7 @@ class ProductResource extends Resource
                     BulkAction::make('translate_hybrid')
                         ->label('Traduzir Selecionados (Auto)')
                         ->icon('heroicon-o-language')
-                        ->color('info')
+                        ->color('primary')
                         ->requiresConfirmation()
                         ->modalHeading('Tradução Inteligente')
                         ->action(function (Collection $records) {

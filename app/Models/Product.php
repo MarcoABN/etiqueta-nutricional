@@ -109,6 +109,10 @@ class Product extends Model
         'allergens_contains',
         'allergens_may_contain',
         'image_nutritional',
+
+        'ingredients_pt',
+        'allergens_contains_pt',
+        'allergens_may_contain_pt',
     ];
 
     /**
