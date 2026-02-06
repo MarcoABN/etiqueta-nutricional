@@ -54,6 +54,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->placeholder('Digite Nome, Cód ou EAN')
                                     ->searchable()
                                     ->live()
+                                    ->disabled(fn() => $this->editingItemId !== null)
                                     ->getSearchResultsUsing(function (string $search) {
                                         return Product::query()
                                             ->where(function ($query) use ($search) {
@@ -248,7 +249,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->limit(20),
             ])
             ->actions([
-                // 1. Botão Editar (Customizado)
+                // 1. Botão Editar
                 Tables\Actions\Action::make('edit_line')
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
@@ -256,7 +257,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->tooltip('Editar este item')
                     ->action(fn(RequestItem $record) => $this->editItem($record->id)),
 
-                // 2. Botão Excluir Nativo (Com comportamento ajustado)
+                // 2. Botão Excluir Nativo (CORRIGIDO)
                 Tables\Actions\DeleteAction::make()
                     ->tooltip('Excluir item permanentemente')
                     ->before(function (RequestItem $record) {
@@ -265,8 +266,9 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                             $this->resetInput();
                         }
                     })
-                    // O método 'using' customiza APENAS a execução da exclusão
-                    // mantendo todo o resto (modal, notificação, refresh) funcionando padrão.
+                    // Configura o título da notificação nativa do Filament
+                    ->successNotificationTitle('Item excluído') 
+                    // No using, fazemos APENAS a exclusão
                     ->using(function (RequestItem $record) {
                         $record->forceDelete();
                     }),
