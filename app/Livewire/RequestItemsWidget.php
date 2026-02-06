@@ -263,21 +263,33 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->tooltip('Editar este item')
                     ->action(fn (RequestItem $record) => $this->editItem($record->id)),
 
-                // 2. BOTÃO EXCLUIR DEFINITIVO (CORRIGIDO)
-                Tables\Actions\DeleteAction::make()
+                // 2. BOTÃO EXCLUIR (Com Confirmação e Force Delete)
+                Tables\Actions\Action::make('delete_item')
                     ->label('')
-                    ->tooltip('Excluir item permanentemente')
-                    // Sobrescrevemos a ação padrão para garantir o Force Delete
+                    ->icon('heroicon-m-trash')
+                    ->color('danger')
+                    ->tooltip('Excluir item')
+                    
+                    // --- AQUI ESTÁ O RETORNO DA CONFIRMAÇÃO ---
+                    ->requiresConfirmation() 
+                    ->modalHeading('Excluir Item')
+                    ->modalDescription('Tem certeza que deseja excluir este item permanentemente?')
+                    ->modalSubmitActionLabel('Sim, excluir')
+                    // ------------------------------------------
+
                     ->action(function (RequestItem $record) {
-                        // Se estiver editando este item, cancela a edição
+                        // Se estiver editando este item, cancela a edição para não dar erro
                         if ($this->editingItemId === $record->id) {
                             $this->resetInput();
                         }
-                        
-                        // Executa a exclusão definitiva
-                        $record->forceDelete(); 
-                        
-                        Notification::make()->title('Item excluído')->success()->send();
+
+                        // Executa a exclusão definitiva (SQL DELETE)
+                        $record->forceDelete();
+
+                        Notification::make()
+                            ->title('Item excluído')
+                            ->success()
+                            ->send();
                     }),
             ])
             ->paginated(false);
