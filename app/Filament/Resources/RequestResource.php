@@ -16,7 +16,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Livewire\Component; // [IMPORTANTE] Necessário para o JS
+use Livewire\Component;
 
 class RequestResource extends Resource
 {
@@ -37,8 +37,8 @@ class RequestResource extends Resource
                             ->disabled()
                             ->dehydrated(false)
                             ->prefix('#')
-                            ->extraInputAttributes(['style' => 'font-weight: bold;'])
-                            ->columnSpan(3),
+                            ->extraInputAttributes(['style' => 'font-weight: bold; font-size: 1.1em;'])
+                            ->columnSpan(3), // Mantido o ajuste para não cortar o número
 
                         Select::make('status')
                             ->label('Status')
@@ -103,34 +103,8 @@ class RequestResource extends Resource
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
-                // --- AÇÃO DE IMPRIMIR NA TABELA (NOVA ABA) ---
-                Tables\Actions\Action::make('imprimir')
-                    ->label('Imprimir')
-                    ->icon('heroicon-o-printer')
-                    ->color('gray')
-                    ->form([
-                        Forms\Components\Radio::make('filter_type')
-                            ->label('O que deseja imprimir?')
-                            ->options([
-                                'all' => 'Todos os Itens',
-                                'registered' => 'Somente Cadastrados',
-                                'manual' => 'Somente Manuais',
-                            ])
-                            ->default('all')
-                            ->required(),
-                    ])
-                    ->action(function (Request $record, array $data, Component $livewire) {
-                        $url = route('request.print', [
-                            'record' => $record->id, 
-                            'filter_type' => $data['filter_type']
-                        ]);
-
-                        // Comando JS para abrir nova aba
-                        $livewire->js("window.open('$url', '_blank')");
-                    }),
-
+                // Apenas o botão Editar foi mantido na listagem
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
