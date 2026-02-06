@@ -13,7 +13,10 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Component;
 
 class RequestItemsWidget extends Component implements HasForms, HasTable
@@ -22,10 +25,8 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     use InteractsWithTable;
 
     public Request $requestRecord;
-
     public ?string $editingItemId = null;
 
-    // Dados do formulário
     public $product_id;
     public $product_name;
     public $quantity = 1;
@@ -42,15 +43,14 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     {
         return $form
             ->schema([
-                Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Item')
+                Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Novo Item')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(24)
                             ->schema([
-                                // 1. Busca
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
-                                    ->placeholder('Nome/Cód')
+                                    ->placeholder('Digite Nome ou Código...')
                                     ->searchable()
                                     ->live()
                                     ->getSearchResultsUsing(function (string $search) {
@@ -78,13 +78,11 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     })
                                     ->columnSpan(7),
 
-                                // 2. Nome
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
                                     ->columnSpan(8),
 
-                                // 3. Detalhes
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
@@ -99,7 +97,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->required()
                                     ->columnSpan(3),
 
-                                // ALTERADO: Adicionado 'Avaliar'
                                 Forms\Components\Select::make('shipping_type')
                                     ->label('Envio')
                                     ->options([
@@ -111,7 +108,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->required()
                                     ->columnSpan(3),
 
-                                // LINHA 2
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação')
                                     ->columnSpan(18),
@@ -143,7 +139,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         $data = $this->form->getState();
         $prodId = $data['product_id'] ?? null;
 
-        // Validação
         if ($prodId) {
             $exists = RequestItem::where('request_id', $this->requestRecord->id)
                 ->where('product_id', $prodId)
@@ -214,9 +209,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
             ->query(
                 RequestItem::query()
                     ->where('request_id', $this->requestRecord->id)
-                    // REMOVIDO: orderBy fixo, pois bloqueia a ordenação dinâmica
             )
-            // ADICIONADO: Ordenação padrão que permite override
             ->defaultSort('created_at', 'desc')
             ->heading('Itens Gravados')
             ->columns([
@@ -225,7 +218,8 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->description(fn ($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
                     ->weight('bold')
                     ->wrap()
-                    ->sortable(), // ADICIONADO: Ordenação
+                    ->sortable()
+                    ->searchable(),
                 
                 Tables\Columns\TextColumn::make('quantity')
                     ->label('Qtd')
@@ -237,18 +231,44 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 Tables\Columns\TextColumn::make('shipping_type')
                     ->label('Envio')
                     ->badge()
-                    // ALTERADO: Lógica de cores atualizada
                     ->color(fn ($state) => match ($state) {
                         'Aereo' => 'warning',
                         'Maritimo' => 'info',
                         'Avaliar' => 'gray',
                         default => 'gray',
                     })
-                    ->sortable(), // ADICIONADO: Ordenação
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('observation')
                     ->label('Obs')
-                    ->limit(20),
+                    ->limit(20)
+                    ->tooltip(fn ($state) => $state),
+            ])
+            ->filters([
+                Filter::make('product_type')
+                    ->form([
+                        Forms\Components\Select::make('type')
+                            ->label('Origem do Produto')
+                            ->options([
+                                'all' => 'Todos',
+                                'registered' => 'Com Cadastro (WinThor)',
+                                'manual' => 'Sem Cadastro (Manual)',
+                            ])
+                            ->default('all'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['type'] === 'registered', fn (Builder $query) => $query->whereNotNull('product_id'))
+                            ->when($data['type'] === 'manual', fn (Builder $query) => $query->whereNull('product_id'));
+                    }),
+
+                SelectFilter::make('shipping_type')
+                    ->label('Tipo de Envio')
+                    ->options([
+                        'Maritimo' => 'Marítimo',
+                        'Aereo' => 'Aéreo',
+                        'Avaliar' => 'Avaliar',
+                    ]),
             ])
             ->actions([
                 Tables\Actions\Action::make('edit_line')

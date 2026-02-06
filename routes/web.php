@@ -18,7 +18,7 @@ Route::get('/print/label/{product}', function (Product $product) {
 
 Route::get('/print/label/{product}', function (Product $product) {
     $qty = request()->query('qty', 1);
-    
+
     // CORREÇÃO: Busca configurações no banco ou cria padrão de 0.5mm
     $settings = LabelSetting::firstOrCreate(
         ['id' => 1],
@@ -34,7 +34,7 @@ Route::get('/print/label/{product}', function (Product $product) {
 
     // Chama a nova view 'labels.print'
     return view('labels.print', [
-        'product' => $product, 
+        'product' => $product,
         'qty' => $qty,
         'settings' => $settings
     ]);
@@ -46,5 +46,6 @@ Route::get('/imprimir-etiqueta/{record}', function (Product $record) {
 
 // Rota simples para imprimir a solicitação
 Route::get('/admin/requests/{record}/print', function (Request $record) {
+    // Se o arquivo está em resources/views/print/request.blade.php
     return view('print.request', ['record' => $record]);
-})->name('requests.print')->middleware('auth');
+})->name('request.print')->middleware('auth');

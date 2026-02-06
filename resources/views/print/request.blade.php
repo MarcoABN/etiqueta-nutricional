@@ -21,7 +21,6 @@
         th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
         th { background-color: #f9f9f9; font-weight: bold; }
         
-        /* Destaque visual para diferenciar */
         .manual-item { color: #555; font-style: italic; }
 
         @media print { 
@@ -36,6 +35,12 @@
     <div class="header">
         <h1>SOLICITAÇÃO DE PEDIDO</h1>
         <h2>{{ $record->display_id }}</h2>
+        {{-- Exibe qual filtro foi aplicado, se houver --}}
+        @if(request('filter_type') == 'registered')
+            <p>(Somente Itens Cadastrados)</p>
+        @elseif(request('filter_type') == 'manual')
+            <p>(Somente Itens Manuais)</p>
+        @endif
     </div>
 
     <div class="info">
@@ -44,9 +49,22 @@
     </div>
 
     @php
-        // Separa os itens em duas coleções
-        $registeredItems = $record->items->filter(fn($item) => !empty($item->product_id));
-        $manualItems = $record->items->filter(fn($item) => empty($item->product_id));
+        $filterType = request('filter_type', 'all');
+
+        // Lógica de filtragem baseada no parâmetro GET
+        $items = $record->items;
+
+        if ($filterType === 'registered') {
+            // Mantém apenas itens com product_id preenchido
+            $items = $items->filter(fn($item) => !empty($item->product_id));
+        } elseif ($filterType === 'manual') {
+            // Mantém apenas itens sem product_id (manuais)
+            $items = $items->filter(fn($item) => empty($item->product_id));
+        }
+
+        // Separa as coleções para exibição baseada na coleção já filtrada
+        $registeredItems = $items->filter(fn($item) => !empty($item->product_id));
+        $manualItems = $items->filter(fn($item) => empty($item->product_id));
     @endphp
 
     {{-- 1. TABELA DE PRODUTOS CADASTRADOS --}}
@@ -106,7 +124,9 @@
     @endif
 
     @if($registeredItems->isEmpty() && $manualItems->isEmpty())
-        <p style="text-align: center; color: #999; margin-top: 50px;">Nenhum item inserido nesta solicitação.</p>
+        <p style="text-align: center; color: #999; margin-top: 50px;">
+            Nenhum item encontrado para os critérios selecionados.
+        </p>
     @endif
 
 </body>

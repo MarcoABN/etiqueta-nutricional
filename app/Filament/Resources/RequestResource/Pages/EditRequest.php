@@ -6,7 +6,9 @@ use App\Filament\Resources\RequestResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use App\Models\Request;
-use Filament\Forms\Components\CheckboxList; // Importante
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Radio;
+use Livewire\Component; // [IMPORTANTE] Necessário para abrir nova aba
 
 class EditRequest extends EditRecord
 {
@@ -15,12 +17,11 @@ class EditRequest extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            // BOTÃO EXPORTAR (Excel / CSV)
+            // --- AÇÃO DE EXPORTAR (Mantém o download direto) ---
             Actions\Action::make('export_csv')
                 ->label('Exportar Excel')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('success')
-                // ADICIONADO: Formulário de Filtro
                 ->form([
                     CheckboxList::make('shipping_types')
                         ->label('Selecione os tipos para exportar:')
@@ -32,21 +33,40 @@ class EditRequest extends EditRecord
                         ->default(['Maritimo', 'Aereo', 'Avaliar'])
                         ->required()
                         ->columns(3),
+
+                    Radio::make('filter_type')
+                        ->label('Filtrar por origem:')
+                        ->options([
+                            'all' => 'Todos',
+                            'registered' => 'Somente Cadastrados',
+                            'manual' => 'Somente Manuais',
+                        ])
+                        ->default('all')
+                        ->inline()
+                        ->required(),
                 ])
                 ->action(function (Request $record, array $data) {
                     return response()->streamDownload(function () use ($record, $data) {
-                        echo "\xEF\xBB\xBF";
+                        echo "\xEF\xBB\xBF"; // BOM para Excel abrir corretamente acentos
                         $handle = fopen('php://output', 'w');
                         
-                        // FILTRO: Usa os tipos selecionados no modal
-                        $selectedTypes = $data['shipping_types'];
-                        $items = $record->items()
-                            ->whereIn('shipping_type', $selectedTypes)
-                            ->get();
+                        // 1. Filtra por Tipo de Envio
+                        $query = $record->items()->whereIn('shipping_type', $data['shipping_types']);
 
+                        // 2. Filtra por Origem (Cadastrado vs Manual)
+                        if ($data['filter_type'] === 'registered') {
+                            $query->whereNotNull('product_id');
+                        } elseif ($data['filter_type'] === 'manual') {
+                            $query->whereNull('product_id');
+                        }
+
+                        $items = $query->get();
+
+                        // Separa para gerar o relatório organizado
                         $registered = $items->filter(fn($i) => !empty($i->product_id));
                         $manual = $items->filter(fn($i) => empty($i->product_id));
 
+                        // BLOCO 1: Cadastrados
                         if ($registered->isNotEmpty()) {
                             fputcsv($handle, ['--- PRODUTOS CADASTRADOS ---'], ';');
                             fputcsv($handle, ['ID Pedido', 'Cód WinThor', 'Produto', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
@@ -64,11 +84,13 @@ class EditRequest extends EditRecord
                             }
                         }
 
+                        // Espaçamento
                         if ($registered->isNotEmpty() && $manual->isNotEmpty()) {
                             fputcsv($handle, [], ';'); 
                             fputcsv($handle, [], ';'); 
                         }
 
+                        // BLOCO 2: Manuais
                         if ($manual->isNotEmpty()) {
                             fputcsv($handle, ['--- ITENS MANUAIS ---'], ';');
                             fputcsv($handle, ['ID Pedido', 'Tipo', 'Descrição do Item', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
@@ -90,11 +112,10 @@ class EditRequest extends EditRecord
                     }, "pedido_{$record->display_id}.csv");
                 }),
 
-            // BOTÃO IMPRIMIR
+            // --- AÇÃO DE IMPRIMIR (Abre em Nova Aba) ---
             Actions\Action::make('print')
                 ->label('Imprimir')
                 ->icon('heroicon-o-printer')
-                // ADICIONADO: Formulário de Filtro
                 ->form([
                     CheckboxList::make('shipping_types')
                         ->label('Selecione os tipos para imprimir:')
@@ -106,19 +127,30 @@ class EditRequest extends EditRecord
                         ->default(['Maritimo', 'Aereo', 'Avaliar'])
                         ->required()
                         ->columns(3),
+
+                    Radio::make('filter_type')
+                        ->label('Filtrar por origem:')
+                        ->options([
+                            'all' => 'Todos',
+                            'registered' => 'Somente Cadastrados',
+                            'manual' => 'Somente Manuais',
+                        ])
+                        ->default('all')
+                        ->inline()
+                        ->required(),
                 ])
-                ->action(function (Request $record, array $data) {
-                    // Monta a URL passando os tipos como parâmetros query string
-                    $url = route('requests.print', [
+                // [ALTERAÇÃO AQUI] Injeção do componente $livewire para rodar JS
+                ->action(function (Request $record, array $data, Component $livewire) {
+                    $url = route('request.print', [
                         'record' => $record,
-                        'types' => $data['shipping_types']
+                        'types' => $data['shipping_types'],
+                        'filter_type' => $data['filter_type']
                     ]);
                     
-                    // Redireciona para a rota de impressão
-                    return redirect()->away($url);
+                    // Comando JS para abrir nova aba
+                    $livewire->js("window.open('$url', '_blank')");
                 }),
 
-            // BOTÃO EXCLUIR
             Actions\DeleteAction::make(),
         ];
     }
