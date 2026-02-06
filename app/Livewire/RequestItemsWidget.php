@@ -24,13 +24,13 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     public Request $requestRecord;
 
     // Controle de Edição
-    public ?string $editingItemId = null; // Armazena o ID se estivermos editando
+    public ?string $editingItemId = null;
 
     // Dados do formulário
     public $product_id;
     public $product_name;
     public $quantity = 1;
-    public $packaging = 'CX'; // Padrão CX
+    public $packaging = 'CX'; // Padrão mantido como CX
     public $shipping_type = 'Maritimo';
     public $observation;
 
@@ -49,10 +49,11 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                         Forms\Components\Grid::make(12)
                             ->schema([
                                 // LINHA 1: PRODUTO E DETALHES (Total 12 colunas)
-                                // 1. Busca (5 colunas)
+                                
+                                // 1. Busca (Reduzido para 3 colunas)
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
-                                    ->placeholder('Digite Nome, Cód ou EAN')
+                                    ->placeholder('Nome/Cód')
                                     ->searchable()
                                     ->live()
                                     ->getSearchResultsUsing(function (string $search) {
@@ -79,45 +80,43 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                             $set('packaging', $product->serving_size_unit ?? 'CX');
                                         }
                                     })
-                                    ->columnSpan(5),
+                                    ->columnSpan(3), // Reduzido de 5 para 3
 
-                                // 2. Nome do Item (4 colunas)
+                                // 2. Nome do Item (Reduzido para 3 colunas)
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
-                                    ->columnSpan(4),
+                                    ->columnSpan(3), // Reduzido de 4 para 3
 
-                                // 3. Quantidade (1 coluna)
+                                // 3. Campos Menores (Aumentados para 2 colunas cada)
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
                                     ->default(1)
                                     ->required()
-                                    ->columnSpan(1),
+                                    ->columnSpan(2), // Aumentado de 1 para 2
 
-                                // 4. Embalagem (1 coluna)
                                 Forms\Components\Select::make('packaging')
                                     ->label('Emb')
                                     ->options(['CX'=>'CX', 'UN'=>'UN', 'DP'=>'DP', 'PCT'=>'PCT', 'FD'=>'FD'])
                                     ->default('CX')
                                     ->required()
-                                    ->columnSpan(1),
+                                    ->columnSpan(2), // Aumentado de 1 para 2
 
-                                // 5. Envio (1 coluna)
                                 Forms\Components\Select::make('shipping_type')
                                     ->label('Envio')
                                     ->options(['Maritimo'=>'Mar', 'Aereo'=>'Aér'])
                                     ->default('Maritimo')
                                     ->required()
-                                    ->columnSpan(1),
+                                    ->columnSpan(2), // Aumentado de 1 para 2
 
-                                // LINHA 2: OBSERVAÇÃO E AÇÕES (Total 12 colunas)
-                                // 6. Observação (9 colunas - reduzido para caber o botão)
+                                // LINHA 2: OBSERVAÇÃO E AÇÕES
+                                // Observação (Mantido 9 colunas)
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação')
                                     ->columnSpan(9),
 
-                                // 7. Botões de Ação (3 colunas - mesma linha da obs)
+                                // Botões de Ação (Mantido 3 colunas)
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
                                         ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
@@ -133,7 +132,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                         ->visible(fn () => $this->editingItemId !== null),
                                 ])
                                 ->columnSpan(3)
-                                // mt-8 adiciona margem superior para alinhar os botões com a caixa de texto (pulando o label)
                                 ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2']) 
                                 ->alignRight(),
                             ]),
@@ -218,7 +216,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
             'product_id' => null,
             'product_name' => '',
             'quantity' => 1,
-            'packaging' => 'CX', // Reset para padrão CX
+            'packaging' => 'CX',
             'shipping_type' => 'Maritimo',
             'observation' => '',
         ]);
@@ -254,7 +252,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 Tables\Columns\TextColumn::make('observation')->label('Obs')->limit(20),
             ])
             ->actions([
-                // 1. BOTÃO EDITAR
                 Tables\Actions\Action::make('edit_line')
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
@@ -262,7 +259,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->tooltip('Editar este item')
                     ->action(fn (RequestItem $record) => $this->editItem($record->id)),
 
-                // 2. BOTÃO EXCLUIR ORIGINAL
                 Tables\Actions\DeleteAction::make()
                     ->label('')
                     ->tooltip('Excluir item permanentemente')
