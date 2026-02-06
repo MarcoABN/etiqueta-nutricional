@@ -30,7 +30,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
     public $product_id;
     public $product_name;
     public $quantity = 1;
-    public $packaging = 'CX'; // Alterado padrão para CX
+    public $packaging = 'CX'; // Padrão CX
     public $shipping_type = 'Maritimo';
     public $observation;
 
@@ -48,7 +48,8 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
-                                // 1. BUSCA INTELIGENTE (Aumentado para 5 colunas)
+                                // LINHA 1: PRODUTO E DETALHES (Total 12 colunas)
+                                // 1. Busca (5 colunas)
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
                                     ->placeholder('Digite Nome, Cód ou EAN')
@@ -78,14 +79,15 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                             $set('packaging', $product->serving_size_unit ?? 'CX');
                                         }
                                     })
-                                    ->columnSpan(5), // Expandido
+                                    ->columnSpan(5),
 
-                                // 2. DADOS DO ITEM (Reajustado espaços)
+                                // 2. Nome do Item (4 colunas)
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
-                                    ->columnSpan(4), // Expandido
+                                    ->columnSpan(4),
 
+                                // 3. Quantidade (1 coluna)
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
@@ -93,42 +95,48 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->required()
                                     ->columnSpan(1),
 
+                                // 4. Embalagem (1 coluna)
                                 Forms\Components\Select::make('packaging')
                                     ->label('Emb')
                                     ->options(['CX'=>'CX', 'UN'=>'UN', 'DP'=>'DP', 'PCT'=>'PCT', 'FD'=>'FD'])
-                                    ->default('CX') // Padrão alterado
+                                    ->default('CX')
                                     ->required()
                                     ->columnSpan(1),
 
+                                // 5. Envio (1 coluna)
                                 Forms\Components\Select::make('shipping_type')
                                     ->label('Envio')
                                     ->options(['Maritimo'=>'Mar', 'Aereo'=>'Aér'])
                                     ->default('Maritimo')
                                     ->required()
                                     ->columnSpan(1),
+
+                                // LINHA 2: OBSERVAÇÃO E AÇÕES (Total 12 colunas)
+                                // 6. Observação (9 colunas - reduzido para caber o botão)
+                                Forms\Components\TextInput::make('observation')
+                                    ->label('Observação')
+                                    ->columnSpan(9),
+
+                                // 7. Botões de Ação (3 colunas - mesma linha da obs)
+                                Forms\Components\Actions::make([
+                                    Forms\Components\Actions\Action::make('save')
+                                        ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
+                                        ->icon(fn () => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
+                                        ->color(fn () => $this->editingItemId ? 'warning' : 'primary')
+                                        ->action(fn () => $this->saveItem()),
+
+                                    Forms\Components\Actions\Action::make('cancel')
+                                        ->label('CANCELAR')
+                                        ->icon('heroicon-m-x-mark')
+                                        ->color('gray')
+                                        ->action(fn () => $this->resetInput())
+                                        ->visible(fn () => $this->editingItemId !== null),
+                                ])
+                                ->columnSpan(3)
+                                // mt-8 adiciona margem superior para alinhar os botões com a caixa de texto (pulando o label)
+                                ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2']) 
+                                ->alignRight(),
                             ]),
-                            
-                        Forms\Components\TextInput::make('observation')
-                            ->label('Observação')
-                            ->columnSpanFull(),
-
-                        // 3. BOTÕES DE AÇÃO (Movidos para o final)
-                        Forms\Components\Actions::make([
-                            Forms\Components\Actions\Action::make('save')
-                                ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
-                                ->icon(fn () => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
-                                ->color(fn () => $this->editingItemId ? 'warning' : 'primary')
-                                ->action(fn () => $this->saveItem()),
-
-                            Forms\Components\Actions\Action::make('cancel')
-                                ->label('CANCELAR')
-                                ->icon('heroicon-m-x-mark')
-                                ->color('gray')
-                                ->action(fn () => $this->resetInput())
-                                ->visible(fn () => $this->editingItemId !== null),
-                        ])
-                        ->alignRight() // Alinhado à direita para ficar próximo ao botão de salvar nativo
-                        ->extraAttributes(['class' => 'mt-2']),
                     ])
             ]);
     }
@@ -210,7 +218,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
             'product_id' => null,
             'product_name' => '',
             'quantity' => 1,
-            'packaging' => 'CX', // Reset para CX
+            'packaging' => 'CX', // Reset para padrão CX
             'shipping_type' => 'Maritimo',
             'observation' => '',
         ]);
@@ -259,7 +267,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->label('')
                     ->tooltip('Excluir item permanentemente')
                     ->before(function (RequestItem $record) {
-                        // Limpa o form se estiver editando o item que vai ser apagado
                         if ($this->editingItemId === $record->id) {
                             $this->resetInput();
                         }
