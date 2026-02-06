@@ -232,7 +232,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 RequestItem::query()
                     ->where('request_id', $this->requestRecord->id)
                     ->orderBy('created_at', 'desc')
-                    // Removemos withTrashed() pois o usuário quer Excluir em Definitivo nesta tela
             )
             ->heading('Itens Gravados')
             ->columns([
@@ -256,7 +255,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 Tables\Columns\TextColumn::make('observation')->label('Obs')->limit(20),
             ])
             ->actions([
-                // BOTÃO EDITAR (Sobe os dados para o form)
+                // 1. BOTÃO EDITAR
                 Tables\Actions\Action::make('edit_line')
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
@@ -264,10 +263,22 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     ->tooltip('Editar este item')
                     ->action(fn (RequestItem $record) => $this->editItem($record->id)),
 
-                // BOTÃO EXCLUIR EM DEFINITIVO (Force Delete)
-                Tables\Actions\ForceDeleteAction::make()
+                // 2. BOTÃO EXCLUIR DEFINITIVO (CORRIGIDO)
+                Tables\Actions\DeleteAction::make()
                     ->label('')
-                    ->tooltip('Excluir permanentemente'),
+                    ->tooltip('Excluir item permanentemente')
+                    // Sobrescrevemos a ação padrão para garantir o Force Delete
+                    ->action(function (RequestItem $record) {
+                        // Se estiver editando este item, cancela a edição
+                        if ($this->editingItemId === $record->id) {
+                            $this->resetInput();
+                        }
+                        
+                        // Executa a exclusão definitiva
+                        $record->forceDelete(); 
+                        
+                        Notification::make()->title('Item excluído')->success()->send();
+                    }),
             ])
             ->paginated(false);
     }
