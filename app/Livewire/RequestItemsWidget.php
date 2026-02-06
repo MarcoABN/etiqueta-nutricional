@@ -23,7 +23,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
 
     public Request $requestRecord;
 
-    // Controle de Edição
     public ?string $editingItemId = null;
 
     // Dados do formulário
@@ -46,12 +45,9 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Item')
                     ->compact()
                     ->schema([
-                        // TRUQUE: Aumentamos o Grid para 24 para permitir "meias colunas" (ex: 3/24 = 1.5/12)
                         Forms\Components\Grid::make(24)
                             ->schema([
-                                // LINHA 1: Total 24 colunas
-                                
-                                // 1. Busca (7 colunas - um pouco menos que 1/3)
+                                // 1. Busca
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
                                     ->placeholder('Nome/Cód')
@@ -82,14 +78,13 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     })
                                     ->columnSpan(7),
 
-                                // 2. Nome do Item (8 colunas - 1/3 da tela)
+                                // 2. Nome
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
                                     ->columnSpan(8),
 
-                                // 3. Campos Menores (3 colunas cada = 12.5% cada)
-                                // Isso equivale a "1.5" na escala de 12 colunas
+                                // 3. Detalhes
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
@@ -104,21 +99,23 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->required()
                                     ->columnSpan(3),
 
+                                // ALTERADO: Adicionado 'Avaliar'
                                 Forms\Components\Select::make('shipping_type')
                                     ->label('Envio')
-                                    ->options(['Maritimo'=>'Mar', 'Aereo'=>'Aér'])
+                                    ->options([
+                                        'Maritimo' => 'Mar', 
+                                        'Aereo' => 'Aér',
+                                        'Avaliar' => 'Avaliar'
+                                    ])
                                     ->default('Maritimo')
                                     ->required()
                                     ->columnSpan(3),
 
-                                // LINHA 2: OBSERVAÇÃO E AÇÕES (Total 24 colunas)
-                                
-                                // Observação (18 colunas = 75%)
+                                // LINHA 2
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação')
                                     ->columnSpan(18),
 
-                                // Botões (6 colunas = 25%)
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
                                         ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
@@ -146,7 +143,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         $data = $this->form->getState();
         $prodId = $data['product_id'] ?? null;
 
-        // VALIDAÇÃO DE DUPLICIDADE
+        // Validação
         if ($prodId) {
             $exists = RequestItem::where('request_id', $this->requestRecord->id)
                 ->where('product_id', $prodId)
@@ -154,40 +151,27 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 ->exists();
 
             if ($exists) {
-                Notification::make()
-                    ->title('Item Duplicado')
-                    ->body('Este produto já foi adicionado a este pedido.')
-                    ->warning()
-                    ->send();
+                Notification::make()->title('Item Duplicado')->warning()->send();
                 return;
             }
         }
 
-        if ($this->editingItemId) {
-            $item = RequestItem::find($this->editingItemId);
-            $item->update([
-                'product_id' => $data['product_id'],
-                'product_name' => $data['product_name'],
-                'quantity' => $data['quantity'],
-                'packaging' => $data['packaging'],
-                'shipping_type' => $data['shipping_type'],
-                'observation' => $data['observation'],
-                'winthor_code' => Product::find($prodId)?->codprod,
-            ]);
-            
-            Notification::make()->title('Item atualizado com sucesso')->success()->send();
-        } else {
-            RequestItem::create([
-                'request_id' => $this->requestRecord->id,
-                'product_id' => $prodId,
-                'product_name' => $data['product_name'],
-                'quantity' => $data['quantity'],
-                'packaging' => $data['packaging'],
-                'shipping_type' => $data['shipping_type'],
-                'observation' => $data['observation'],
-                'winthor_code' => Product::find($prodId)?->codprod,
-            ]);
+        $itemData = [
+            'request_id' => $this->requestRecord->id,
+            'product_id' => $prodId,
+            'product_name' => $data['product_name'],
+            'quantity' => $data['quantity'],
+            'packaging' => $data['packaging'],
+            'shipping_type' => $data['shipping_type'],
+            'observation' => $data['observation'],
+            'winthor_code' => Product::find($prodId)?->codprod,
+        ];
 
+        if ($this->editingItemId) {
+            RequestItem::find($this->editingItemId)->update($itemData);
+            Notification::make()->title('Item atualizado')->success()->send();
+        } else {
+            RequestItem::create($itemData);
             Notification::make()->title('Item incluído')->success()->send();
         }
 
@@ -230,44 +214,53 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
             ->query(
                 RequestItem::query()
                     ->where('request_id', $this->requestRecord->id)
-                    ->orderBy('created_at', 'desc')
+                    // REMOVIDO: orderBy fixo, pois bloqueia a ordenação dinâmica
             )
+            // ADICIONADO: Ordenação padrão que permite override
+            ->defaultSort('created_at', 'desc')
             ->heading('Itens Gravados')
             ->columns([
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
                     ->description(fn ($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
                     ->weight('bold')
-                    ->wrap(),
+                    ->wrap()
+                    ->sortable(), // ADICIONADO: Ordenação
                 
                 Tables\Columns\TextColumn::make('quantity')
                     ->label('Qtd')
                     ->alignCenter(),
                 
-                Tables\Columns\TextColumn::make('packaging')->label('Emb'),
+                Tables\Columns\TextColumn::make('packaging')
+                    ->label('Emb'),
                 
                 Tables\Columns\TextColumn::make('shipping_type')
                     ->label('Envio')
                     ->badge()
-                    ->color(fn ($state) => $state === 'Aereo' ? 'warning' : 'info'),
+                    // ALTERADO: Lógica de cores atualizada
+                    ->color(fn ($state) => match ($state) {
+                        'Aereo' => 'warning',
+                        'Maritimo' => 'info',
+                        'Avaliar' => 'gray',
+                        default => 'gray',
+                    })
+                    ->sortable(), // ADICIONADO: Ordenação
 
-                Tables\Columns\TextColumn::make('observation')->label('Obs')->limit(20),
+                Tables\Columns\TextColumn::make('observation')
+                    ->label('Obs')
+                    ->limit(20),
             ])
             ->actions([
                 Tables\Actions\Action::make('edit_line')
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
                     ->color('warning')
-                    ->tooltip('Editar este item')
                     ->action(fn (RequestItem $record) => $this->editItem($record->id)),
 
                 Tables\Actions\DeleteAction::make()
                     ->label('')
-                    ->tooltip('Excluir item permanentemente')
                     ->before(function (RequestItem $record) {
-                        if ($this->editingItemId === $record->id) {
-                            $this->resetInput();
-                        }
+                        if ($this->editingItemId === $record->id) $this->resetInput();
                     })
                     ->using(function (RequestItem $record) {
                         $record->forceDelete();

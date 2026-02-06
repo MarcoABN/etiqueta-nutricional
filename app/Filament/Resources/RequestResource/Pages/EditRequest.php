@@ -6,6 +6,7 @@ use App\Filament\Resources\RequestResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use App\Models\Request;
+use Filament\Forms\Components\CheckboxList; // Importante
 
 class EditRequest extends EditRecord
 {
@@ -19,21 +20,35 @@ class EditRequest extends EditRecord
                 ->label('Exportar Excel')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('success')
-                ->action(function (Request $record) {
-                    return response()->streamDownload(function () use ($record) {
-                        echo "\xEF\xBB\xBF"; // Adiciona BOM para que o Excel abra os acentos corretamente
+                // ADICIONADO: Formulário de Filtro
+                ->form([
+                    CheckboxList::make('shipping_types')
+                        ->label('Selecione os tipos para exportar:')
+                        ->options([
+                            'Maritimo' => 'Maritimo',
+                            'Aereo' => 'Aereo',
+                            'Avaliar' => 'Avaliar',
+                        ])
+                        ->default(['Maritimo', 'Aereo', 'Avaliar'])
+                        ->required()
+                        ->columns(3),
+                ])
+                ->action(function (Request $record, array $data) {
+                    return response()->streamDownload(function () use ($record, $data) {
+                        echo "\xEF\xBB\xBF";
                         $handle = fopen('php://output', 'w');
                         
-                        // Busca e filtra os itens
-                        $items = $record->items;
+                        // FILTRO: Usa os tipos selecionados no modal
+                        $selectedTypes = $data['shipping_types'];
+                        $items = $record->items()
+                            ->whereIn('shipping_type', $selectedTypes)
+                            ->get();
+
                         $registered = $items->filter(fn($i) => !empty($i->product_id));
                         $manual = $items->filter(fn($i) => empty($i->product_id));
 
-                        // --- BLOCO 1: PRODUTOS CADASTRADOS ---
                         if ($registered->isNotEmpty()) {
-                            // Título da Seção
-                            fputcsv($handle, ['--- PRODUTOS CADASTRADOS (WINTHOR) ---'], ';');
-                            // Cabeçalho das Colunas
+                            fputcsv($handle, ['--- PRODUTOS CADASTRADOS ---'], ';');
                             fputcsv($handle, ['ID Pedido', 'Cód WinThor', 'Produto', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
 
                             foreach ($registered as $item) {
@@ -49,17 +64,13 @@ class EditRequest extends EditRecord
                             }
                         }
 
-                        // --- SEPARADOR VISUAL (Linhas em branco) ---
                         if ($registered->isNotEmpty() && $manual->isNotEmpty()) {
                             fputcsv($handle, [], ';'); 
                             fputcsv($handle, [], ';'); 
                         }
 
-                        // --- BLOCO 2: ITENS MANUAIS ---
                         if ($manual->isNotEmpty()) {
-                            // Título da Seção
-                            fputcsv($handle, ['--- ITENS MANUAIS / SEM CADASTRO ---'], ';');
-                            // Cabeçalho das Colunas (Adaptado)
+                            fputcsv($handle, ['--- ITENS MANUAIS ---'], ';');
                             fputcsv($handle, ['ID Pedido', 'Tipo', 'Descrição do Item', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
 
                             foreach ($manual as $item) {
@@ -83,15 +94,35 @@ class EditRequest extends EditRecord
             Actions\Action::make('print')
                 ->label('Imprimir')
                 ->icon('heroicon-o-printer')
-                ->url(fn (Request $record) => route('requests.print', $record))
-                ->openUrlInNewTab(), // Abre a visualização de impressão em nova aba
+                // ADICIONADO: Formulário de Filtro
+                ->form([
+                    CheckboxList::make('shipping_types')
+                        ->label('Selecione os tipos para imprimir:')
+                        ->options([
+                            'Maritimo' => 'Maritimo',
+                            'Aereo' => 'Aereo',
+                            'Avaliar' => 'Avaliar',
+                        ])
+                        ->default(['Maritimo', 'Aereo', 'Avaliar'])
+                        ->required()
+                        ->columns(3),
+                ])
+                ->action(function (Request $record, array $data) {
+                    // Monta a URL passando os tipos como parâmetros query string
+                    $url = route('requests.print', [
+                        'record' => $record,
+                        'types' => $data['shipping_types']
+                    ]);
+                    
+                    // Redireciona para a rota de impressão
+                    return redirect()->away($url);
+                }),
 
             // BOTÃO EXCLUIR
             Actions\DeleteAction::make(),
         ];
     }
 
-    // Redireciona para a listagem após salvar alterações no cabeçalho
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
