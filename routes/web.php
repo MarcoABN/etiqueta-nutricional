@@ -5,6 +5,7 @@ use App\Models\Product;
 use App\Services\GeminiFdaTranslator;
 use Illuminate\Support\Facades\Route;
 use App\Models\Produto;
+use App\Models\Request;
 
 Route::get('/', function () {
     return view('welcome');
@@ -42,3 +43,8 @@ Route::get('/print/label/{product}', function (Product $product) {
 Route::get('/imprimir-etiqueta/{record}', function (Product $record) {
     return view('etiqueta', ['produto' => $record]);
 })->name('imprimir.etiqueta');
+
+// Rota simples para imprimir a solicitação
+Route::get('/admin/requests/{record}/print', function (Request $record) {
+    return view('print.request', ['record' => $record]);
+})->name('requests.print')->middleware('auth');
