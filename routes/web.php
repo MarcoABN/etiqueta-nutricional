@@ -8,7 +8,7 @@ use App\Models\Produto;
 use App\Models\Request;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect('/admin/login');
 });
 
 Route::get('/print/label/{product}', function (Product $product) {
