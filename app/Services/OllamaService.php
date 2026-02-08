@@ -24,7 +24,7 @@ class OllamaService
 
     public function __construct()
     {
-        // IP do Tailscale do seu PC (Porta 8002 do Worker Python)
+        // Pega o HOST do .env (ajustado para Docker ou Local)
         $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:8002'), '/');
     }
 
@@ -39,7 +39,7 @@ class OllamaService
             $response = Http::timeout($timeoutSeconds)
                 ->post($url, [
                     'prompt' => $prompt,
-                    'model'  => $this->model // Usa o qwen3-vl:8b
+                    'model'  => $this->model 
                 ]);
 
             if ($response->successful()) {
@@ -60,14 +60,12 @@ class OllamaService
      */
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
-        // Decodifica a imagem
         $imageBinary = base64_decode($base64Image);
         $url = "{$this->host}/process-nutritional";
 
         try {
             Log::info("Enviando imagem para Worker Python: $url");
 
-            // Envia como multipart/form-data
             $response = Http::timeout($timeoutSeconds)
                 ->attach('file', $imageBinary, 'tabela.jpg')
                 ->post($url);
@@ -75,7 +73,6 @@ class OllamaService
             if ($response->successful()) {
                 $json = $response->json();
                 
-                // Mapeia o retorno 'analysis' do Python
                 if (isset($json['analysis'])) {
                     return $this->mapJsonToDatabase($json['analysis']);
                 }
@@ -119,7 +116,7 @@ class OllamaService
             }
         }
 
-        // 2. CAMPOS DE TEXTO (Ingredientes e Alergênicos - NÃO limpar números)
+        // 2. CAMPOS DE TEXTO (Ingredientes e Alergênicos - CORRIGIDO)
         $textFields = [
             'ingredients_pt', 
             'allergens_contains_pt', 
@@ -128,21 +125,27 @@ class OllamaService
 
         foreach ($textFields as $field) {
             if (isset($data[$field]) && !empty($data[$field])) {
-                $mapped[$field] = trim($data[$field]);
+                $value = $data[$field];
+
+                // CORREÇÃO DO ERRO: Se a IA mandar um array ["A", "B"], converte para string "A, B"
+                if (is_array($value)) {
+                    $value = implode(', ', $value);
+                }
+
+                // Agora o trim recebe sempre string
+                $mapped[$field] = trim((string)$value);
             }
         }
 
-        // 3. Processamento da Porção (Lógica Especial)
+        // 3. Processamento da Porção
         if (!empty($data['serving_descriptor'])) {
             $raw = $data['serving_descriptor'];
             
-            // Tenta extrair peso (ex: 30g)
             if (preg_match('/(\d+\s*[.,]?\s*\d*)\s*(g|ml|kg|l)/i', $raw, $weightMatch)) {
                 $mapped['serving_weight'] = str_replace(',', '.', $weightMatch[1]) . strtolower($weightMatch[2]);
             }
 
-            // Tenta extrair medida caseira (ex: 2 fatias)
-            $measure = $this->parseHouseholdMeasure($raw);
+            $measure = $this->parseHouseholdMeasure((string)$raw); // Cast string por segurança
             $mapped['serving_size_quantity'] = $measure['qty'];
             $mapped['serving_size_unit'] = $measure['unit'];
         }
@@ -151,8 +154,7 @@ class OllamaService
     }
 
     /**
-     * Limpa apenas valores numéricos, mantendo ponto flutuante
-     * Converte "Zero", "Não contém" para 0
+     * Limpa apenas valores numéricos
      */
     private function cleanNumericValue($val)
     {
@@ -160,15 +162,11 @@ class OllamaService
         
         $strVal = (string)$val;
 
-        // Tratamento para nulos/vazios comuns em rótulos
         if (preg_match('/(zero|n[ãa]o cont[ée]m|tra[çc]os|isento)/i', $strVal)) {
             return '0';
         }
 
-        // Remove tudo que não for número, ponto, vírgula ou traço
         $clean = preg_replace('/[^\d.,-]/', '', $strVal);
-        
-        // Padroniza decimal para ponto
         return $clean === '' ? null : str_replace(',', '.', $clean);
     }
 
@@ -183,7 +181,6 @@ class OllamaService
         }
         
         $qty = '1';
-        // Captura frações (1/2) ou decimais (1,5)
         if (preg_match('/(\d+\s+\d+\/\d+|\d+\/\d+|\d+[.,]\d+|\d+)/', $text, $matches)) {
             $qty = str_replace(',', '.', $matches[0]);
         }
