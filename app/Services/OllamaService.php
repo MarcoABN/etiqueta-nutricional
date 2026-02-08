@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 class OllamaService
 {
     protected string $host;
+    // Modelo padrão definido para garantir consistência
+    protected string $model = 'qwen3-vl:8b';
 
     protected array $unitMap = [
         '/x[ií]c/i'         => 'Cup',
@@ -27,8 +29,7 @@ class OllamaService
     }
 
     /**
-     * NOVO: Método para processamento de texto (Tradução/Correção)
-     * Envia para o endpoint /completion do Python
+     * Processamento de Texto Geral
      */
     public function completion(string $prompt, int $timeoutSeconds = 60): ?string
     {
@@ -38,7 +39,7 @@ class OllamaService
             $response = Http::timeout($timeoutSeconds)
                 ->post($url, [
                     'prompt' => $prompt,
-                    'model'  => 'qwen2.5-vl:7b' // Pode usar o mesmo modelo leve
+                    'model'  => $this->model // Usa o qwen3-vl:8b
                 ]);
 
             if ($response->successful()) {
@@ -59,12 +60,14 @@ class OllamaService
      */
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
+        // Decodifica a imagem
         $imageBinary = base64_decode($base64Image);
         $url = "{$this->host}/process-nutritional";
 
         try {
             Log::info("Enviando imagem para Worker Python: $url");
 
+            // Envia como multipart/form-data
             $response = Http::timeout($timeoutSeconds)
                 ->attach('file', $imageBinary, 'tabela.jpg')
                 ->post($url);
@@ -72,6 +75,7 @@ class OllamaService
             if ($response->successful()) {
                 $json = $response->json();
                 
+                // Mapeia o retorno 'analysis' do Python
                 if (isset($json['analysis'])) {
                     return $this->mapJsonToDatabase($json['analysis']);
                 }
@@ -90,8 +94,8 @@ class OllamaService
     {
         $mapped = [];
 
-        // Mapeamento direto de campos
-        $fields = [
+        // 1. CAMPOS NUMÉRICOS (Precisam de limpeza de caracteres)
+        $numericFields = [
             'servings_per_container',
             'calories',
             'total_carb', 'total_carb_dv',
@@ -101,28 +105,43 @@ class OllamaService
             'trans_fat', 'trans_fat_dv', 'mono_fat', 'poly_fat',
             'fiber', 'fiber_dv',
             'sodium', 'sodium_dv', 'cholesterol', 'cholesterol_dv',
-            'vitamin_d', 'vitamin_a', 'vitamin_c', 'vitamin_e', 'vitamin_k',
-            'thiamin', 'riboflavin', 'niacin', 'vitamin_b6', 'vitamin_b12',
-            'folate', 'biotin', 'pantothenic_acid',
-            'calcium', 'iron', 'potassium', 'phosphorus', 'iodine',
-            'magnesium', 'zinc', 'selenium', 'copper', 'manganese',
-            'chromium', 'molybdenum', 'chloride'
+            // Micronutrientes
+            'vitamin_d', 'vitamin_a', 'vitamin_c', 'vitamin_e', 'vitamin_k', 'vitamin_b12',
+            'thiamin', 'riboflavin', 'niacin', 'vitamin_b6', 'folate', 'biotin', 
+            'pantothenic_acid', 'phosphorus', 'iodine', 'magnesium', 'zinc', 
+            'selenium', 'copper', 'manganese', 'chromium', 'molybdenum', 'chloride',
+            'calcium', 'iron', 'potassium'
         ];
 
-        foreach ($fields as $field) {
+        foreach ($numericFields as $field) {
             if (isset($data[$field])) {
-                $mapped[$field] = $this->cleanValue($data[$field]);
+                $mapped[$field] = $this->cleanNumericValue($data[$field]);
             }
         }
 
-        // Processamento da Porção
+        // 2. CAMPOS DE TEXTO (Ingredientes e Alergênicos - NÃO limpar números)
+        $textFields = [
+            'ingredients_pt', 
+            'allergens_contains_pt', 
+            'allergens_may_contain_pt'
+        ];
+
+        foreach ($textFields as $field) {
+            if (isset($data[$field]) && !empty($data[$field])) {
+                $mapped[$field] = trim($data[$field]);
+            }
+        }
+
+        // 3. Processamento da Porção (Lógica Especial)
         if (!empty($data['serving_descriptor'])) {
             $raw = $data['serving_descriptor'];
             
+            // Tenta extrair peso (ex: 30g)
             if (preg_match('/(\d+\s*[.,]?\s*\d*)\s*(g|ml|kg|l)/i', $raw, $weightMatch)) {
                 $mapped['serving_weight'] = str_replace(',', '.', $weightMatch[1]) . strtolower($weightMatch[2]);
             }
 
+            // Tenta extrair medida caseira (ex: 2 fatias)
             $measure = $this->parseHouseholdMeasure($raw);
             $mapped['serving_size_quantity'] = $measure['qty'];
             $mapped['serving_size_unit'] = $measure['unit'];
@@ -131,11 +150,26 @@ class OllamaService
         return $mapped;
     }
 
-    private function cleanValue($val)
+    /**
+     * Limpa apenas valores numéricos, mantendo ponto flutuante
+     * Converte "Zero", "Não contém" para 0
+     */
+    private function cleanNumericValue($val)
     {
         if (is_array($val)) return json_encode($val);
-        $clean = preg_replace('/[^\d.,-]/', '', (string)$val);
-        return $clean === '' ? '0' : str_replace(',', '.', $clean);
+        
+        $strVal = (string)$val;
+
+        // Tratamento para nulos/vazios comuns em rótulos
+        if (preg_match('/(zero|n[ãa]o cont[ée]m|tra[çc]os|isento)/i', $strVal)) {
+            return '0';
+        }
+
+        // Remove tudo que não for número, ponto, vírgula ou traço
+        $clean = preg_replace('/[^\d.,-]/', '', $strVal);
+        
+        // Padroniza decimal para ponto
+        return $clean === '' ? null : str_replace(',', '.', $clean);
     }
 
     private function parseHouseholdMeasure(string $text): array
@@ -147,10 +181,13 @@ class OllamaService
                 break;
             }
         }
+        
         $qty = '1';
+        // Captura frações (1/2) ou decimais (1,5)
         if (preg_match('/(\d+\s+\d+\/\d+|\d+\/\d+|\d+[.,]\d+|\d+)/', $text, $matches)) {
             $qty = str_replace(',', '.', $matches[0]);
         }
+        
         return ['qty' => $qty, 'unit' => $translatedUnit];
     }
 }
