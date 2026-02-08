@@ -22,10 +22,41 @@ class OllamaService
 
     public function __construct()
     {
-        // IP do Tailscale do seu PC (Porta 8002)
+        // IP do Tailscale do seu PC (Porta 8002 do Worker Python)
         $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:8002'), '/');
     }
 
+    /**
+     * NOVO: Método para processamento de texto (Tradução/Correção)
+     * Envia para o endpoint /completion do Python
+     */
+    public function completion(string $prompt, int $timeoutSeconds = 60): ?string
+    {
+        $url = "{$this->host}/completion";
+
+        try {
+            $response = Http::timeout($timeoutSeconds)
+                ->post($url, [
+                    'prompt' => $prompt,
+                    'model'  => 'qwen2.5-vl:7b' // Pode usar o mesmo modelo leve
+                ]);
+
+            if ($response->successful()) {
+                return $response->json('text');
+            }
+            
+            Log::warning("Worker Texto Falhou: " . $response->body());
+
+        } catch (\Exception $e) {
+            Log::error("Erro Conexão Texto: " . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Processamento de Imagem (Visão)
+     */
     public function extractNutritionalData(string $base64Image, int $timeoutSeconds = 600): ?array
     {
         $imageBinary = base64_decode($base64Image);
@@ -34,7 +65,6 @@ class OllamaService
         try {
             Log::info("Enviando imagem para Worker Python: $url");
 
-            // Timeout de 10 min para garantir que o Qwen tenha tempo
             $response = Http::timeout($timeoutSeconds)
                 ->attach('file', $imageBinary, 'tabela.jpg')
                 ->post($url);
@@ -60,29 +90,17 @@ class OllamaService
     {
         $mapped = [];
 
-        // 1. Lista de Campos Simples (Nome no JSON == Nome no Banco)
-        // Adicionadas todas as vitaminas/minerais e gorduras extras
+        // Mapeamento direto de campos
         $fields = [
             'servings_per_container',
             'calories',
-            
             'total_carb', 'total_carb_dv',
-            'total_sugars', 
-            'added_sugars', 'added_sugars_dv', 
-            'sugar_alcohol',
-            
+            'total_sugars', 'added_sugars', 'added_sugars_dv', 'sugar_alcohol',
             'protein', 'protein_dv',
-            
-            'total_fat', 'total_fat_dv',
-            'sat_fat', 'sat_fat_dv',
-            'trans_fat', 'trans_fat_dv',
-            'mono_fat', 'poly_fat',
-            
+            'total_fat', 'total_fat_dv', 'sat_fat', 'sat_fat_dv',
+            'trans_fat', 'trans_fat_dv', 'mono_fat', 'poly_fat',
             'fiber', 'fiber_dv',
-            'sodium', 'sodium_dv',
-            'cholesterol', 'cholesterol_dv',
-
-            // Micronutrientes (Conforme Migration)
+            'sodium', 'sodium_dv', 'cholesterol', 'cholesterol_dv',
             'vitamin_d', 'vitamin_a', 'vitamin_c', 'vitamin_e', 'vitamin_k',
             'thiamin', 'riboflavin', 'niacin', 'vitamin_b6', 'vitamin_b12',
             'folate', 'biotin', 'pantothenic_acid',
@@ -97,16 +115,14 @@ class OllamaService
             }
         }
 
-        // 2. Processamento da Porção (Ex: "30g (3 biscoitos)")
+        // Processamento da Porção
         if (!empty($data['serving_descriptor'])) {
             $raw = $data['serving_descriptor'];
             
-            // Extrai peso numérico e unidade (g/ml)
             if (preg_match('/(\d+\s*[.,]?\s*\d*)\s*(g|ml|kg|l)/i', $raw, $weightMatch)) {
                 $mapped['serving_weight'] = str_replace(',', '.', $weightMatch[1]) . strtolower($weightMatch[2]);
             }
 
-            // Extrai medida caseira e unidade (xícara, colher)
             $measure = $this->parseHouseholdMeasure($raw);
             $mapped['serving_size_quantity'] = $measure['qty'];
             $mapped['serving_size_unit'] = $measure['unit'];
@@ -118,11 +134,7 @@ class OllamaService
     private function cleanValue($val)
     {
         if (is_array($val)) return json_encode($val);
-        
-        // Remove tudo que não for número, ponto ou vírgula
-        // (Remove "mg", "kcal", "%", "<", ">")
         $clean = preg_replace('/[^\d.,-]/', '', (string)$val);
-        
         return $clean === '' ? '0' : str_replace(',', '.', $clean);
     }
 
