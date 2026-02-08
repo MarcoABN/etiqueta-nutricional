@@ -8,28 +8,47 @@ use Illuminate\Support\Facades\Log;
 class OllamaService
 {
     protected string $host;
-    // Modelo padrão definido para garantir consistência
-    protected string $model = 'qwen3-vl:8b';
 
+    // Mapeamento de Regex (Português) -> Abreviação FDA (Inglês)
+    // Fonte: FDA Guidance for Industry: Nutrition Labeling Manual
     protected array $unitMap = [
-        '/x[ií]c/i'         => 'Cup',
-        '/copo/i'           => 'Cup',
-        '/colher.*sopa/i'   => 'Tablespoon',
-        '/colher.*ch[aá]/i' => 'Teaspoon',
-        '/colher/i'         => 'Tablespoon',
-        '/fatia/i'          => 'Slice',
-        '/unidade/i'        => 'Piece',      
-        '/embalagem/i'      => 'Package',
+        // Colheres
+        '/colher.*sopa/i'   => 'Tbsp', // Tablespoon -> Tbsp
+        '/colher.*ch[aá]/i' => 'tsp',  // Teaspoon -> tsp
+        '/colher/i'         => 'Tbsp', // Default para Tbsp se não especificar
+
+        // Copos e Líquidos
+        '/x[ií]c/i'         => 'cup',  // Cup geralmente fica em minúsculo ou 'cup'
+        '/copo/i'           => 'glass', // Glass (uso comum, mas cup é melhor para medida padrão)
+        '/ml/i'             => 'mL',   // Mililitros
+        '/litro/i'          => 'L',
+
+        // Unidades Sólidas
+        '/fatia/i'          => 'slice',
+        '/unidade/i'        => 'piece',
+        '/biscoito/i'       => 'cookie',
+        '/bolacha/i'        => 'cracker',
+        
+        // Embalagens
+        '/embalagem/i'      => 'pkg',  // Package -> pkg
+        '/pacote/i'         => 'pkg',
+        '/pote/i'           => 'pkg',
+        '/lata/i'           => 'can',
+        '/garrafa/i'        => 'bottle',
+        
+        // Pesos (caso apareçam no descritor)
+        '/onça/i'           => 'oz',
+        '/libra/i'          => 'lb',
     ];
 
     public function __construct()
     {
-        // Pega o HOST do .env (ajustado para Docker ou Local)
+        // IP do Tailscale do seu PC (Porta 8002 do Worker Python)
         $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:8002'), '/');
     }
 
     /**
-     * Processamento de Texto Geral
+     * Método para processamento de texto (Tradução/Correção)
      */
     public function completion(string $prompt, int $timeoutSeconds = 60): ?string
     {
@@ -39,7 +58,7 @@ class OllamaService
             $response = Http::timeout($timeoutSeconds)
                 ->post($url, [
                     'prompt' => $prompt,
-                    'model'  => $this->model 
+                    'model'  => 'qwen2.5-vl:7b' 
                 ]);
 
             if ($response->successful()) {
@@ -91,8 +110,8 @@ class OllamaService
     {
         $mapped = [];
 
-        // 1. CAMPOS NUMÉRICOS (Precisam de limpeza de caracteres)
-        $numericFields = [
+        // Mapeamento direto de campos
+        $fields = [
             'servings_per_container',
             'calories',
             'total_carb', 'total_carb_dv',
@@ -102,85 +121,58 @@ class OllamaService
             'trans_fat', 'trans_fat_dv', 'mono_fat', 'poly_fat',
             'fiber', 'fiber_dv',
             'sodium', 'sodium_dv', 'cholesterol', 'cholesterol_dv',
-            // Micronutrientes
-            'vitamin_d', 'vitamin_a', 'vitamin_c', 'vitamin_e', 'vitamin_k', 'vitamin_b12',
-            'thiamin', 'riboflavin', 'niacin', 'vitamin_b6', 'folate', 'biotin', 
-            'pantothenic_acid', 'phosphorus', 'iodine', 'magnesium', 'zinc', 
-            'selenium', 'copper', 'manganese', 'chromium', 'molybdenum', 'chloride',
-            'calcium', 'iron', 'potassium'
+            'vitamin_d', 'vitamin_a', 'vitamin_c', 'vitamin_e', 'vitamin_k',
+            'thiamin', 'riboflavin', 'niacin', 'vitamin_b6', 'vitamin_b12',
+            'folate', 'biotin', 'pantothenic_acid',
+            'calcium', 'iron', 'potassium', 'phosphorus', 'iodine',
+            'magnesium', 'zinc', 'selenium', 'copper', 'manganese',
+            'chromium', 'molybdenum', 'chloride'
         ];
 
-        foreach ($numericFields as $field) {
+        foreach ($fields as $field) {
             if (isset($data[$field])) {
-                $mapped[$field] = $this->cleanNumericValue($data[$field]);
+                $mapped[$field] = $this->cleanValue($data[$field]);
             }
         }
 
-        // 2. CAMPOS DE TEXTO (Ingredientes e Alergênicos - CORRIGIDO)
-        $textFields = [
-            'ingredients_pt', 
-            'allergens_contains_pt', 
-            'allergens_may_contain_pt'
-        ];
-
-        foreach ($textFields as $field) {
-            if (isset($data[$field]) && !empty($data[$field])) {
-                $value = $data[$field];
-
-                // CORREÇÃO DO ERRO: Se a IA mandar um array ["A", "B"], converte para string "A, B"
-                if (is_array($value)) {
-                    $value = implode(', ', $value);
-                }
-
-                // Agora o trim recebe sempre string
-                $mapped[$field] = trim((string)$value);
-            }
-        }
-
-        // 3. Processamento da Porção
+        // Processamento da Porção com conversão para Abreviação FDA
         if (!empty($data['serving_descriptor'])) {
             $raw = $data['serving_descriptor'];
             
+            // 1. Extrai peso numérico (ex: 20g)
             if (preg_match('/(\d+\s*[.,]?\s*\d*)\s*(g|ml|kg|l)/i', $raw, $weightMatch)) {
                 $mapped['serving_weight'] = str_replace(',', '.', $weightMatch[1]) . strtolower($weightMatch[2]);
             }
 
-            $measure = $this->parseHouseholdMeasure((string)$raw); // Cast string por segurança
+            // 2. Extrai medida caseira já convertida para abreviação (ex: "1 Tbsp")
+            $measure = $this->parseHouseholdMeasure($raw);
             $mapped['serving_size_quantity'] = $measure['qty'];
-            $mapped['serving_size_unit'] = $measure['unit'];
+            $mapped['serving_size_unit'] = $measure['unit']; // Aqui já virá 'Tbsp', 'cup', 'slice'
         }
 
         return $mapped;
     }
 
-    /**
-     * Limpa apenas valores numéricos
-     */
-    private function cleanNumericValue($val)
+    private function cleanValue($val)
     {
         if (is_array($val)) return json_encode($val);
-        
-        $strVal = (string)$val;
-
-        if (preg_match('/(zero|n[ãa]o cont[ée]m|tra[çc]os|isento)/i', $strVal)) {
-            return '0';
-        }
-
-        $clean = preg_replace('/[^\d.,-]/', '', $strVal);
-        return $clean === '' ? null : str_replace(',', '.', $clean);
+        $clean = preg_replace('/[^\d.,-]/', '', (string)$val);
+        return $clean === '' ? '0' : str_replace(',', '.', $clean);
     }
 
     private function parseHouseholdMeasure(string $text): array
     {
-        $translatedUnit = 'Unit'; 
-        foreach ($this->unitMap as $regex => $englishUnit) {
+        $translatedUnit = 'piece'; // Default genérico seguro (unidade/peça)
+        
+        foreach ($this->unitMap as $regex => $fdaAbbreviation) {
             if (preg_match($regex, $text)) {
-                $translatedUnit = $englishUnit;
+                $translatedUnit = $fdaAbbreviation;
                 break;
             }
         }
-        
+
         $qty = '1';
+        // Procura frações (1/2, 1.5) ou inteiros
         if (preg_match('/(\d+\s+\d+\/\d+|\d+\/\d+|\d+[.,]\d+|\d+)/', $text, $matches)) {
             $qty = str_replace(',', '.', $matches[0]);
         }

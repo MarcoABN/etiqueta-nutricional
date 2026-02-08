@@ -148,23 +148,58 @@
                                 </tbody>
                             </table>
 
-                            <div class="border-t border-black pt-1 text-[10px] leading-tight mt-1 flex flex-wrap gap-x-1">
-                                @if($this->product->vitamin_d && $this->product->vitamin_d != '0')
-                                    <span>Vitamin D {{ $this->product->vitamin_d }} •</span>
-                                @endif
+                            {{-- LÓGICA DE VITAMINAS: Só exibe se houver valores > 0 --}}
+                            @php
+                                $showVitamins = false;
+                                // Verifica se existe o método no model, caso contrário faz verificação manual básica
+                                if (method_exists($this->product, 'hasMicronutrients')) {
+                                    $showVitamins = $this->product->hasMicronutrients();
+                                } else {
+                                    // Fallback manual caso o model não tenha sido atualizado ainda
+                                    $showVitamins = 
+                                        floatval($this->product->vitamin_d) > 0 ||
+                                        floatval($this->product->calcium) > 0 ||
+                                        floatval($this->product->iron) > 0 ||
+                                        floatval($this->product->potassium) > 0;
+                                }
+                            @endphp
+
+                            @if($showVitamins)
+                            <div class="border-t-[4px] border-black pt-1 mt-1">
+                                <div class="text-[11px] font-black uppercase mb-1">Vitamins and Minerals</div>
                                 
-                                @if($this->product->calcium && $this->product->calcium != '0')
-                                    <span>Calcium {{ $this->product->calcium }} •</span>
-                                @endif
-                                
-                                @if($this->product->iron && $this->product->iron != '0')
-                                    <span>Iron {{ $this->product->iron }} •</span>
-                                @endif
-                                
-                                @if($this->product->potassium && $this->product->potassium != '0')
-                                    <span>Potassium {{ $this->product->potassium }}</span>
-                                @endif
+                                <table class="w-full text-xs leading-tight">
+                                    @if(floatval($this->product->vitamin_d) > 0)
+                                    <tr>
+                                        <td>Vitamin D {{ $this->product->vitamin_d }}</td>
+                                        <td class="text-right">--%</td>
+                                    </tr>
+                                    @endif
+
+                                    @if(floatval($this->product->calcium) > 0)
+                                    <tr>
+                                        <td>Calcium {{ $this->product->calcium }}</td>
+                                        <td class="text-right">--%</td>
+                                    </tr>
+                                    @endif
+
+                                    @if(floatval($this->product->iron) > 0)
+                                    <tr>
+                                        <td>Iron {{ $this->product->iron }}</td>
+                                        <td class="text-right">--%</td>
+                                    </tr>
+                                    @endif
+
+                                    @if(floatval($this->product->potassium) > 0)
+                                    <tr>
+                                        <td>Potassium {{ $this->product->potassium }}</td>
+                                        <td class="text-right">--%</td>
+                                    </tr>
+                                    @endif
+                                </table>
                             </div>
+                            @endif
+
                         </div>
 
                         <div class="space-y-3 pt-2">

@@ -12,37 +12,74 @@
 
     $scale = $settings->font_scale / 100;
 
-    $micronutrients = collect([
-        ['Vitamin D', $product->vitamin_d],
-        ['Calcium', $product->calcium],
-        ['Iron', $product->iron],
-        ['Potassium', $product->potassium],
-        ['Vitamin A', $product->vitamin_a],
-        ['Vitamin C', $product->vitamin_c],
-        ['Vitamin E', $product->vitamin_e],
-        ['Thiamin', $product->thiamin],
-        ['Riboflavin', $product->riboflavin],
-        ['Niacin', $product->niacin],
-        ['Vitamin B6', $product->vitamin_b6],
-        ['Folate', $product->folate],
-        ['Vitamin B12', $product->vitamin_b12],
-        ['Biotin', $product->biotin],
-        ['Pantothenic Acid', $product->pantothenic_acid],
-        ['Phosphorus', $product->phosphorus],
-        ['Iodine', $product->iodine],
-        ['Magnesium', $product->magnesium],
-        ['Zinc', $product->zinc],
-        ['Selenium', $product->selenium],
-        ['Copper', $product->copper],
-        ['Manganese', $product->manganese],
-        ['Chromium', $product->chromium],
-        ['Molybdenum', $product->molybdenum],
-        ['Chloride', $product->chloride],
-    ])->filter(fn($item) => filled($item[1])) 
-    ->map(fn($item) => "{$item[0]} {$item[1]}")
-    ->implode(', ');
+    // --- 1. LÓGICA DE MICRONUTRIENTES ---
+    // LISTA ÚNICA: A regra agora é: SÓ MOSTRA SE O VALOR FOR MAIOR QUE ZERO.
+    
+    $allMicronutrients = [
+        // Prioritários (Antigos Obrigatórios)
+        ['Vitamin D', $product->vitamin_d, 'mcg'],
+        ['Calcium', $product->calcium, 'mg'],
+        ['Iron', $product->iron, 'mg'],
+        ['Potassium', $product->potassium, 'mg'],
+        
+        // Demais (Voluntários)
+        ['Vitamin A', $product->vitamin_a, 'mcg'],
+        ['Vitamin C', $product->vitamin_c, 'mg'],
+        ['Vitamin E', $product->vitamin_e, 'mg'],
+        ['Thiamin', $product->thiamin, 'mg'],
+        ['Riboflavin', $product->riboflavin, 'mg'],
+        ['Niacin', $product->niacin, 'mg'],
+        ['Vitamin B6', $product->vitamin_b6, 'mg'],
+        ['Folate', $product->folate, 'mcg'],
+        ['Vitamin B12', $product->vitamin_b12, 'mcg'],
+        ['Biotin', $product->biotin, 'mcg'],
+        ['Pantothenic Acid', $product->pantothenic_acid, 'mg'],
+        ['Phosphorus', $product->phosphorus, 'mg'],
+        ['Iodine', $product->iodine, 'mcg'],
+        ['Magnesium', $product->magnesium, 'mg'],
+        ['Zinc', $product->zinc, 'mg'],
+        ['Selenium', $product->selenium, 'mcg'],
+        ['Copper', $product->copper, 'mcg'],
+        ['Manganese', $product->manganese, 'mg'],
+        ['Chromium', $product->chromium, 'mcg'],
+        ['Molybdenum', $product->molybdenum, 'mcg'],
+        ['Chloride', $product->chloride, 'mg'],
+    ];
 
-    $hasMicros = !empty($micronutrients);
+    $finalMicros = collect();
+
+    foreach ($allMicronutrients as $micro) {
+        $label = $micro[0];
+        $val   = $micro[1];
+        $unit  = $micro[2];
+
+        // AQUI ESTÁ A CORREÇÃO:
+        // Usa floatval para garantir que null, "", "0", "0.00" sejam tratados como zero.
+        // Só adiciona na lista se for estritamente maior que 0.
+        if (floatval($val) > 0) {
+            $finalMicros->push("{$label} {$val}{$unit}");
+        }
+    }
+
+    $micronutrientsString = $finalMicros->implode(', ');
+    $hasMicros = $finalMicros->isNotEmpty();
+
+
+    // --- 2. LÓGICA DE MACRONUTRIENTES ---
+    
+    $nutrientsList = [
+        // Label, Valor, %VD, Negrito?, Indentado?
+        ['Total Fat', ($product->total_fat ?? '0').'g', ($product->total_fat_dv ?? '0'), true],
+        ['Saturated Fat', ($product->sat_fat ?? '0').'g', ($product->sat_fat_dv ?? '0'), false, true],
+        ['Trans Fat', ($product->trans_fat ?? '0').'g', '', false, true], 
+        ['Cholesterol', ($product->cholesterol ?? '0').'mg', ($product->cholesterol_dv ?? '0'), true],
+        ['Sodium', ($product->sodium ?? '0').'mg', ($product->sodium_dv ?? '0'), true],
+        ['Total Carb.', ($product->total_carb ?? '0').'g', ($product->total_carb_dv ?? '0'), true],
+        ['Dietary Fiber', ($product->fiber ?? '0').'g', ($product->fiber_dv ?? '0'), false, true],
+        ['Total Sugars', ($product->total_sugars ?? '0').'g', '', false, true], 
+        ['Incl. Added Sugars', ($product->added_sugars ?? '0').'g', ($product->added_sugars_dv ?? '0'), false, true],
+        ['Protein', ($product->protein ?? '0').'g', ($product->protein_dv ?? '0'), true],
+    ];
 @endphp
 
 <div class="fda-label-container bg-white text-black overflow-hidden relative"
@@ -68,45 +105,38 @@
         gap: {{ $settings->gap_width }}mm; 
         height: 100%;
     ">
+        {{-- COLUNA DA ESQUERDA: TABELA NUTRICIONAL --}}
         <div class="nutrition-facts" style="font-size: 7.5pt; line-height: 1.1; display: flex; flex-direction: column;">
             
             <div>
                 <div style="font-weight: 900; font-size: 16pt; margin: 0; line-height: 1;">Nutrition Facts</div>
                 <div style="display: flex; justify-content: space-between; margin-top: 1px;">
-                    <span>{{ $product->servings_per_container }} servings per container</span>
+                    <span>{{ $product->servings_per_container ?? 'Varied' }} servings per container</span>
                 </div>
                 <div style="border-bottom: 6px solid black; padding-bottom: 1px; margin-bottom: 1px; font-weight: 800; display: flex; justify-content: space-between;">
                     <span>Serving size</span>
-                    <span style="font-size: 7pt;">{{ $product->serving_size_quantity }} {{ $product->serving_size_unit }} ({{ $product->serving_weight }}g)</span>
+                    <span style="font-size: 7pt;">
+                        {{ $product->serving_size_quantity ?? '0' }} {{ $product->serving_size_unit }} 
+                        ({{ $product->serving_weight ?? '0g' }})
+                    </span>
                 </div>
                 <div style="border-bottom: 4px solid black; padding-bottom: 1px; display: flex; justify-content: space-between; align-items: flex-end;">
                     <div style="line-height: 1.2;">
                         <span style="font-weight: normal; font-size: 6pt; display: block;">Amount per serving</span>
                         <span style="font-weight: 900; font-size: 14pt;">Calories</span>
                     </div>
-                    <span style="font-weight: 900; font-size: 22pt; line-height: 0.8;">{{ $product->calories }}</span>
+                    <span style="font-weight: 900; font-size: 22pt; line-height: 0.8;">{{ $product->calories ?? '0' }}</span>
                 </div>
                 <div style="text-align: right; border-bottom: 1px solid black; font-size: 6pt; font-weight: bold;">% Daily Value*</div>
             </div>
 
-            @foreach([
-                ['Total Fat', $product->total_fat.'g', $product->total_fat_dv, true],
-                ['Saturated Fat', $product->sat_fat.'g', $product->sat_fat_dv, false, true],
-                ['Trans Fat', $product->trans_fat.'g', '', false, true],
-                ['Cholesterol', $product->cholesterol.'mg', $product->cholesterol_dv, true],
-                ['Sodium', $product->sodium.'mg', $product->sodium_dv, true],
-                ['Total Carb.', $product->total_carb.'g', $product->total_carb_dv, true],
-                ['Dietary Fiber', $product->fiber.'g', $product->fiber_dv, false, true],
-                ['Total Sugars', $product->total_sugars.'g', '', false, true],
-                ['Incl. Added Sugars', $product->added_sugars.'g', $product->added_sugars_dv, false, true],
-                ['Protein', $product->protein.'g', $product->protein_dv, true],
-            ] as $nutri)
+            @foreach($nutrientsList as $nutri)
                 <div style="border-top: 1px solid #000; display: flex; justify-content: space-between; {{ isset($nutri[4]) ? 'padding-left: 8px;' : '' }}">
                     <span>
                         @if($nutri[3]) <strong>{{ $nutri[0] }}</strong> @else {{ $nutri[0] }} @endif 
                         {{ $nutri[1] }}
                     </span>
-                    @if($nutri[2]) <strong>{{ $nutri[2] }}%</strong> @endif
+                    @if($nutri[2] !== '') <strong>{{ $nutri[2] }}%</strong> @endif
                 </div>
             @endforeach
             
@@ -125,6 +155,7 @@
             </div>
         </div>
 
+        {{-- COLUNA DA DIREITA: INGREDIENTES E EXTRAS --}}
         <div style="font-size: 7pt; display: flex; flex-direction: column; overflow: hidden; padding-left: 2px;">
             
             <div class="product-title-fit" style="
@@ -139,14 +170,15 @@
                 {{ $product->product_name_en ?? $product->product_name }}
             </div>
 
+            {{-- SEÇÃO DE VITAMINAS CORRIGIDA: Só exibe se $hasMicros for true --}}
             @if($hasMicros)
                 <div style="margin-bottom: 4px; font-size: 6.5pt; line-height: 1.1;">
-                    <strong>VITAMINS AND MINERALS:</strong> {{ $micronutrients }}.
+                    <strong>VITAMINS AND MINERALS:</strong> {{ $micronutrientsString }}.
                 </div>
             @endif
 
             <div class="auto-fit-ingredients" style="margin-bottom: 4px; flex-grow: 1; overflow: hidden;">
-                <strong>INGREDIENTS:</strong> {{ $product->ingredients }}
+                <strong>INGREDIENTS:</strong> {{ $product->ingredients ?? 'Ingredients not available.' }}
             </div>
 
             @if($product->allergens_contains)
@@ -168,11 +200,9 @@
     (function() {
         const scaleFactor = {{ $scale }};
 
-        // Função Genérica (Ingredientes)
         function fitTextGeneric(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
-
             elements.forEach(el => {
                 let size = parseFloat(window.getComputedStyle(el).fontSize);
                 while (el.offsetHeight > 0 && (el.scrollHeight > el.clientHeight) && size > minPx) {
@@ -182,38 +212,27 @@
             });
         }
 
-        // --- NOVA LÓGICA DE 2 LINHAS ---
         function fitTwoLines(selector, minSizePt) {
             const elements = document.querySelectorAll(selector);
             const minPx = minSizePt * 1.33 * scaleFactor;
-
             elements.forEach(el => {
-                // 1. Garante CSS base para o cálculo
                 el.style.lineHeight = '1.1';
                 el.style.maxHeight = 'none';
-                
-                // Pega o tamanho atual em PX
                 let currentSizePx = parseFloat(window.getComputedStyle(el).fontSize);
-                
-                // 2. Loop de Redução
-                // Calcula matematicamente quanto seria a altura de 2 linhas:
-                // Size * LineHeight(1.1) * 2 linhas * tolerancia(1.05)
                 const checkFits = (size) => {
                     const maxAllowedHeight = size * 1.1 * 2.1;
                     return el.scrollHeight <= maxAllowedHeight;
                 };
-
                 while (!checkFits(currentSizePx) && currentSizePx > minPx) {
-                    currentSizePx -= 0.5; // Redução agressiva (meio pixel por vez)
+                    currentSizePx -= 0.5; 
                     el.style.fontSize = currentSizePx + 'px';
                 }
             });
         }
         
         setTimeout(() => {
-            // Mínimo de 3pt para forçar textos longos a caberem
             fitTwoLines('.product-title-fit', 3.0); 
             fitTextGeneric('.auto-fit-ingredients', 4.5);
-        }, 200); // Aumentei levemente o delay para garantir renderização
+        }, 200); 
     })();
 </script>

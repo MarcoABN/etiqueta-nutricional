@@ -47,17 +47,18 @@ class PrintLabels extends Page implements HasForms
                     ->suffixAction(
                         Action::make('search')
                             ->icon('heroicon-m-magnifying-glass')
-                            ->action(fn () => $this->searchProduct())
+                            ->action(fn() => $this->searchProduct())
                     )
                     ->extraInputAttributes(['wire:keydown.enter' => 'searchProduct'])
-                    ->columnSpan(2), 
+                    ->columnSpan(2),
 
                 // 2. Visualização do Status (1 Coluna - NOVO)
                 Placeholder::make('status_display')
                     ->label('Status do Produto')
                     ->content(function () {
-                        if (!$this->product) return '-';
-                        
+                        if (!$this->product)
+                            return '-';
+
                         $status = $this->product->import_status ?? 'Indefinido';
                         $color = match ($status) {
                             'Liberado' => 'text-green-500',
@@ -88,14 +89,35 @@ class PrintLabels extends Page implements HasForms
     public function searchProduct()
     {
         $this->validate(['search_code' => 'required']);
+        $search = trim($this->search_code);
 
-        $found = Product::where('codprod', $this->search_code)->first();
+        // Limite máximo de um campo Inteiro (PostgreSQL)
+        $maxInt = 2147483647;
+
+        // Inicia a query
+        $query = Product::query();
+
+        // LÓGICA INTELIGENTE:
+        // Se for numérico e MENOR que o limite do integer, pode ser um codprod.
+        // Se for MAIOR, com certeza é só código de barras.
+        if (is_numeric($search) && $search > $maxInt) {
+            // É um número gigante (EAN), então só pesquisa no barcode
+            // Isso evita o erro "Numeric value out of range" no codprod
+            $query->where('barcode', $search);
+        } else {
+            // É um número pequeno ou texto, pesquisa nos dois
+            $query->where('codprod', $search)
+                ->orWhere('codprod', ltrim($search, '0'))
+                ->orWhere('barcode', $search);
+        }
+
+        $found = $query->first();
 
         if ($found) {
             $this->product = $found;
-            Notification::make()->title('Produto Carregado')->success()->send();
+            // $this->search_code = ''; // Opcional: limpar campo
+            Notification::make()->title('Produto: ' . $found->product_name)->success()->send();
         } else {
-            $this->product = null;
             Notification::make()->title('Produto não encontrado')->danger()->send();
         }
     }

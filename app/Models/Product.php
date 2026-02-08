@@ -126,4 +126,49 @@ class Product extends Model
         'cholesterol_dv' => '0',
         'serving_size_unit' => 'Unit',
     ];
+
+    public function hasMicronutrients(): bool
+    {
+        $fields = [
+            'vitamin_d',
+            'calcium',
+            'iron',
+            'potassium',
+            'vitamin_a',
+            'vitamin_c',
+            'vitamin_e',
+            'vitamin_k',
+            'thiamin',
+            'riboflavin',
+            'niacin',
+            'vitamin_b6',
+            'folate',
+            'vitamin_b12',
+            'biotin',
+            'pantothenic_acid',
+            'phosphorus',
+            'iodine',
+            'magnesium',
+            'zinc',
+            'selenium',
+            'copper',
+            'manganese',
+            'chromium',
+            'molybdenum',
+            'chloride'
+        ];
+
+        foreach ($fields as $field) {
+            // Pega o valor do campo
+            $val = $this->{$field};
+
+            // Converte para float para garantir a comparação numérica
+            // Se for null, "0", "0.00" ou vazio, retorna false na verificação > 0
+            if (floatval($val) > 0) {
+                return true; // Encontrou pelo menos um!
+            }
+        }
+
+        return false; // Não encontrou nenhum
+    }
 }
