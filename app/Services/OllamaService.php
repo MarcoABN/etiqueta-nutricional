@@ -12,7 +12,7 @@ class OllamaService
     public function __construct()
     {
         // IP do Worker Python
-        $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:8002'), '/');
+        $this->host = rtrim(env('OLLAMA_HOST', 'http://127.0.0.1:8003'), '/');
     }
 
     /**
