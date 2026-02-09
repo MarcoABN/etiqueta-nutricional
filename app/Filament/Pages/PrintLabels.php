@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Product;
 use Filament\Pages\Page;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -25,6 +26,10 @@ class PrintLabels extends Page implements HasForms
     // Propriedades do Livewire
     public ?string $search_code = '';
     public int $quantity = 1;
+    
+    // CORREÇÃO: Nome alterado de $layout para $labelLayout para evitar conflito
+    public string $labelLayout = 'standard'; 
+    
     public ?Product $product = null;
 
     protected function getViewData(): array
@@ -38,7 +43,7 @@ class PrintLabels extends Page implements HasForms
     {
         return $form
             ->schema([
-                // 1. Campo de Busca (2 Colunas)
+                // 1. Campo de Busca
                 TextInput::make('search_code')
                     ->label('Pesquisar Cód. WinThor')
                     ->placeholder('Bipe ou digite...')
@@ -52,28 +57,39 @@ class PrintLabels extends Page implements HasForms
                     ->extraInputAttributes(['wire:keydown.enter' => 'searchProduct'])
                     ->columnSpan(2),
 
-                // 2. Visualização do Status (1 Coluna - NOVO)
+                // 2. Status Visual
                 Placeholder::make('status_display')
                     ->label('Status do Produto')
                     ->content(function () {
-                        if (!$this->product)
-                            return '-';
+                        if (!$this->product) return '-';
 
                         $status = $this->product->import_status ?? 'Indefinido';
                         $color = match ($status) {
                             'Liberado' => 'text-green-500',
-                            'Processado (IA)' => 'text-blue-400', // Azul para destacar IA
+                            'Processado (IA)' => 'text-blue-400',
                             'Em Análise' => 'text-yellow-500',
                             'Bloqueado' => 'text-red-500',
                             default => 'text-gray-400',
                         };
 
-                        // Retorna HTML colorido e negrito
                         return new HtmlString("<span class='text-xl font-black {$color}'>{$status}</span>");
                     })
                     ->columnSpan(1),
 
-                // 3. Quantidade (1 Coluna)
+                // 3. Seletor de Layout (CORRIGIDO)
+                Select::make('labelLayout') // Nome do campo atualizado
+                    ->label('Modelo de Etiqueta')
+                    ->options([
+                        'standard' => 'Padrão Vertical (100x80mm)',
+                        'tabular' => 'Tabular Horizontal (80x50mm - Dupla)',
+                    ])
+                    ->default('standard')
+                    ->selectablePlaceholder(false)
+                    ->live()
+                    ->required()
+                    ->columnSpan(1),
+
+                // 4. Quantidade
                 TextInput::make('quantity')
                     ->label('Qtd. Etiquetas')
                     ->numeric()
@@ -81,31 +97,21 @@ class PrintLabels extends Page implements HasForms
                     ->minValue(1)
                     ->maxValue(1000)
                     ->required()
-                    ->live()
                     ->columnSpan(1),
-            ])->columns(4); // Grid total de 4 colunas
+            ])->columns(5);
     }
 
     public function searchProduct()
     {
         $this->validate(['search_code' => 'required']);
         $search = trim($this->search_code);
-
-        // Limite máximo de um campo Inteiro (PostgreSQL)
         $maxInt = 2147483647;
 
-        // Inicia a query
         $query = Product::query();
 
-        // LÓGICA INTELIGENTE:
-        // Se for numérico e MENOR que o limite do integer, pode ser um codprod.
-        // Se for MAIOR, com certeza é só código de barras.
         if (is_numeric($search) && $search > $maxInt) {
-            // É um número gigante (EAN), então só pesquisa no barcode
-            // Isso evita o erro "Numeric value out of range" no codprod
             $query->where('barcode', $search);
         } else {
-            // É um número pequeno ou texto, pesquisa nos dois
             $query->where('codprod', $search)
                 ->orWhere('codprod', ltrim($search, '0'))
                 ->orWhere('barcode', $search);
@@ -115,7 +121,6 @@ class PrintLabels extends Page implements HasForms
 
         if ($found) {
             $this->product = $found;
-            // $this->search_code = ''; // Opcional: limpar campo
             Notification::make()->title('Produto: ' . $found->product_name)->success()->send();
         } else {
             Notification::make()->title('Produto não encontrado')->danger()->send();
