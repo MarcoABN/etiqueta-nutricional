@@ -1,44 +1,52 @@
-<p align="center">
-    <img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="300" alt="TableNutri Logo">
-</p>
+# TableNutri 🥗🏷️
 
-<p align="center">
-    <a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-10.x-red?style=for-the-badge&logo=laravel" alt="Laravel"></a>
-    <a href="https://filamentphp.com"><img src="https://img.shields.io/badge/Filament-3.x-amber?style=for-the-badge&logo=livewire" alt="Filament"></a>
-    <a href="https://vuejs.org"><img src="https://img.shields.io/badge/Frontend-Livewire_%2B_Alpine-42b883?style=for-the-badge&logo=vue.js" alt="Frontend"></a>
-    <a href="https://www.postgresql.org"><img src="https://img.shields.io/badge/Database-PostgreSQL-316192?style=for-the-badge&logo=postgresql" alt="Postgres"></a>
-    <a href="https://ollama.com"><img src="https://img.shields.io/badge/AI_Core-Qwen3_VL_8b-blueviolet?style=for-the-badge&logo=openai" alt="AI Model"></a>
-    <a href="https://www.fda.gov/food/food-labeling-nutrition"><img src="https://img.shields.io/badge/Compliance-FDA-green?style=for-the-badge&logo=shield" alt="FDA Compliant"></a>
-</p>
+![Status do Projeto](https://img.shields.io/badge/status-em_desenvolvimento-orange)
+![Laravel](https://img.shields.io/badge/Laravel-11-FF2D20?logo=laravel&logoColor=white)
+![Filament](https://img.shields.io/badge/Filament-3.x-F28D1A?logo=filament&logoColor=white)
+![AI Model](https://img.shields.io/badge/AI-Qwen3--VL:8b-blueviolet)
+![Database](https://img.shields.io/badge/Postgres-16-336791?logo=postgresql&logoColor=white)
 
-# TableNutri - FDA Nutrition Label System
+> **Solução inteligente para geração de tabelas nutricionais compatíveis com o padrão FDA para exportação.**
 
-O **TableNutri** é uma plataforma robusta de engenharia de dados nutricionais, desenvolvida para automatizar a criação de rótulos em conformidade com as rígidas normas da **FDA (Food and Drug Administration)**.
-
-O sistema resolve o desafio da exportação de alimentos integrando reconhecimento visual via IA, cálculos nutricionais complexos e gestão de fluxo de trabalho em uma interface unificada.
+O **TableNutri** é um sistema completo desenvolvido para simplificar e automatizar a criação de rótulos nutricionais. O diferencial do projeto reside na integração de tecnologias web modernas com **Inteligência Artificial Vision-Language (VLM)** para extração e processamento de dados nutricionais diretamente de embalagens via câmera móvel.
 
 ---
 
-## 🏗️ Arquitetura de Engenharia (Híbrida)
+## 🚀 Destaques e Arquitetura
 
-O projeto utiliza uma topologia inovadora para reduzir custos de nuvem enquanto mantém alta capacidade de processamento de IA, utilizando um túnel seguro entre a AWS e um servidor local de alta performance.
+O projeto utiliza uma **arquitetura híbrida**, combinando a estabilidade da nuvem com o poder de processamento de hardware local dedicado para inferência de IA.
 
-```mermaid
-graph TD
-    User(["📱 Usuário Mobile/Desktop"]) -->|HTTPS| WebServer["☁️ AWS Lightsail (Ubuntu + Nginx)"]
-    WebServer -->|Tunnel Criptografado| HomeLab["🏠 Servidor Local (GPU Node)"]
-    
-    subgraph Cloud ["☁️ Cloud Layer"]
-        WebServer
-        DB[("PostgreSQL")]
-        Queue["Redis Queue"]
-    end
-    
-    subgraph Local ["🏠 AI Inference Layer"]
-        HomeLab
-        GPU["NVIDIA RTX 4070"]
-        Model["Qwen3-VL:8b"]
-    end
+### 🏗️ Infraestrutura Híbrida
+* **Servidor de Produção (Cloud):** Hospedado na **AWS**, rodando Ubuntu com Nginx. Responsável por servir a aplicação web, gerenciar o banco de dados e a interface do usuário.
+* **Unidade de Processamento de IA (Edge/Local):** Um servidor de inferência de alto desempenho que executa os modelos de IA localmente.
+    * *Benefício:* Redução drástica de custos com APIs de IA externas e garantia de privacidade dos dados, utilizando o poder da GPU dedicada para processamento visual pesado.
 
-    HomeLab -->|JSON Estruturado| WebServer
-    WebServer -->|PDF/ZPL| User
+### 🧠 Inteligência Artificial
+O núcleo de inteligência do sistema utiliza o modelo **Qwen3-VL:8b**.
+* **Capacidade:** Modelo *Vision-Language* capaz de interpretar imagens complexas de rótulos.
+* **Função:** Extração automática de dados nutricionais a partir de fotos, validação de conformidade e categorização de ingredientes.
+
+---
+
+## 🛠️ Stack Tecnológica
+
+### Backend & Framework
+* **[Laravel](https://laravel.com/):** Framework PHP robusto utilizado como espinha dorsal da aplicação.
+* **[FilamentPHP](https://filamentphp.com/):** Painel administrativo (TALL stack) para gerenciamento ágil de produtos, usuários e relatórios.
+
+### Banco de Dados & Servidor
+* **PostgreSQL:** Banco de dados relacional escolhido pela robustez e suporte a dados complexos.
+* **Nginx:** Servidor web de alta performance.
+* **Ubuntu:** Sistema operacional base para os ambientes de produção e inferência.
+
+### Ferramentas de Desenvolvimento
+* **Laragon:** Ambiente de desenvolvimento local isolado e ágil.
+
+---
+
+## ✨ Funcionalidades Principais
+
+* **📸 Coletor Mobile Inteligente:** Interface otimizada para dispositivos móveis que permite capturar fotos de produtos em tempo real.
+* **✂️ Tratamento de Imagem Avançado:** Ferramenta integrada de **Cropping (recorte)** para ajustar o foco na tabela nutricional antes do processamento.
+* **🇺🇸 Conformidade FDA:** Algoritmos ajustados para formatar e converter unidades conforme as exigências rigorosas da *Food and Drug Administration* para exportação.
+* **📄 Geração de etiquetas:** Exportação automática dos rótulos prontos para impressão em alta definição.
