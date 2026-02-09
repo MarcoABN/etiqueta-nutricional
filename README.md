@@ -25,19 +25,19 @@ O projeto utiliza uma topologia inovadora para reduzir custos de nuvem enquanto 
 
 ```mermaid
 graph TD
-    User([📱 Usuário Mobile/Desktop]) -->|HTTPS| WebServer[☁️ AWS Lightsail (Ubuntu + Nginx)]
-    WebServer -->|Tunnel Criptografado| HomeLab[🏠 Servidor Local (GPU Node)]
+    User(["📱 Usuário Mobile/Desktop"]) -->|HTTPS| WebServer["☁️ AWS Lightsail (Ubuntu + Nginx)"]
+    WebServer -->|Tunnel Criptografado| HomeLab["🏠 Servidor Local (GPU Node)"]
     
-    subgraph "☁️ Cloud Layer"
+    subgraph Cloud ["☁️ Cloud Layer"]
         WebServer
-        DB[(PostgreSQL)]
-        Queue[Redis Queue]
+        DB[("PostgreSQL")]
+        Queue["Redis Queue"]
     end
     
-    subgraph "🏠 AI Inference Layer"
+    subgraph Local ["🏠 AI Inference Layer"]
         HomeLab
-        GPU[NVIDIA RTX 4070]
-        Model[Qwen3-VL:8b]
+        GPU["NVIDIA RTX 4070"]
+        Model["Qwen3-VL:8b"]
     end
 
     HomeLab -->|JSON Estruturado| WebServer
