@@ -21,7 +21,18 @@ class ManageLabelSettings extends Page implements HasForms
     protected static ?string $navigationLabel = 'Config. Impressão';
     protected static ?string $title = 'Calibração da Etiqueta Zebra';
     protected static string $view = 'filament.pages.manage-label-settings';
+    
+    protected static bool $shouldRegisterNavigation = false;
+    /*
 
+    CLASSE DESATIVADA !!!!!
+    FUNÇÕES INTEGRADAS A TELA DE IMPRESSÃO
+    CODIGO MANTIDO APENAS POR PRECAUÇÃO
+
+
+
+
+    */
     // Propriedade para segurar os dados do formulário
     public ?array $data = [];
 

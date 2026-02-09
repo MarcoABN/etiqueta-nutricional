@@ -24,6 +24,16 @@
 
     @php 
         $layout = request('layout', 'standard'); 
+        
+        // RECUPERA A CONFIGURAÇÃO ESPECÍFICA DO LAYOUT SOLICITADO
+        $settings = \App\Models\LabelSetting::where('layout', $layout)->first();
+        
+        // Fallback caso não exista (segurança)
+        if (!$settings) {
+            $settings = new \App\Models\LabelSetting([
+                'padding_top' => 2, 'gap_width' => 4, 'font_scale' => 100
+            ]);
+        }
     @endphp
 
     @if($layout === 'standard')

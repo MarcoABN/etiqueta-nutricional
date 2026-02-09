@@ -132,6 +132,11 @@
                         <?php if($microsText): ?>
                             <div style="margin-bottom: 1px; border-bottom: 1px solid black; padding-bottom: 1px;"><?php echo $microsText; ?></div>
                         <?php endif; ?>
+                        
+                        <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 1px;">
+                            <?php echo $product->product_name_en ?? $product->product_name; ?>
+                        </div>
+
                         <div style="overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; text-overflow: ellipsis;">
                             <strong>INGREDIENTS:</strong> <?php echo $product->ingredients; ?>
                             <?php if($product->allergens_contains): ?> <span style="font-weight:bold;"> CONTAINS: <?php echo $product->allergens_contains; ?></span> <?php endif; ?>
