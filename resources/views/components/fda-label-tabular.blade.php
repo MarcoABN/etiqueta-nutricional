@@ -1,23 +1,22 @@
 @props(['product', 'settings'])
 
+@if(!$product)
+    <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #fee2e2; color: #991b1b; font-weight: bold; border: 2px dashed #f87171;">
+        ERRO: Produto não carregado.
+    </div>
+@else
+
 @php
-    // --- 1. CONFIGURAÇÕES E DIMENSÕES ---
-    $gapWidth = $settings->gap_width ?? 4; // Padrão 4mm se não definido
+    $gapWidth = $settings->gap_width ?? 4; 
     $scale    = ($settings->font_scale ?? 100) / 100;
     
-    // Dimensões Alvo (Versão Estável: 48x78mm úteis)
-    // Visual Width (78mm) vira Altura Física no papel
+    // Dimensões Tabular (78x48mm visual)
     $targetVisualWidth = 78.0; 
-    
-    // Visual Height (48mm) vira Largura Física no papel
-    // A largura física máxima é o slot (50mm) MENOS metade do gap.
     $maxPhysicalWidth = 50 - ($gapWidth / 2);
     $targetVisualHeight = min(48.0, $maxPhysicalWidth);
-
-    // Margens Internas (Apenas para afastar o texto da borda preta)
     $innerPad = 1.5; 
 
-    // --- 2. DADOS ---
+    // Dados
     $microsText = collect([
         ['Vitamin D', $product->vitamin_d, 'mcg'],
         ['Calcium', $product->calcium, 'mg'],
@@ -42,7 +41,6 @@
         ['Protein', ($product->protein ?? '0').'g', $product->protein_dv, true],
     ];
 
-    // --- 3. CLOSURE DE DESENHO DA ETIQUETA ---
     $drawLabelContent = function() use ($product, $scale, $microsText, $col2_data, $col3_data, $innerPad, $targetVisualWidth, $targetVisualHeight) {
         ?>
         <div style="
@@ -58,17 +56,12 @@
         ">
             <div style="border: 2px solid black; width: 100%; height: 100%; display: flex; flex-direction: column;">
 
-                <div style="height: 60%; display: flex; border-bottom: 1px solid black;">
-                    
+                <div style="height: 50%; display: flex; border-bottom: 1px solid black;">
                     <div style="width: 30%; display: flex; flex-direction: column; justify-content: space-between;">
-                        
                         <div style="padding: 2px 0 0 3px;">
-                            <div style="font-weight: 900; font-size: <?php echo 11 * $scale; ?>pt; line-height: 0.9; letter-spacing: -0.5px;">
-                                Nutrition Facts
-                            </div>
+                            <div style="font-weight: 900; font-size: <?php echo 11 * $scale; ?>pt; line-height: 0.9; letter-spacing: -0.5px;">Nutrition Facts</div>
                             <div style="border-bottom: 1px solid black; margin-top: 2px; width: 95%;"></div>
                         </div>
-
                         <div style="padding: 0 0 0 3px; display: flex; flex-direction: column; justify-content: center; flex-grow: 1;">
                             <div style="font-size: <?php echo 5 * $scale; ?>pt; line-height: 1.1; margin-bottom: 2px;">
                                 <?php echo $product->servings_per_container ?? 'Varied'; ?> servings per container
@@ -78,7 +71,6 @@
                                 <?php echo $product->serving_size_quantity ?? '0'; ?><?php echo $product->serving_size_unit; ?> (<?php echo $product->serving_weight; ?>)
                             </div>
                         </div>
-                        
                         <div style="border-top: 1px solid black; padding: 2px 2px 2px 3px; margin-top: 2px;">
                             <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                                 <div style="line-height: 1.1;">
@@ -127,23 +119,45 @@
                     </div>
                 </div>
 
-                <div style="height: 40%; padding: 1px 3px 2px 3px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div style="font-size: <?php echo 5.5 * $scale; ?>pt; line-height: 1.1;">
-                        <?php if($microsText): ?>
-                            <div style="margin-bottom: 1px; border-bottom: 1px solid black; padding-bottom: 1px;"><?php echo $microsText; ?></div>
-                        <?php endif; ?>
-                        
-                        <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 1px;">
-                            <?php echo $product->product_name_en ?? $product->product_name; ?>
+                <div style="height: 50%; padding: 1px 3px 2px 3px; display: flex; flex-direction: column; justify-content: space-between;">
+                    
+                    <div style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
+                        <div style="font-size: <?php echo 5 * $scale; ?>pt; line-height: 1.1; margin-bottom: 2px;">
+                            <?php if($microsText): ?>
+                                <div style="margin-bottom: 1px; border-bottom: 1px solid black; padding-bottom: 1px;"><?php echo $microsText; ?></div>
+                            <?php endif; ?>
+                            
+                            <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">
+                                <?php echo $product->product_name_en ?? $product->product_name; ?>
+                            </div>
                         </div>
 
-                        <div style="overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; text-overflow: ellipsis;">
+                        <div style="
+                            flex-grow: 1;
+                            overflow: hidden; 
+                            display: -webkit-box; 
+                            -webkit-line-clamp: 5;
+                            -webkit-box-orient: vertical; 
+                            text-overflow: ellipsis;
+                            font-size: <?php echo 5 * $scale; ?>pt; 
+                            line-height: 1.1;
+                            margin-bottom: 2px;
+                            min-height: 0;
+                        ">
                             <strong>INGREDIENTS:</strong> <?php echo $product->ingredients; ?>
-                            <?php if($product->allergens_contains): ?> <span style="font-weight:bold;"> CONTAINS: <?php echo $product->allergens_contains; ?></span> <?php endif; ?>
-                            <?php if($product->allergens_may_contain): ?> <span style="font-weight:bold;"> MAY CONTAIN: <?php echo $product->allergens_may_contain; ?></span> <?php endif; ?>
+                        </div>
+                        
+                        <div style="font-size: <?php echo 5 * $scale; ?>pt; line-height: 1.1; flex-shrink: 0;">
+                            <?php if($product->allergens_contains): ?> 
+                                <div><strong style="font-weight: 800;">CONTAINS:</strong> <?php echo $product->allergens_contains; ?></div> 
+                            <?php endif; ?>
+                            <?php if($product->allergens_may_contain): ?> 
+                                <div><strong style="font-weight: 800;">MAY CONTAIN:</strong> <?php echo $product->allergens_may_contain; ?></div> 
+                            <?php endif; ?>
                         </div>
                     </div>
-                    <div style="font-size: <?php echo 4.5 * $scale; ?>pt; line-height: 1.0; border-top: 1px solid black; padding-top: 1px; display: flex; justify-content: space-between; align-items: flex-end;">
+
+                    <div style="font-size: <?php echo 4.5 * $scale; ?>pt; line-height: 1.0; border-top: 1px solid black; padding-top: 1px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0;">
                         <div style="max-width: 65%;">
                             <?php if(filled($product->imported_by)): ?> IMP: <?php echo nl2br(e($product->imported_by)); ?> <?php else: ?> IMPORTED BY: GO MINAS DISTRIBUTION LLC<br>MARGATE, FL 33063 <?php endif; ?>
                         </div>
@@ -159,19 +173,17 @@
 
 <div style="position: relative; width: 100mm; height: 80mm; background: white; overflow: hidden;">
     
+    {{-- ETIQUETA 1 --}}
     <div style="
         position: absolute; 
-        top: 0; 
-        left: 0; 
-        width: <?php echo 50 - ($gapWidth / 2); ?>mm; 
-        height: 80mm; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center;
+        top: 0; left: 0; 
+        width: <?php echo 50 - ($gapWidth / 2); ?>mm; height: 80mm; 
+        display: flex; align-items: center; justify-content: center;
     ">
         <div style="transform: rotate(90deg);">{{ $drawLabelContent() }}</div>
     </div>
 
+    {{-- GAP --}}
     <div style="
         position: absolute;
         left: <?php echo 50 - ($gapWidth / 2); ?>mm;
@@ -179,17 +191,15 @@
         height: 80mm;
     "></div>
 
+    {{-- ETIQUETA 2 --}}
     <div style="
         position: absolute; 
-        top: 0; 
-        left: <?php echo 50 + ($gapWidth / 2); ?>mm; 
-        width: <?php echo 50 - ($gapWidth / 2); ?>mm; 
-        height: 80mm; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center;
+        top: 0; left: <?php echo 50 + ($gapWidth / 2); ?>mm; 
+        width: <?php echo 50 - ($gapWidth / 2); ?>mm; height: 80mm; 
+        display: flex; align-items: center; justify-content: center;
     ">
         <div style="transform: rotate(90deg);">{{ $drawLabelContent() }}</div>
     </div>
 
 </div>
+@endif
