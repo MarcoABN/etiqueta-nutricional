@@ -21,26 +21,23 @@ class PriceScanner extends Page implements HasForms
     protected static ?string $title = 'Coletor de Preços';
     protected static string $view = 'filament.pages.price-scanner';
 
-    protected static ?string $navigationGroup = 'Precificação';
-
-    // Propriedades
+    // Propriedades de Estado
     public $filialId = null;
-    public $showScanner = false;
-    public $product = null;
-    public $novoPreco = null;
+    public $product = null;     // Produto encontrado
+    public $novoPreco = null;   // Input do usuário
 
-    // Ouvintes de eventos do Front (JS) e Notificações
+    // Listeners
     protected $listeners = [
         'barcode-scanned' => 'handleBarcodeScan',
-        'save-confirmed'  => 'forceSavePrice'
+        'save-confirmed'  => 'forceSavePrice',
+        'change-filial'   => 'changeFilial'
     ];
 
     public function mount()
     {
-        // Recupera filial da sessão se existir
+        // Recupera filial da sessão para não pedir toda hora
         if (Session::has('scanner_filial_id')) {
             $this->filialId = Session::get('scanner_filial_id');
-            $this->showScanner = true;
         }
     }
 
@@ -49,13 +46,14 @@ class PriceScanner extends Page implements HasForms
         return $form
             ->schema([
                 Select::make('filialId')
-                    ->label('Selecione a Filial de Operação')
+                    ->label('Selecione a Filial')
                     ->options(PctabprTn::distinct()->pluck('CODFILIAL', 'CODFILIAL'))
                     ->required()
                     ->live()
                     ->afterStateUpdated(function ($state) {
                         Session::put('scanner_filial_id', $state);
-                        $this->showScanner = true;
+                        // Dispara evento para o JS iniciar a câmera assim que selecionar
+                        $this->dispatch('filial-selected');
                     }),
             ]);
     }
@@ -73,18 +71,17 @@ class PriceScanner extends Page implements HasForms
             $this->product = $found;
             $this->novoPreco = $found->PVENDA_NOVO;
             
-            // Toca o beep e foca no campo
-            $this->dispatch('play-beep');
-            $this->dispatch('focus-price');
+            // Avisa o Front para pausar câmera e mostrar modal
+            $this->dispatch('product-found');
         } else {
             Notification::make()
                 ->title('Produto não encontrado')
-                ->body("EAN: $code na Filial {$this->filialId}")
+                ->body("EAN: $code")
                 ->danger()
-                ->duration(3000)
+                ->duration(2000)
                 ->send();
             
-            // Reinicia o scanner no JS
+            // Manda reiniciar o scanner imediatamente
             $this->dispatch('reset-scanner');
         }
     }
@@ -93,10 +90,10 @@ class PriceScanner extends Page implements HasForms
     {
         if (!$this->product) return;
 
-        // Tratamento de vírgula/ponto
         $valorLimpo = str_replace(',', '.', $this->novoPreco);
 
-        if ($valorLimpo == '') {
+        // Se estiver vazio, salva como null (remove o preço novo)
+        if ($valorLimpo === '' || $valorLimpo === null) {
              $this->forceSavePrice(null);
              return;
         }
@@ -132,7 +129,6 @@ class PriceScanner extends Page implements HasForms
 
     public function forceSavePrice($valor = null)
     {
-        // Se foi chamado pelo listener 'save-confirmed', pega o valor do estado
         if ($valor === null && $this->novoPreco !== null) {
             $valor = str_replace(',', '.', $this->novoPreco);
         }
@@ -140,9 +136,8 @@ class PriceScanner extends Page implements HasForms
         $this->product->PVENDA_NOVO = $valor;
         $this->product->save();
 
-        Notification::make()->title('Preço atualizado!')->success()->duration(1500)->send();
+        Notification::make()->title('Preço salvo!')->success()->duration(1500)->send();
 
-        // Reseta para ler o próximo
         $this->resetCycle();
     }
 
@@ -150,14 +145,16 @@ class PriceScanner extends Page implements HasForms
     {
         $this->product = null;
         $this->novoPreco = null;
-        $this->dispatch('reset-scanner'); // Manda o JS reabrir a câmera
+        
+        // O segredo: Dispara evento para o JS reabrir a câmera
+        $this->dispatch('reset-scanner');
     }
 
     public function changeFilial()
     {
-        $this->showScanner = false;
         $this->filialId = null;
         $this->product = null;
         Session::forget('scanner_filial_id');
+        // O front irá detectar que filialId é null e mostrará o form
     }
 }
