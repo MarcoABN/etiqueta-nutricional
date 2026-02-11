@@ -21,25 +21,24 @@ class PriceScanner extends Page implements HasForms
     protected static ?string $title = 'Coletor de Preços';
     protected static string $view = 'filament.pages.price-scanner';
 
-    protected static ?string $navigationGroup = 'Precificação';
+    // Propriedades
+    public $filialId = null;
+    public $showScanner = false;
+    public $product = null;
+    public $novoPreco = null;
 
-    // Propriedades (Estado)
-    public $selectedFilial = null;
-    public $scannedCode = null; // Código lido
-    public $foundProduct = null; // Objeto do produto
-    public $novoPreco = null;    // Campo de input
-
-    // Listeners para eventos do Front e Back
+    // Ouvintes de eventos do Front (JS) e Notificações
     protected $listeners = [
-        'barcode-scanned' => 'handleBarcodeScan', // Vem do JS
-        'save-confirmed'  => 'forceSavePrice'     // Vem da Notificação de Confirmação
+        'barcode-scanned' => 'handleBarcodeScan',
+        'save-confirmed'  => 'forceSavePrice'
     ];
 
     public function mount()
     {
-        // Recupera a filial da sessão se o usuário der F5
-        if (Session::has('scanner_filial')) {
-            $this->selectedFilial = Session::get('scanner_filial');
+        // Recupera filial da sessão se existir
+        if (Session::has('scanner_filial_id')) {
+            $this->filialId = Session::get('scanner_filial_id');
+            $this->showScanner = true;
         }
     }
 
@@ -47,121 +46,116 @@ class PriceScanner extends Page implements HasForms
     {
         return $form
             ->schema([
-                Select::make('selectedFilial')
-                    ->label('Filial de Operação')
+                Select::make('filialId')
+                    ->label('Selecione a Filial de Operação')
                     ->options(PctabprTn::distinct()->pluck('CODFILIAL', 'CODFILIAL'))
                     ->required()
                     ->live()
                     ->afterStateUpdated(function ($state) {
-                        Session::put('scanner_filial', $state);
+                        Session::put('scanner_filial_id', $state);
+                        $this->showScanner = true;
                     }),
             ]);
     }
 
     public function handleBarcodeScan($code)
     {
-        if (!$this->selectedFilial) {
-            Notification::make()->title('Selecione a filial primeiro!')->warning()->send();
-            return;
-        }
+        if (!$this->filialId) return;
 
-        $this->scannedCode = $code;
-        
-        // Busca produto na filial selecionada
-        $product = PctabprTn::where('CODAUXILIAR', $code)
-            ->where('CODFILIAL', $this->selectedFilial)
+        // Busca o produto
+        $found = PctabprTn::where('CODFILIAL', $this->filialId)
+            ->where('CODAUXILIAR', $code)
             ->first();
 
-        if ($product) {
-            $this->foundProduct = $product;
-            $this->novoPreco = $product->PVENDA_NOVO; 
+        if ($found) {
+            $this->product = $found;
+            $this->novoPreco = $found->PVENDA_NOVO;
             
-            // Opcional: Tocar um som de "beep" via JS se desejar
-            $this->dispatch('play-beep'); 
+            // Toca o beep e foca no campo
+            $this->dispatch('play-beep');
+            $this->dispatch('focus-price');
         } else {
-            // Se não achar, avisa e JÁ REINICIA o scanner para o próximo
             Notification::make()
                 ->title('Produto não encontrado')
-                ->body("EAN: $code na Filial {$this->selectedFilial}")
+                ->body("EAN: $code na Filial {$this->filialId}")
                 ->danger()
                 ->duration(3000)
                 ->send();
             
-            $this->dispatch('reset-scanner-ui');
+            // Reinicia o scanner no JS
+            $this->dispatch('reset-scanner');
         }
     }
 
     public function savePrice()
     {
-        if (!$this->foundProduct) return;
+        if (!$this->product) return;
 
+        // Tratamento de vírgula/ponto
         $valorLimpo = str_replace(',', '.', $this->novoPreco);
 
-        // Validação de numérico
-        if (!is_numeric($valorLimpo) && !empty($this->novoPreco)) {
-             Notification::make()->title('Valor inválido')->warning()->send();
+        if ($valorLimpo == '') {
+             $this->forceSavePrice(null);
              return;
         }
 
-        // --- REGRA DE NEGÓCIO: PREÇO ABAIXO DO CUSTO ---
-        $custo = $this->foundProduct->CUSTOULTENT;
+        if (!is_numeric($valorLimpo)) {
+            Notification::make()->title('Valor inválido')->warning()->send();
+            return;
+        }
 
-        if ($valorLimpo > 0 && $valorLimpo < $custo) {
+        // Validação de Custo
+        if ($valorLimpo < $this->product->CUSTOULTENT) {
             Notification::make()
                 ->warning()
-                ->title('Atenção: Prejuízo Detectado!')
-                ->body("Custo: R$ " . number_format($custo, 2, ',', '.') . " | Novo: R$ " . number_format($valorLimpo, 2, ',', '.') . "\nDeseja confirmar?")
+                ->title('Atenção: Prejuízo!')
+                ->body("Custo: {$this->product->CUSTOULTENT} | Novo: $valorLimpo. Confirmar?")
                 ->persistent()
                 ->actions([
                     NotificationAction::make('confirmar')
-                        ->label('Sim, Confirmar')
+                        ->label('Sim, Salvar')
                         ->button()
                         ->color('danger')
-                        ->dispatch('save-confirmed'), // Chama forceSavePrice
+                        ->dispatch('save-confirmed'),
                     NotificationAction::make('cancelar')
                         ->label('Corrigir')
-                        ->color('gray')
                         ->close(),
                 ])
                 ->send();
-            return; 
+            return;
         }
 
-        // Se estiver tudo ok, salva direto
-        $this->forceSavePrice();
+        $this->forceSavePrice($valorLimpo);
     }
 
-    public function forceSavePrice()
+    public function forceSavePrice($valor = null)
     {
-        $valorLimpo = str_replace(',', '.', $this->novoPreco);
-        
-        $this->foundProduct->PVENDA_NOVO = empty($this->novoPreco) ? null : $valorLimpo;
-        $this->foundProduct->save();
+        // Se foi chamado pelo listener 'save-confirmed', pega o valor do estado
+        if ($valor === null && $this->novoPreco !== null) {
+            $valor = str_replace(',', '.', $this->novoPreco);
+        }
 
-        Notification::make()
-            ->title('Salvo!')
-            ->success()
-            ->duration(1500) // Duração curta para agilizar
-            ->send();
+        $this->product->PVENDA_NOVO = $valor;
+        $this->product->save();
 
-        // AQUI ESTÁ A MÁGICA: Limpa o produto mas mantém a filial
-        $this->resetProductState();
+        Notification::make()->title('Preço atualizado!')->success()->duration(1500)->send();
+
+        // Reseta para ler o próximo
+        $this->resetCycle();
     }
 
-    public function resetProductState()
+    public function resetCycle()
     {
-        $this->foundProduct = null;
-        $this->scannedCode = null;
+        $this->product = null;
         $this->novoPreco = null;
-        
-        // Este evento diz ao Front: "Ocultei o formulário, mostre a câmera de novo"
-        $this->dispatch('reset-scanner-ui'); 
+        $this->dispatch('reset-scanner'); // Manda o JS reabrir a câmera
     }
 
     public function changeFilial()
     {
-        $this->selectedFilial = null;
-        $this->foundProduct = null;
-        Session::forget('scanner_filial');
+        $this->showScanner = false;
+        $this->filialId = null;
+        $this->product = null;
+        Session::forget('scanner_filial_id');
     }
 }
