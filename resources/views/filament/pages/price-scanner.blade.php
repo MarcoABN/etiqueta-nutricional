@@ -4,131 +4,567 @@
     {{-- Som de Beep --}}
     <audio id="scan-sound" src="{{ asset('sounds/beep.mp3') }}" preload="auto"></audio>
 
-    {{-- ESTILOS DE QUIOSQUE (Igual ao Nutricional) --}}
     <style>
-        /* Remove toda a interface do Filament (Menu, Topbar, Footer) */
-        .fi-topbar, .fi-header, .fi-breadcrumbs, .fi-sidebar, .fi-footer { display: none !important; }
-        .fi-main-ctn, .fi-page { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+        /* Remove interface do Filament */
+        .fi-topbar, .fi-header, .fi-breadcrumbs, .fi-sidebar, .fi-footer { 
+            display: none !important; 
+        }
+        .fi-main-ctn, .fi-page { 
+            padding: 0 !important; 
+            margin: 0 !important; 
+            max-width: 100% !important; 
+        }
         
-        /* Define o container principal como tela cheia preta */
+        /* Container principal fullscreen */
         .kiosk-container { 
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; 
-            background: #000; color: white; z-index: 9999; display: flex; flex-direction: column; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100dvh; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden;
         }
 
-        /* Área do Vídeo da Câmera */
-        #scanner-viewport { flex: 1; position: relative; overflow: hidden; background: #000; }
-        #reader { width: 100%; height: 100%; object-fit: cover; }
-        #reader video { object-fit: cover; width: 100%; height: 100%; }
-
-        /* Overlay de Edição (Modal) */
-        #edit-modal { 
-            position: absolute; bottom: 0; left: 0; width: 100%; 
-            background: rgba(255, 255, 255, 0.95); color: #000; 
-            border-top-left-radius: 20px; border-top-right-radius: 20px;
-            padding: 20px; box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
-            transform: translateY(100%); transition: transform 0.3s ease-out;
-            z-index: 50; max-height: 80vh; overflow-y: auto;
+        /* Tela de seleção de filial */
+        .filial-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
-        #edit-modal.open { transform: translateY(0); }
 
-        /* Botão Flutuante Trocar Câmera */
+        .filial-card {
+            background: white;
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            max-width: 420px;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .filial-card h2 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1f2937;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .filial-card p {
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 2rem;
+            font-size: 0.875rem;
+        }
+
+        /* Área do Scanner */
+        .scanner-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        }
+
+        /* Header do Scanner */
+        .scanner-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 30;
+            padding: 1rem;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .filial-badge {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            color: white;
+        }
+
+        .filial-badge-label {
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.7;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .filial-badge-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .exit-button {
+            background: rgba(239, 68, 68, 0.9);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .exit-button:hover {
+            background: rgba(239, 68, 68, 1);
+            transform: translateY(-1px);
+        }
+
+        /* Viewport da Câmera */
+        #scanner-viewport { 
+            flex: 1; 
+            position: relative; 
+            overflow: hidden; 
+            background: #000; 
+        }
+
+        #reader { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+        }
+
+        #reader video { 
+            object-fit: cover; 
+            width: 100%; 
+            height: 100%; 
+        }
+
+        /* Mira de Scan */
+        .scan-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .scan-frame {
+            width: 280px;
+            height: 180px;
+            border: 3px solid rgba(255, 255, 255, 0.6);
+            border-radius: 16px;
+            position: relative;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+        }
+
+        .scan-frame::before,
+        .scan-frame::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #ef4444, transparent);
+        }
+
+        .scan-frame::before {
+            top: 50%;
+            animation: scanLine 2s ease-in-out infinite;
+        }
+
+        @keyframes scanLine {
+            0%, 100% { 
+                top: 20%; 
+                opacity: 0;
+            }
+            50% { 
+                top: 80%; 
+                opacity: 1;
+            }
+        }
+
+        .scan-corners {
+            position: absolute;
+            inset: -8px;
+        }
+
+        .scan-corner {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #3b82f6;
+        }
+
+        .scan-corner.top-left { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 16px 0 0 0; }
+        .scan-corner.top-right { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 16px 0 0; }
+        .scan-corner.bottom-left { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 16px; }
+        .scan-corner.bottom-right { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 16px 0; }
+
+        .scan-instruction {
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 0.5rem 1.25rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        /* Botão trocar câmera */
         .fab-camera {
-            position: absolute; top: 20px; right: 20px; z-index: 40;
-            background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.3);
-            color: white; border-radius: 50%; width: 50px; height: 50px;
-            display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(5px);
+            position: absolute;
+            top: 5rem;
+            right: 1rem;
+            z-index: 40;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 50%;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .fab-camera:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.05);
+        }
+
+        /* Modal de Edição */
+        #edit-modal { 
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            border-top-left-radius: 28px;
+            border-top-right-radius: 28px;
+            padding: 1.5rem;
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 50;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        #edit-modal.open { 
+            transform: translateY(0); 
+        }
+
+        .modal-handle {
+            width: 40px;
+            height: 4px;
+            background: #d1d5db;
+            border-radius: 9999px;
+            margin: 0 auto 1.5rem;
+        }
+
+        .product-header {
+            border-bottom: 2px solid #f3f4f6;
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .product-codes {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .product-code {
+            font-size: 0.75rem;
+            font-family: 'Courier New', monospace;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+        }
+
+        .product-name {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: #111827;
+            line-height: 1.4;
+        }
+
+        .price-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .price-box {
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .price-box.cost {
+            background: #f3f4f6;
+            border: 2px solid #e5e7eb;
+        }
+
+        .price-box.current {
+            background: #dbeafe;
+            border: 2px solid #3b82f6;
+        }
+
+        .price-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .price-box.cost .price-label {
+            color: #6b7280;
+        }
+
+        .price-box.current .price-label {
+            color: #2563eb;
+        }
+
+        .price-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .price-box.cost .price-value {
+            color: #374151;
+        }
+
+        .price-box.current .price-value {
+            color: #1e40af;
+        }
+
+        .new-price-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .new-price-label {
+            display: block;
+            text-align: center;
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            margin-bottom: 0.75rem;
+        }
+
+        .new-price-input {
+            width: 100%;
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            border: 3px solid #8b5cf6;
+            border-radius: 16px;
+            padding: 1rem;
+            color: #111827;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .new-price-input:focus {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1);
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            padding: 1rem;
+            font-weight: 700;
+            font-size: 0.875rem;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .btn-cancel {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .btn-cancel:hover {
+            background: #e5e7eb;
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(139, 92, 246, 0.5);
+        }
+
+        /* Animações */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .scanning-indicator {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
     </style>
 
     <div class="kiosk-container" x-data="scannerLogic()" x-init="initApp()">
         
-        {{-- TELA 1: SELEÇÃO DE FILIAL (Só aparece se não tiver filial) --}}
-        @if(!$filialId)
-            <div class="flex-1 flex flex-col items-center justify-center p-6 bg-gray-900">
-                <div class="w-full max-w-md bg-white rounded-xl p-6 shadow-2xl">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Selecionar Filial</h2>
+        {{-- TELA 1: SELEÇÃO DE FILIAL --}}
+        <template x-if="!hasFilial">
+            <div class="filial-screen">
+                <div class="filial-card">
+                    <h2>🏪 Scanner de Preços</h2>
+                    <p>Selecione a filial para iniciar</p>
                     {{ $this->form }}
                 </div>
             </div>
-        @else
-            {{-- TELA 2: SCANNER ATIVO --}}
-            
-            {{-- Header Transparente --}}
-            <div class="absolute top-0 left-0 w-full p-4 flex justify-between items-start z-30 pointer-events-none">
-                <div class="pointer-events-auto bg-black/50 px-3 py-1 rounded backdrop-blur-sm">
-                    <span class="text-xs text-gray-300 block">FILIAL</span>
-                    <span class="text-xl font-bold text-white font-mono">{{ $filialId }}</span>
+        </template>
+
+        {{-- TELA 2: SCANNER ATIVO --}}
+        <template x-if="hasFilial">
+            <div class="scanner-screen">
+                {{-- Header --}}
+                <div class="scanner-header">
+                    <div class="filial-badge">
+                        <span class="filial-badge-label">Filial</span>
+                        <span class="filial-badge-value">{{ $filialId }}</span>
+                    </div>
+                    <button wire:click="changeFilial" class="exit-button">
+                        SAIR
+                    </button>
                 </div>
-                <button wire:click="changeFilial" class="pointer-events-auto bg-red-600/80 text-white text-xs font-bold px-3 py-2 rounded hover:bg-red-600">
-                    SAIR
+
+                {{-- Botão Trocar Câmera --}}
+                <button @click="switchCamera" class="fab-camera" x-show="cameras.length > 1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
                 </button>
-            </div>
 
-            {{-- Botão Trocar Câmera --}}
-            <button @click="switchCamera" class="fab-camera pointer-events-auto" x-show="cameras.length > 1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-            </button>
-
-            {{-- Viewport da Câmera --}}
-            <div id="scanner-viewport">
-                <div id="reader"></div>
-                
-                {{-- Mira visual (Overlay CSS) --}}
-                <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-50">
-                    <div class="w-64 h-40 border-2 border-white/50 rounded-lg"></div>
-                    <div class="absolute w-full h-0.5 bg-red-500/50 top-1/2"></div>
-                </div>
-            </div>
-
-            {{-- MODAL DE EDIÇÃO (Desliza de baixo para cima) --}}
-            <div id="edit-modal" :class="{ 'open': isEditing }">
-                @if($product)
-                    <div class="flex flex-col gap-4">
-                        {{-- Info do Produto --}}
-                        <div class="border-b pb-2">
-                            <div class="flex justify-between text-xs text-gray-500 font-mono">
-                                <span>COD: {{ $product->CODPROD }}</span>
-                                <span>EAN: {{ $product->CODAUXILIAR }}</span>
+                {{-- Viewport da Câmera --}}
+                <div id="scanner-viewport">
+                    <div id="reader"></div>
+                    
+                    {{-- Mira de Scan --}}
+                    <div class="scan-overlay">
+                        <div class="scan-frame">
+                            <div class="scan-corners">
+                                <div class="scan-corner top-left"></div>
+                                <div class="scan-corner top-right"></div>
+                                <div class="scan-corner bottom-left"></div>
+                                <div class="scan-corner bottom-right"></div>
                             </div>
-                            <h3 class="text-lg font-bold leading-tight mt-1 text-gray-900">{{ $product->DESCRICAO }}</h3>
+                            <div class="scan-instruction scanning-indicator">
+                                📱 Posicione o código de barras
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- MODAL DE EDIÇÃO --}}
+                <div id="edit-modal" :class="{ 'open': isEditing }">
+                    @if($product)
+                        <div class="modal-handle"></div>
+                        
+                        {{-- Info do Produto --}}
+                        <div class="product-header">
+                            <div class="product-codes">
+                                <span class="product-code">COD: {{ $product->CODPROD }}</span>
+                                <span class="product-code">EAN: {{ $product->CODAUXILIAR }}</span>
+                            </div>
+                            <h3 class="product-name">{{ $product->DESCRICAO }}</h3>
                         </div>
 
                         {{-- Comparativo de Preços --}}
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="bg-gray-100 p-2 rounded">
-                                <span class="text-xs text-gray-500 block">Custo</span>
-                                <span class="text-lg font-bold text-gray-700">R$ {{ number_format($product->CUSTOULTENT, 2, ',', '.') }}</span>
+                        <div class="price-grid">
+                            <div class="price-box cost">
+                                <div class="price-label">💰 Custo</div>
+                                <div class="price-value">R$ {{ number_format($product->CUSTOULTENT, 2, ',', '.') }}</div>
                             </div>
-                            <div class="bg-blue-50 p-2 rounded border border-blue-100">
-                                <span class="text-xs text-blue-500 block">Venda Atual</span>
-                                <span class="text-lg font-bold text-blue-700">R$ {{ number_format($product->PVENDA, 2, ',', '.') }}</span>
+                            <div class="price-box current">
+                                <div class="price-label">🏷️ Atual</div>
+                                <div class="price-value">R$ {{ number_format($product->PVENDA, 2, ',', '.') }}</div>
                             </div>
                         </div>
 
-                        {{-- Input Grande --}}
-                        <div>
-                            <label class="block text-center text-xs font-bold uppercase text-gray-500 mb-1">Novo Preço</label>
-                            <input type="tel" x-ref="priceInput"
+                        {{-- Input Novo Preço --}}
+                        <div class="new-price-section">
+                            <label class="new-price-label">✨ Novo Preço</label>
+                            <input type="tel" 
+                                x-ref="priceInput"
                                 wire:model="novoPreco"
                                 wire:keydown.enter="savePrice"
-                                class="w-full text-center text-4xl font-bold border-2 border-primary-600 rounded-xl py-3 text-gray-900 focus:ring-4 focus:ring-primary-200 outline-none"
-                                placeholder="0.00"
+                                class="new-price-input"
+                                placeholder="0,00"
+                                inputmode="decimal"
                             >
                         </div>
 
                         {{-- Botões --}}
-                        <div class="grid grid-cols-2 gap-3 mt-2">
-                            <button wire:click="resetCycle" class="py-3 bg-gray-200 font-bold rounded-lg text-gray-700">CANCELAR</button>
-                            <button wire:click="savePrice" class="py-3 bg-primary-600 font-bold rounded-lg text-white shadow-lg">SALVAR</button>
+                        <div class="action-buttons">
+                            <button wire:click="cancelEdit" class="btn btn-cancel">
+                                Cancelar
+                            </button>
+                            <button wire:click="savePrice" class="btn btn-save">
+                                💾 Salvar
+                            </button>
                         </div>
-                    </div>
-                @endif
+                    @endif
+                </div>
             </div>
-        @endif
+        </template>
     </div>
 
     <script>
@@ -137,32 +573,43 @@
                 scanner: null,
                 isScanning: false,
                 isEditing: @json(!!$product),
+                hasFilial: @json(!!$filialId),
                 cameras: [],
                 currentCameraId: localStorage.getItem('fil_scanner_cam_id'),
 
                 initApp() {
-                    // Escuta eventos do PHP
+                    // Escuta eventos do Livewire
                     Livewire.on('product-found', () => {
                         this.playBeep();
                         this.isEditing = true;
-                        this.stopScanner(); // Pausa a câmera enquanto edita
+                        this.stopScanner();
                         
-                        // Foca no input
-                        setTimeout(() => { if(this.$refs.priceInput) this.$refs.priceInput.focus(); }, 300);
+                        // Foca no input após animação do modal
+                        setTimeout(() => { 
+                            if(this.$refs.priceInput) {
+                                this.$refs.priceInput.focus();
+                                this.$refs.priceInput.select();
+                            }
+                        }, 400);
                     });
 
                     Livewire.on('reset-scanner', () => {
                         this.isEditing = false;
-                        this.startScanner(); // Volta a câmera automaticamente
+                        setTimeout(() => this.startScanner(), 300);
                     });
 
                     Livewire.on('filial-selected', () => {
-                        this.$nextTick(() => this.startScanner());
+                        this.hasFilial = true;
+                        this.$nextTick(() => {
+                            setTimeout(() => this.startScanner(), 500);
+                        });
                     });
 
-                    // Se já tiver filial, inicia
-                    if (@json($filialId) && !this.isEditing) {
-                        this.$nextTick(() => this.startScanner());
+                    // Se já tiver filial, inicia scanner
+                    if (this.hasFilial && !this.isEditing) {
+                        this.$nextTick(() => {
+                            setTimeout(() => this.startScanner(), 500);
+                        });
                     }
                 },
 
@@ -179,34 +626,46 @@
                             }
                         }
 
-                        if(!document.getElementById('reader')) return;
+                        const readerElement = document.getElementById('reader');
+                        if(!readerElement) return;
 
                         this.scanner = new Html5Qrcode("reader");
                         await this.scanner.start(
                             this.currentCameraId, 
-                            { fps: 10, qrbox: { width: 250, height: 250 } },
+                            { 
+                                fps: 10, 
+                                qrbox: { width: 280, height: 180 },
+                                aspectRatio: 1.5
+                            },
                             (decodedText) => {
-                                console.log("Lido:", decodedText);
+                                console.log("✅ Código lido:", decodedText);
                                 @this.handleBarcodeScan(decodedText);
                             },
-                            () => {}
+                            () => {} // Ignora erros de leitura
                         );
                         this.isScanning = true;
+                        console.log("📷 Scanner iniciado");
                     } catch (e) {
-                        console.error("Erro câmera:", e);
+                        console.error("❌ Erro ao iniciar câmera:", e);
                     }
                 },
 
                 async stopScanner() {
                     if (this.scanner && this.isScanning) {
-                        await this.scanner.stop();
-                        this.scanner.clear();
-                        this.isScanning = false;
+                        try {
+                            await this.scanner.stop();
+                            this.scanner.clear();
+                            this.isScanning = false;
+                            console.log("📷 Scanner pausado");
+                        } catch(e) {
+                            console.error("Erro ao parar scanner:", e);
+                        }
                     }
                 },
 
                 async switchCamera() {
                     if (this.cameras.length < 2) return;
+                    
                     await this.stopScanner();
                     
                     // Lógica circular
@@ -220,7 +679,9 @@
 
                 playBeep() {
                     const audio = document.getElementById('scan-sound');
-                    if(audio) audio.play().catch(e => console.log(e));
+                    if(audio) {
+                        audio.play().catch(e => console.log('🔇 Áudio bloqueado:', e));
+                    }
                 }
             }
         }
