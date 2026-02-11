@@ -6,7 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class PctabprTn extends Model
 {
-    protected $table = 'PCTABPR_TN';
+    // AQUI ESTÁ O SEGREDO: O nome deve ser exato
+    protected $table = 'PCTABPR_TN'; 
 
     protected $fillable = [
         'CODFILIAL',
