@@ -6,25 +6,31 @@
 
     <style>
         /* Remove interface do Filament */
-        .fi-topbar, .fi-header, .fi-breadcrumbs, .fi-sidebar, .fi-footer { 
-            display: none !important; 
+        .fi-topbar,
+        .fi-header,
+        .fi-breadcrumbs,
+        .fi-sidebar,
+        .fi-footer {
+            display: none !important;
         }
-        .fi-main-ctn, .fi-page { 
-            padding: 0 !important; 
-            margin: 0 !important; 
-            max-width: 100% !important; 
+
+        .fi-main-ctn,
+        .fi-page {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
         }
-        
+
         /* Container principal fullscreen */
-        .kiosk-container { 
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100vw; 
-            height: 100dvh; 
+        .kiosk-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100dvh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex; 
-            flex-direction: column; 
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
         }
 
@@ -53,6 +59,7 @@
                 opacity: 0;
                 transform: translateY(30px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -119,7 +126,7 @@
             right: 0;
             z-index: 30;
             padding: 1rem;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
@@ -168,23 +175,23 @@
         }
 
         /* Viewport da Câmera */
-        #scanner-viewport { 
-            flex: 1; 
-            position: relative; 
-            overflow: hidden; 
-            background: #000; 
+        #scanner-viewport {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #000;
         }
 
-        #reader { 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
+        #reader {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
-        #reader video { 
-            object-fit: cover; 
-            width: 100%; 
-            height: 100%; 
+        #reader video {
+            object-fit: cover;
+            width: 100%;
+            height: 100%;
         }
 
         /* Mira de Scan */
@@ -223,12 +230,15 @@
         }
 
         @keyframes scanLine {
-            0%, 100% { 
-                top: 20%; 
+
+            0%,
+            100% {
+                top: 20%;
                 opacity: 0;
             }
-            50% { 
-                top: 80%; 
+
+            50% {
+                top: 80%;
                 opacity: 1;
             }
         }
@@ -245,10 +255,37 @@
             border: 3px solid #3b82f6;
         }
 
-        .scan-corner.top-left { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 16px 0 0 0; }
-        .scan-corner.top-right { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 16px 0 0; }
-        .scan-corner.bottom-left { bottom: 0; left: 0; border-right: 0; border-top: 0; border-radius: 0 0 0 16px; }
-        .scan-corner.bottom-right { bottom: 0; right: 0; border-left: 0; border-top: 0; border-radius: 0 0 16px 0; }
+        .scan-corner.top-left {
+            top: 0;
+            left: 0;
+            border-right: 0;
+            border-bottom: 0;
+            border-radius: 16px 0 0 0;
+        }
+
+        .scan-corner.top-right {
+            top: 0;
+            right: 0;
+            border-left: 0;
+            border-bottom: 0;
+            border-radius: 0 16px 0 0;
+        }
+
+        .scan-corner.bottom-left {
+            bottom: 0;
+            left: 0;
+            border-right: 0;
+            border-top: 0;
+            border-radius: 0 0 0 16px;
+        }
+
+        .scan-corner.bottom-right {
+            bottom: 0;
+            right: 0;
+            border-left: 0;
+            border-top: 0;
+            border-radius: 0 0 16px 0;
+        }
 
         .scan-instruction {
             position: absolute;
@@ -291,7 +328,7 @@
         }
 
         /* Modal de Edição */
-        #edit-modal { 
+        #edit-modal {
             position: absolute;
             bottom: 0;
             left: 0;
@@ -308,8 +345,8 @@
             overflow-y: auto;
         }
 
-        #edit-modal.open { 
-            transform: translateY(0); 
+        #edit-modal.open {
+            transform: translateY(0);
         }
 
         .modal-handle {
@@ -475,9 +512,12 @@
 
         /* Animações */
         @keyframes pulse {
-            0%, 100% {
+
+            0%,
+            100% {
                 opacity: 1;
             }
+
             50% {
                 opacity: 0.5;
             }
@@ -489,7 +529,7 @@
     </style>
 
     <div class="kiosk-container" x-data="scannerLogic()" x-init="initApp()">
-        
+
         {{-- TELA 1: SELEÇÃO DE FILIAL --}}
         <template x-if="!hasFilial">
             <div class="filial-screen">
@@ -497,16 +537,16 @@
                     <h2>🏪 Scanner de Preços</h2>
                     <p>Selecione a filial para iniciar</p>
                     {{ $this->form }}
-                    
+
                     <div style="margin-top: 1.5rem;">
-                        <button 
-                            wire:click="startScanner" 
-                            class="btn-start-scanner"
-                            type="button"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; margin-right: 8px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <button wire:click="startScanner" class="btn-start-scanner" type="button">
+                            <svg xmlns="http://www.w3.org/2000/svg"
+                                style="width: 20px; height: 20px; margin-right: 8px;" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             Iniciar Scanner
                         </button>
@@ -531,15 +571,17 @@
 
                 {{-- Botão Trocar Câmera --}}
                 <button @click="switchCamera" class="fab-camera" x-show="cameras.length > 1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                 </button>
 
                 {{-- Viewport da Câmera --}}
                 <div id="scanner-viewport">
                     <div id="reader"></div>
-                    
+
                     {{-- Mira de Scan --}}
                     <div class="scan-overlay">
                         <div class="scan-frame">
@@ -560,7 +602,7 @@
                 <div id="edit-modal" :class="{ 'open': isEditing }">
                     @if($product)
                         <div class="modal-handle"></div>
-                        
+
                         {{-- Info do Produto --}}
                         <div class="product-header">
                             <div class="product-codes">
@@ -585,14 +627,8 @@
                         {{-- Input Novo Preço --}}
                         <div class="new-price-section">
                             <label class="new-price-label">✨ Novo Preço</label>
-                            <input type="tel" 
-                                x-ref="priceInput"
-                                wire:model="novoPreco"
-                                wire:keydown.enter="savePrice"
-                                class="new-price-input"
-                                placeholder="0,00"
-                                inputmode="decimal"
-                            >
+                            <input type="tel" x-ref="priceInput" wire:model="novoPreco" wire:keydown.enter="savePrice"
+                                class="new-price-input" placeholder="0,00" inputmode="decimal">
                         </div>
 
                         {{-- Botões --}}
@@ -615,30 +651,42 @@
             return {
                 scanner: null,
                 isScanning: false,
+                isProcessing: false, // <--- NOVO: Bloqueia leituras repetidas
                 isEditing: @json(!!$product),
                 hasFilial: @json(!!$filialId),
                 cameras: [],
                 currentCameraId: localStorage.getItem('fil_scanner_cam_id'),
 
                 initApp() {
-                    // Escuta eventos do Livewire
+                    // SUCESSO: Produto encontrado
                     Livewire.on('product-found', () => {
                         this.playBeep();
+                        this.isProcessing = false; // Libera o processamento
                         this.isEditing = true;
                         this.stopScanner();
-                        
-                        // Foca no input após animação do modal
-                        setTimeout(() => { 
-                            if(this.$refs.priceInput) {
+
+                        setTimeout(() => {
+                            if (this.$refs.priceInput) {
                                 this.$refs.priceInput.focus();
                                 this.$refs.priceInput.select();
                             }
                         }, 400);
                     });
 
+                    // ERRO ou RESET: Produto não encontrado ou cancelado
                     Livewire.on('reset-scanner', () => {
                         this.isEditing = false;
-                        setTimeout(() => this.startScanner(), 300);
+
+                        // Mantém bloqueado por 2 segundos se for erro, para não bipar 
+                        // o mesmo produto inválido instantaneamente de novo
+                        setTimeout(() => {
+                            this.isProcessing = false; // Libera para ler o próximo
+
+                            // Se o scanner parou, reinicia
+                            if (!this.isScanning) {
+                                this.startScanner();
+                            }
+                        }, 2000);
                     });
 
                     Livewire.on('filial-selected', () => {
@@ -648,7 +696,6 @@
                         });
                     });
 
-                    // Se já tiver filial, inicia scanner
                     if (this.hasFilial && !this.isEditing) {
                         this.$nextTick(() => {
                             setTimeout(() => this.startScanner(), 500);
@@ -658,36 +705,38 @@
 
                 async startScanner() {
                     if (this.isScanning) return;
-                    
+
                     try {
                         const devices = await Html5Qrcode.getCameras();
                         if (devices && devices.length) {
                             this.cameras = devices;
-                            // Se não tiver câmera salva, pega a última (traseira geralmente)
                             if (!this.currentCameraId || !devices.find(c => c.id === this.currentCameraId)) {
                                 this.currentCameraId = devices[devices.length - 1].id;
                             }
                         }
 
                         const readerElement = document.getElementById('reader');
-                        if(!readerElement) return;
+                        if (!readerElement) return;
 
                         this.scanner = new Html5Qrcode("reader");
                         await this.scanner.start(
-                            this.currentCameraId, 
-                            { 
-                                fps: 10, 
+                            this.currentCameraId,
+                            {
+                                fps: 10,
                                 qrbox: { width: 280, height: 180 },
                                 aspectRatio: 1.5
                             },
                             (decodedText) => {
-                                console.log("✅ Código lido:", decodedText);
+                                // --- LÓGICA DE BLOQUEIO ---
+                                if (this.isProcessing) return; // Ignora se já está processando um código
+
+                                console.log("✅ Código lido e travado:", decodedText);
+                                this.isProcessing = true; // Trava leituras imediatas
                                 @this.handleBarcodeScan(decodedText);
                             },
-                            () => {} // Ignora erros de leitura
+                            () => { }
                         );
                         this.isScanning = true;
-                        console.log("📷 Scanner iniciado");
                     } catch (e) {
                         console.error("❌ Erro ao iniciar câmera:", e);
                     }
@@ -699,8 +748,7 @@
                             await this.scanner.stop();
                             this.scanner.clear();
                             this.isScanning = false;
-                            console.log("📷 Scanner pausado");
-                        } catch(e) {
+                        } catch (e) {
                             console.error("Erro ao parar scanner:", e);
                         }
                     }
@@ -708,23 +756,17 @@
 
                 async switchCamera() {
                     if (this.cameras.length < 2) return;
-                    
                     await this.stopScanner();
-                    
-                    // Lógica circular
                     const idx = this.cameras.findIndex(c => c.id === this.currentCameraId);
                     const nextIdx = (idx + 1) % this.cameras.length;
                     this.currentCameraId = this.cameras[nextIdx].id;
-                    
                     localStorage.setItem('fil_scanner_cam_id', this.currentCameraId);
                     await this.startScanner();
                 },
 
                 playBeep() {
                     const audio = document.getElementById('scan-sound');
-                    if(audio) {
-                        audio.play().catch(e => console.log('🔇 Áudio bloqueado:', e));
-                    }
+                    if (audio) audio.play().catch(e => console.log('🔇 Áudio bloqueado:', e));
                 }
             }
         }
