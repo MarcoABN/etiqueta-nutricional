@@ -64,16 +64,11 @@ class PriceScanner extends Page implements HasForms
      */
     public function startScanner(): void
     {
+        // Obtém os dados do formulário
+        $formData = $this->form->getState();
+        $filialSelecionada = $formData['filialId'] ?? null;
+
         // Valida se a filial foi selecionada
-        $this->validate([
-            'data.filialId' => 'required',
-        ], [
-            'data.filialId.required' => 'Por favor, selecione uma filial antes de continuar.',
-        ]);
-
-        // Pega o valor do formulário
-        $filialSelecionada = $this->data['filialId'] ?? null;
-
         if (!$filialSelecionada) {
             Notification::make()
                 ->title('Selecione uma Filial')
