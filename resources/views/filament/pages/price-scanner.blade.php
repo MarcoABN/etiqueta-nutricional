@@ -580,7 +580,7 @@
 
                 {{-- Viewport da Câmera --}}
                 <div id="scanner-viewport">
-                    <div id="reader"></div>
+                    <div id="reader" wire:ignore></div>
 
                     {{-- Mira de Scan --}}
                     <div class="scan-overlay">
@@ -651,17 +651,17 @@
             return {
                 scanner: null,
                 isScanning: false,
-                isProcessing: false, // <--- NOVO: Bloqueia leituras repetidas
+                isProcessing: false,
                 isEditing: @json(!!$product),
                 hasFilial: @json(!!$filialId),
                 cameras: [],
                 currentCameraId: localStorage.getItem('fil_scanner_cam_id'),
 
                 initApp() {
-                    // SUCESSO: Produto encontrado
+                    // Produto encontrado: Para o scanner e abre modal
                     Livewire.on('product-found', () => {
                         this.playBeep();
-                        this.isProcessing = false; // Libera o processamento
+                        this.isProcessing = false;
                         this.isEditing = true;
                         this.stopScanner();
 
@@ -673,20 +673,22 @@
                         }, 400);
                     });
 
-                    // ERRO ou RESET: Produto não encontrado ou cancelado
+                    // Reset: Produto não encontrado ou Cancelamento
                     Livewire.on('reset-scanner', () => {
                         this.isEditing = false;
 
-                        // Mantém bloqueado por 2 segundos se for erro, para não bipar 
-                        // o mesmo produto inválido instantaneamente de novo
+                        // Delay para dar tempo de ler a mensagem de erro
                         setTimeout(() => {
-                            this.isProcessing = false; // Libera para ler o próximo
-
-                            // Se o scanner parou, reinicia
+                            // Se o scanner parou (ex: cancelou edição), reinicia
                             if (!this.isScanning) {
-                                this.startScanner();
+                                this.startScanner().then(() => {
+                                    this.isProcessing = false;
+                                });
+                            } else {
+                                // Se o scanner já estava rodando (ex: produto não encontrado), só libera
+                                this.isProcessing = false;
                             }
-                        }, 2000);
+                        }, 1500);
                     });
 
                     Livewire.on('filial-selected', () => {
@@ -704,9 +706,15 @@
                 },
 
                 async startScanner() {
+                    // Se já estiver escaneando, não faz nada para evitar erro da lib
                     if (this.isScanning) return;
 
                     try {
+                        // Limpa instância anterior se houver lixo de memória
+                        if (this.scanner) {
+                            try { await this.scanner.clear(); } catch (e) { }
+                        }
+
                         const devices = await Html5Qrcode.getCameras();
                         if (devices && devices.length) {
                             this.cameras = devices;
@@ -719,6 +727,7 @@
                         if (!readerElement) return;
 
                         this.scanner = new Html5Qrcode("reader");
+
                         await this.scanner.start(
                             this.currentCameraId,
                             {
@@ -727,18 +736,25 @@
                                 aspectRatio: 1.5
                             },
                             (decodedText) => {
-                                // --- LÓGICA DE BLOQUEIO ---
-                                if (this.isProcessing) return; // Ignora se já está processando um código
+                                // Se estiver bloqueado processando anterior, ignora
+                                if (this.isProcessing) return;
 
-                                console.log("✅ Código lido e travado:", decodedText);
-                                this.isProcessing = true; // Trava leituras imediatas
+                                console.log("✅ Código lido:", decodedText);
+                                this.isProcessing = true; // Bloqueia novas leituras
                                 @this.handleBarcodeScan(decodedText);
                             },
-                            () => { }
+                            () => { } // Ignora erros de frame vazio
                         );
+
                         this.isScanning = true;
+                        this.isProcessing = false; // Garante que começa desbloqueado
+                        console.log("📷 Scanner iniciado");
+
                     } catch (e) {
                         console.error("❌ Erro ao iniciar câmera:", e);
+                        // Tenta recuperar se falhar (ex: permissão demorou)
+                        this.isScanning = false;
+                        this.isProcessing = false;
                     }
                 },
 
@@ -746,10 +762,13 @@
                     if (this.scanner && this.isScanning) {
                         try {
                             await this.scanner.stop();
-                            this.scanner.clear();
+                            // Não damos clear() total aqui para manter o preview se possível, 
+                            // mas o stop() pausa o feed de vídeo.
                             this.isScanning = false;
+                            console.log("📷 Scanner pausado");
                         } catch (e) {
                             console.error("Erro ao parar scanner:", e);
+                            this.isScanning = false;
                         }
                     }
                 },
@@ -757,16 +776,20 @@
                 async switchCamera() {
                     if (this.cameras.length < 2) return;
                     await this.stopScanner();
+
                     const idx = this.cameras.findIndex(c => c.id === this.currentCameraId);
                     const nextIdx = (idx + 1) % this.cameras.length;
                     this.currentCameraId = this.cameras[nextIdx].id;
+
                     localStorage.setItem('fil_scanner_cam_id', this.currentCameraId);
-                    await this.startScanner();
+
+                    // Pequeno delay para hardware liberar a câmera anterior
+                    setTimeout(() => this.startScanner(), 200);
                 },
 
                 playBeep() {
                     const audio = document.getElementById('scan-sound');
-                    if (audio) audio.play().catch(e => console.log('🔇 Áudio bloqueado:', e));
+                    if (audio) audio.play().catch(e => { });
                 }
             }
         }
