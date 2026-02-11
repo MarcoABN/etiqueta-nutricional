@@ -9,10 +9,10 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Tables\Actions\Action; // Importante para o botão customizado
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Filters\TernaryFilter;
 use Illuminate\Database\Eloquent\Builder;
-use Symfony\Component\HttpFoundation\StreamedResponse; // Importante para o download
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PctabprTnResource extends Resource
 {
@@ -26,15 +26,25 @@ class PctabprTnResource extends Resource
     {
         return $form
             ->schema([
+                // Removido ->disabled() de todos os campos
                 Forms\Components\TextInput::make('CODFILIAL')
                     ->label('Filial')
-                    ->disabled(),
+                    ->required()
+                    ->numeric(),
+                    
                 Forms\Components\TextInput::make('CODPROD')
                     ->label('Cód. Produto')
-                    ->disabled(),
+                    ->required()
+                    ->numeric(),
+                    
+                Forms\Components\TextInput::make('CODAUXILIAR')
+                    ->label('EAN / Cód. Barras')
+                    ->maxLength(255),
+
                 Forms\Components\TextInput::make('DESCRICAO')
                     ->label('Descrição')
-                    ->disabled()
+                    ->required()
+                    ->maxLength(255)
                     ->columnSpan(2),
                 
                 Forms\Components\Grid::make(2)
@@ -42,22 +52,19 @@ class PctabprTnResource extends Resource
                         Forms\Components\TextInput::make('CUSTOULTENT')
                             ->label('Custo Últ. Entrada')
                             ->numeric()
-                            ->prefix('R$')
-                            ->disabled(),
+                            ->prefix('R$'),
                             
                         Forms\Components\TextInput::make('PVENDA')
-                            ->label('Preço Atual')
+                            ->label('Preço Venda Atual')
                             ->numeric()
-                            ->prefix('R$')
-                            ->disabled(),
+                            ->prefix('R$'),
                             
                         Forms\Components\TextInput::make('QTESTOQUE')
                             ->label('Estoque')
-                            ->numeric()
-                            ->disabled(),
+                            ->numeric(),
 
                         Forms\Components\TextInput::make('PVENDA_NOVO')
-                            ->label('Novo Preço')
+                            ->label('Novo Preço (Coletado)')
                             ->numeric()
                             ->prefix('R$')
                             ->live(onBlur: true)
@@ -115,7 +122,6 @@ class PctabprTnResource extends Resource
                 Tables\Actions\EditAction::make(),
             ])
             ->headerActions([
-                // AQUI ESTÁ O BOTÃO QUE FALTAVA NA LISTAGEM
                 Action::make('export_csv')
                     ->label('Exportar CSV')
                     ->icon('heroicon-o-arrow-down-tray')
@@ -134,20 +140,13 @@ class PctabprTnResource extends Resource
         ];
     }
 
-    // Função de exportação otimizada
     public static function exportToCsv()
     {
         $response = new StreamedResponse(function () {
-            // Abre o output stream
             $handle = fopen('php://output', 'w');
-
-            // Adiciona BOM para Excel reconhecer acentos UTF-8
-            fputs($handle, "\xEF\xBB\xBF");
-
-            // Cabeçalho do CSV
+            fputs($handle, "\xEF\xBB\xBF"); // BOM para Excel
             fputcsv($handle, ['FILIAL', 'CODPROD', 'EAN', 'DESCRICAO', 'CUSTO', 'PRECO_ATUAL', 'ESTOQUE', 'NOVO_PRECO'], ';');
 
-            // Processa em blocos para não estourar memória
             PctabprTn::chunk(500, function ($rows) use ($handle) {
                 foreach ($rows as $row) {
                     fputcsv($handle, [
