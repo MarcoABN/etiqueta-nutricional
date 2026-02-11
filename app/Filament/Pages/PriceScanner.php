@@ -22,13 +22,13 @@ class PriceScanner extends Page implements HasForms
 
     // Propriedades públicas
     public ?string $filialId = null;
-    public ?object $product = null;
+    public ?object $product = null; 
     public ?string $novoPreco = null;
 
     // Listeners para comunicação com Javascript
     protected $listeners = [
         'barcode-scanned' => 'handleBarcodeScan',
-        'save-confirmed' => 'forceSavePrice'
+        'save-confirmed'  => 'forceSavePrice'
     ];
 
     public function mount(): void
@@ -54,25 +54,48 @@ class PriceScanner extends Page implements HasForms
                     })
                     ->required()
                     ->searchable()
-                    ->native(false)
-                    ->afterStateUpdated(function ($state) {
-                        if ($state) {
-                            $this->filialId = $state;
-                            Session::put('scanner_filial_id', $state);
-
-                            // Dispara evento para o frontend iniciar o scanner
-                            $this->dispatch('filial-selected');
-
-                            Notification::make()
-                                ->title('Filial Selecionada!')
-                                ->body("Filial {$state} ativa. Scanner iniciando...")
-                                ->success()
-                                ->duration(2000)
-                                ->send();
-                        }
-                    }),
+                    ->native(false),
             ])
             ->statePath('data');
+    }
+
+    /**
+     * Inicia o scanner após seleção da filial
+     */
+    public function startScanner(): void
+    {
+        // Valida se a filial foi selecionada
+        $this->validate([
+            'data.filialId' => 'required',
+        ], [
+            'data.filialId.required' => 'Por favor, selecione uma filial antes de continuar.',
+        ]);
+
+        // Pega o valor do formulário
+        $filialSelecionada = $this->data['filialId'] ?? null;
+
+        if (!$filialSelecionada) {
+            Notification::make()
+                ->title('Selecione uma Filial')
+                ->body('Por favor, escolha uma filial antes de iniciar o scanner.')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        // Salva na propriedade e na sessão
+        $this->filialId = $filialSelecionada;
+        Session::put('scanner_filial_id', $filialSelecionada);
+        
+        // Dispara evento para o frontend iniciar o scanner
+        $this->dispatch('filial-selected');
+        
+        Notification::make()
+            ->title('Scanner Iniciado!')
+            ->body("Filial {$filialSelecionada} ativa. Aponte a câmera para o código de barras.")
+            ->success()
+            ->duration(3000)
+            ->send();
     }
 
     /**
@@ -100,13 +123,13 @@ class PriceScanner extends Page implements HasForms
         if ($found) {
             $this->product = $found;
             // Preenche com o preço novo se existir, senão com o preço atual
-            $this->novoPreco = $found->PVENDA_NOVO
+            $this->novoPreco = $found->PVENDA_NOVO 
                 ? number_format($found->PVENDA_NOVO, 2, ',', '.')
                 : number_format($found->PVENDA, 2, ',', '.');
-
+            
             // Notifica o frontend
             $this->dispatch('product-found');
-
+            
             Notification::make()
                 ->title('Produto Encontrado!')
                 ->body($found->DESCRICAO)
@@ -121,7 +144,7 @@ class PriceScanner extends Page implements HasForms
                 ->warning()
                 ->duration(2000)
                 ->send();
-
+            
             // Mantém o scanner ativo
             $this->dispatch('reset-scanner');
         }
@@ -188,8 +211,7 @@ class PriceScanner extends Page implements HasForms
      */
     public function forceSavePrice(): void
     {
-        if (!$this->product)
-            return;
+        if (!$this->product) return;
 
         try {
             // Converte o valor
@@ -235,7 +257,7 @@ class PriceScanner extends Page implements HasForms
             ->info()
             ->duration(1500)
             ->send();
-
+        
         $this->resetCycle();
     }
 
@@ -247,7 +269,7 @@ class PriceScanner extends Page implements HasForms
         // Limpa os dados do produto
         $this->product = null;
         $this->novoPreco = null;
-
+        
         // Dispara evento para reativar o scanner
         $this->dispatch('reset-scanner');
     }
@@ -261,10 +283,10 @@ class PriceScanner extends Page implements HasForms
         $this->filialId = null;
         $this->product = null;
         $this->novoPreco = null;
-
+        
         // Remove da sessão
         Session::forget('scanner_filial_id');
-
+        
         Notification::make()
             ->title('Filial Desconectada')
             ->body('Selecione uma nova filial para continuar.')

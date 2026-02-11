@@ -74,6 +74,35 @@
             font-size: 0.875rem;
         }
 
+        .btn-start-scanner {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-start-scanner:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(139, 92, 246, 0.5);
+        }
+
+        .btn-start-scanner:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         /* Área do Scanner */
         .scanner-screen {
             flex: 1;
@@ -468,6 +497,20 @@
                     <h2>🏪 Scanner de Preços</h2>
                     <p>Selecione a filial para iniciar</p>
                     {{ $this->form }}
+                    
+                    <div style="margin-top: 1.5rem;">
+                        <button 
+                            wire:click="startScanner" 
+                            class="btn-start-scanner"
+                            type="button"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 20px; height: 20px; margin-right: 8px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Iniciar Scanner
+                        </button>
+                    </div>
                 </div>
             </div>
         </template>
