@@ -11,6 +11,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Illuminate\Support\Facades\Session;
 
+
 class PriceScanner extends Page implements HasForms
 {
     use InteractsWithForms;
@@ -19,6 +20,8 @@ class PriceScanner extends Page implements HasForms
     protected static ?string $navigationLabel = 'Scanner de Preços';
     protected static ?string $title = 'Coletor de Preços';
     protected static string $view = 'filament.pages.price-scanner';
+
+    protected static ?string $navigationGroup = 'Precificação';
 
     // Propriedades públicas
     public ?string $filialId = null;
