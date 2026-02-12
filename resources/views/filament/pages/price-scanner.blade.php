@@ -627,8 +627,16 @@
                         {{-- Input Novo Preço --}}
                         <div class="new-price-section">
                             <label class="new-price-label">✨ Novo Preço</label>
-                            <input type="tel" x-ref="priceInput" wire:model="novoPreco" wire:keydown.enter="savePrice"
-                                class="new-price-input" placeholder="0,00" inputmode="decimal">
+                            <input 
+                                type="tel" 
+                                x-ref="priceInput" 
+                                :value="$wire.novoPreco"
+                                x-on:input="formatMoney($el)"
+                                wire:keydown.enter="savePrice"
+                                class="new-price-input" 
+                                placeholder="0,00" 
+                                inputmode="numeric"
+                            >
                         </div>
 
                         {{-- Botões --}}
@@ -703,6 +711,32 @@
                             setTimeout(() => this.startScanner(), 500);
                         });
                     }
+                },
+
+                formatMoney(input) {
+                    // Remove tudo que não for dígito
+                    let value = input.value.replace(/\D/g, '');
+
+                    if (value === '') {
+                        input.value = '';
+                        @this.set('novoPreco', null);
+                        return;
+                    }
+
+                    // Converte para decimal (ex: 2375 -> 23.75)
+                    let floatValue = parseFloat(value) / 100;
+
+                    // Formata para o padrão brasileiro
+                    let formatted = floatValue.toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+
+                    // Atualiza o input visualmente
+                    input.value = formatted;
+
+                    // Atualiza o Livewire sem renderização imediata para performance (true)
+                    @this.set('novoPreco', formatted, true);
                 },
 
                 async startScanner() {
