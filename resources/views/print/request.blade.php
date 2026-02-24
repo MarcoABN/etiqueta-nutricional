@@ -35,7 +35,6 @@
     <div class="header">
         <h1>SOLICITAÇÃO DE PEDIDO</h1>
         <h2>{{ $record->display_id }}</h2>
-        {{-- Exibe qual filtro foi aplicado, se houver --}}
         @if(request('filter_type') == 'registered')
             <p>(Somente Itens Cadastrados)</p>
         @elseif(request('filter_type') == 'manual')
@@ -50,19 +49,26 @@
 
     @php
         $filterType = request('filter_type', 'all');
+        $orderBy = request('order_by', 'product_name'); // [ADICIONADO] Captura a ordenação
 
-        // Lógica de filtragem baseada no parâmetro GET
+        // Carrega todos os itens
         $items = $record->items;
 
+        // [ADICIONADO] Aplica a ordenação na coleção inteira
+        if ($orderBy === 'product_name') {
+            $items = $items->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE);
+        } else {
+            $items = $items->sortBy('created_at');
+        }
+
+        // Aplica o filtro de tipo, mantendo a ordem definida acima
         if ($filterType === 'registered') {
-            // Mantém apenas itens com product_id preenchido
             $items = $items->filter(fn($item) => !empty($item->product_id));
         } elseif ($filterType === 'manual') {
-            // Mantém apenas itens sem product_id (manuais)
             $items = $items->filter(fn($item) => empty($item->product_id));
         }
 
-        // Separa as coleções para exibição baseada na coleção já filtrada
+        // Separa as coleções para exibição
         $registeredItems = $items->filter(fn($item) => !empty($item->product_id));
         $manualItems = $items->filter(fn($item) => empty($item->product_id));
     @endphp

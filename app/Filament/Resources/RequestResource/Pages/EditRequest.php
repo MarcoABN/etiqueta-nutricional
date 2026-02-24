@@ -8,7 +8,8 @@ use Filament\Resources\Pages\EditRecord;
 use App\Models\Request;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Radio;
-use Livewire\Component; // [IMPORTANTE] Necessário para abrir nova aba
+use Filament\Forms\Components\Select; // [ADICIONADO] Import do Select
+use Livewire\Component;
 
 class EditRequest extends EditRecord
 {
@@ -17,7 +18,7 @@ class EditRequest extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            // --- AÇÃO DE EXPORTAR (Mantém o download direto) ---
+            // --- AÇÃO DE EXPORTAR ---
             Actions\Action::make('export_csv')
                 ->label('Exportar Excel')
                 ->icon('heroicon-o-arrow-down-tray')
@@ -47,13 +48,11 @@ class EditRequest extends EditRecord
                 ])
                 ->action(function (Request $record, array $data) {
                     return response()->streamDownload(function () use ($record, $data) {
-                        echo "\xEF\xBB\xBF"; // BOM para Excel abrir corretamente acentos
+                        echo "\xEF\xBB\xBF"; 
                         $handle = fopen('php://output', 'w');
                         
-                        // 1. Filtra por Tipo de Envio
                         $query = $record->items()->whereIn('shipping_type', $data['shipping_types']);
 
-                        // 2. Filtra por Origem (Cadastrado vs Manual)
                         if ($data['filter_type'] === 'registered') {
                             $query->whereNotNull('product_id');
                         } elseif ($data['filter_type'] === 'manual') {
@@ -62,11 +61,9 @@ class EditRequest extends EditRecord
 
                         $items = $query->get();
 
-                        // Separa para gerar o relatório organizado
                         $registered = $items->filter(fn($i) => !empty($i->product_id));
                         $manual = $items->filter(fn($i) => empty($i->product_id));
 
-                        // BLOCO 1: Cadastrados
                         if ($registered->isNotEmpty()) {
                             fputcsv($handle, ['--- PRODUTOS CADASTRADOS ---'], ';');
                             fputcsv($handle, ['ID Pedido', 'Cód WinThor', 'Produto', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
@@ -84,13 +81,11 @@ class EditRequest extends EditRecord
                             }
                         }
 
-                        // Espaçamento
                         if ($registered->isNotEmpty() && $manual->isNotEmpty()) {
                             fputcsv($handle, [], ';'); 
                             fputcsv($handle, [], ';'); 
                         }
 
-                        // BLOCO 2: Manuais
                         if ($manual->isNotEmpty()) {
                             fputcsv($handle, ['--- ITENS MANUAIS ---'], ';');
                             fputcsv($handle, ['ID Pedido', 'Tipo', 'Descrição do Item', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
@@ -112,7 +107,7 @@ class EditRequest extends EditRecord
                     }, "pedido_{$record->display_id}.csv");
                 }),
 
-            // --- AÇÃO DE IMPRIMIR (Abre em Nova Aba) ---
+            // --- AÇÃO DE IMPRIMIR ---
             Actions\Action::make('print')
                 ->label('Imprimir')
                 ->icon('heroicon-o-printer')
@@ -138,16 +133,26 @@ class EditRequest extends EditRecord
                         ->default('all')
                         ->inline()
                         ->required(),
+
+                    // [ADICIONADO] Campo de ordenação
+                    Select::make('order_by')
+                        ->label('Ordenação dos Itens')
+                        ->options([
+                            'product_name' => 'Descrição do Produto (Alfabética)',
+                            'created_at' => 'Ordem de Inserção (Cronológica)',
+                        ])
+                        ->default('product_name') // Padrão solicitado
+                        ->required()
+                        ->native(false),
                 ])
-                // [ALTERAÇÃO AQUI] Injeção do componente $livewire para rodar JS
                 ->action(function (Request $record, array $data, Component $livewire) {
                     $url = route('request.print', [
                         'record' => $record,
                         'types' => $data['shipping_types'],
-                        'filter_type' => $data['filter_type']
+                        'filter_type' => $data['filter_type'],
+                        'order_by' => $data['order_by'] // [ADICIONADO] Envio do parâmetro
                     ]);
                     
-                    // Comando JS para abrir nova aba
                     $livewire->js("window.open('$url', '_blank')");
                 }),
 

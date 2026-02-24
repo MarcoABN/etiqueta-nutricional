@@ -210,7 +210,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 RequestItem::query()
                     ->where('request_id', $this->requestRecord->id)
             )
-            ->defaultSort('created_at', 'desc')
+            ->defaultSort('product_name', 'asc') // [ADICIONADO/ALTERADO] Alterado de 'created_at' para 'product_name'
             ->heading('Itens Gravados')
             ->columns([
                 Tables\Columns\TextColumn::make('product_name')
