@@ -30,6 +30,12 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(asset('images/logo.png'))
             ->brandLogoHeight('3rem')
             ->login()
+            ->navigationGroups([
+                'Etiquetas',     // 1º grupo a aparecer
+                'Gestão',  // 2º grupo
+                'Estoque',       // 3º grupo
+                'Precificação',        // 4º grupo
+            ])
             ->passwordReset()
             ->colors([
                 'primary' => Color::Blue,
