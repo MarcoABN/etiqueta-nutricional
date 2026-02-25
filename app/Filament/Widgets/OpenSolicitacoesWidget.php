@@ -6,12 +6,13 @@ use App\Models\Demand; // <-- Apontando para o Model correto que criamos
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
+use Illuminate\Database\Eloquent\Builder;
 
 class OpenSolicitacoesWidget extends BaseWidget
 {
     protected static ?int $sort = 2;
-    protected int | string | array $columnSpan = 'full';
-    
+    protected int|string|array $columnSpan = 'full';
+
     // Título que vai aparecer no painel
     protected static ?string $heading = '📋 Demandas em Aberto';
 
@@ -19,8 +20,12 @@ class OpenSolicitacoesWidget extends BaseWidget
     {
         return $table
             ->query(
-                // Filtra apenas as demandas que estão Aguardando ou Iniciadas
-                Demand::query()->whereIn('status', ['pending', 'started'])
+                Demand::query()
+                    ->whereIn('status', ['pending', 'started'])
+                    ->where(function (Builder $query) {
+                        $query->where('user_id', auth()->id())
+                            ->orWhere('created_by', auth()->id());
+                    })
             )
             ->columns([
                 Tables\Columns\TextColumn::make('id')
@@ -39,12 +44,12 @@ class OpenSolicitacoesWidget extends BaseWidget
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                    ->formatStateUsing(fn(string $state): string => match ($state) {
                         'pending' => 'Aguardando',
                         'started' => 'Iniciado',
                         'finished' => 'Finalizado',
                     })
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'pending' => 'gray',
                         'started' => 'info',
                         'finished' => 'success',
@@ -55,14 +60,14 @@ class OpenSolicitacoesWidget extends BaseWidget
                     ->date('d/m/Y')
                     ->sortable()
                     // Fica vermelho se estiver atrasado
-                    ->color(fn (Demand $record) => ($record->deadline < now()) ? 'danger' : 'gray'),
+                    ->color(fn(Demand $record) => ($record->deadline < now()) ? 'danger' : 'gray'),
             ])
             ->actions([
                 Tables\Actions\Action::make('view')
                     ->label('Acessar')
                     ->icon('heroicon-m-arrow-top-right-on-square')
                     // Rota corrigida para o DemandResource
-                    ->url(fn (Demand $record): string => route('filament.admin.resources.demands.edit', $record)),
+                    ->url(fn(Demand $record): string => route('filament.admin.resources.demands.edit', $record)),
             ])
             ->emptyStateHeading('Nenhuma demanda pendente')
             ->emptyStateDescription('Tudo limpo por aqui!')

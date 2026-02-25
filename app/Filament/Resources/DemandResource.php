@@ -13,6 +13,7 @@ use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class DemandResource extends Resource
 {
@@ -145,5 +146,16 @@ class DemandResource extends Resource
             'create' => Pages\CreateDemand::route('/create'),
             'edit' => Pages\EditDemand::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->where(function (Builder $query) {
+                // Filtra para mostrar apenas se o usuário logado for o responsável
+                $query->where('user_id', auth()->id())
+                    // (Recomendado) Permite que ele também veja as demandas que ele mesmo criou
+                    ->orWhere('created_by', auth()->id());
+            });
     }
 }
