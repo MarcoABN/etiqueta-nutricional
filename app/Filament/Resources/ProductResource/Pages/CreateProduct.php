@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProductResource\Pages;
 
 use App\Filament\Resources\ProductResource;
 use Filament\Actions;
+use Filament\Forms\Form;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateProduct extends CreateRecord
@@ -14,5 +15,10 @@ class CreateProduct extends CreateRecord
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    public function form(Form $form): Form
+    {
+        return $form->schema(ProductResource::getDetailsFormSchema());
     }
 }

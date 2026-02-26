@@ -13,11 +13,17 @@ class EditProduct extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            // Novo botão para ir para a tela de Detalhes
+            Actions\Action::make('goToDetails')
+                ->label('Editar Detalhes')
+                ->icon('heroicon-o-cog-6-tooth')
+                ->color('warning')
+                ->url(fn () => $this->getResource()::getUrl('edit-details', ['record' => $this->getRecord()])),
+
             Actions\DeleteAction::make(),
         ];
     }
 
-    // Adicione este método para redirecionar para a listagem
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');

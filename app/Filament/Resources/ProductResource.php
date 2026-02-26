@@ -15,6 +15,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Actions\Action;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -32,13 +33,12 @@ class ProductResource extends Resource
     protected static ?string $model = Product::class;
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?string $navigationLabel = 'Produtos';
-
     protected static ?string $modelLabel = 'Produto';
     protected static ?string $pluralModelLabel = 'Produtos';
-
     protected static ?string $navigationGroup = 'Etiquetas';
     protected static ?int $navigationSort = 1;
 
+    // Formulário Padrão (Tabela Nutricional) - Usado pela EditProduct padrão
     public static function form(Form $form): Form
     {
         return $form
@@ -53,66 +53,24 @@ class ProductResource extends Resource
                 JS,
             ])
             ->schema([
-                Section::make('Identificação e Status')
+                Section::make('Identificação e Status (Visualização)')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
+                                // Trocado para TextInput disabled para manter o layout e permitir a Action da API
                                 TextInput::make('codprod')
                                     ->label('Cód. WinThor')
-                                    ->required()
-                                    ->numeric()
-                                    ->unique(ignoreRecord: true)
+                                    ->disabled()
+                                    ->dehydrated(false)
                                     ->columnSpan(2),
-                                
-                                // --- CORREÇÃO AQUI NO ACTION ---
+
                                 TextInput::make('barcode')
                                     ->label('Cód. Barras')
-                                    ->unique(ignoreRecord: true)
+                                    ->disabled()
+                                    ->dehydrated(false)
                                     ->columnSpan(3)
-                                    ->suffixAction(
-                                        Action::make('searchApi')
-                                            ->icon('heroicon-o-cloud-arrow-down')
-                                            ->tooltip('Buscar dados na Open Food Facts')
-                                            ->color('info')
-                                            ->action(function ($state, Set $set) {
-                                                if (!$state) {
-                                                    Notification::make()->title('Preencha o código de barras primeiro')->warning()->send();
-                                                    return;
-                                                }
-
-                                                $service = new OpenFoodFactsService();
-                                                $data = $service->fetchProductData($state);
-
-                                                if (!$data) {
-                                                    Notification::make()->title('Produto não encontrado na API')->danger()->send();
-                                                    return;
-                                                }
-
-                                                // Preencher os campos automaticamente
-                                                foreach ($data as $key => $value) {
-                                                    if ($value !== null) {
-                                                        // FIX: O FileUpload exige um array no estado do formulário
-                                                        if ($key === 'image_nutritional') {
-                                                            $set($key, [$value]);
-                                                        } else {
-                                                            $set($key, $value);
-                                                        }
-                                                    }
-                                                }
-
-                                                Notification::make()->title('Dados importados com sucesso!')->success()->send();
-                                            })
-                                    ),
-
-                                Select::make('curve')
-                                    ->label('Curva')
-                                    ->options([
-                                        'A' => 'Curva A',
-                                        'B' => 'Curva B',
-                                        'C' => 'Curva C',
-                                    ])
-                                    ->columnSpan(2),
+                                    ->suffixAction(self::getOpenFoodFactsAction()),
 
                                 Select::make('import_status')
                                     ->label('Status')
@@ -123,71 +81,77 @@ class ProductResource extends Resource
                                         'Em Análise' => 'Em Análise',
                                         'Liberado' => 'Liberado',
                                     ])
-                                    ->default('Bloqueado')
                                     ->required()
-                                    ->columnSpan(5)
+                                    ->columnSpan(7)
                                     ->selectablePlaceholder(false),
 
                                 TextInput::make('product_name')
                                     ->label('Nome do Produto')
-                                    ->required()
-                                    ->columnSpan(12),
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->columnSpan(6),
+
                                 TextInput::make('product_name_en')
                                     ->label('Nome (Inglês - Tradução)')
-                                    ->columnSpan(12),
-                            ]),
-
-                        Forms\Components\Grid::make(6)
-                            ->schema([
-                                TextInput::make('servings_per_container')->label('Porções/Emb.')->numeric()->columnSpan(1),
-                                TextInput::make('serving_weight')->label('Peso Porção')->columnSpan(1),
-                                TextInput::make('serving_size_quantity')->label('Qtd Medida')->columnSpan(2),
-                                TextInput::make('serving_size_unit')->label('Unidade')->columnSpan(2),
+                                    ->columnSpan(6),
                             ]),
                     ]),
 
                 Section::make('Tabela Nutricional (Macronutrientes)')
                     ->compact()
                     ->schema([
-                        Forms\Components\Grid::make(2)
+                        Forms\Components\Grid::make(['default' => 2, 'sm' => 3, 'md' => 6]) // Ajustado para não quebrar feio no mobile
+                            ->schema([
+                                TextInput::make('servings_per_container')->label('Porções/Emb.')->numeric()->columnSpan(['default' => 1, 'md' => 1]),
+                                TextInput::make('serving_weight')->label('Peso Porção')->columnSpan(['default' => 1, 'md' => 1]),
+                                TextInput::make('serving_size_quantity')->label('Qtd Medida')->columnSpan(['default' => 1, 'sm' => 2, 'md' => 2]),
+                                TextInput::make('serving_size_unit')->label('Unidade')->columnSpan(['default' => 1, 'sm' => 1, 'md' => 2]),
+                            ])->extraAttributes(['class' => 'mb-4 border-b pb-4']),
+
+                        // Aqui dizemos que queremos 1 coluna no celular (empilha os dois grupos) e 2 colunas no PC
+                        Forms\Components\Grid::make(['default' => 1, 'lg' => 2])
                             ->schema([
                                 Group::make()->schema([
                                     TextInput::make('calories')
                                         ->label('Valor energético (kcal)')
                                         ->extraInputAttributes(['class' => 'font-bold text-lg']),
 
-                                    Forms\Components\Grid::make(4)->schema([
-                                        TextInput::make('total_carb')->label('Carbo (g)')->columnSpan(3),
-                                        TextInput::make('total_carb_dv')->label('%VD')->columnSpan(1),
+                                    // Trava este grid interno para SEMPRE ter 4 colunas, até no celular
+                                    Forms\Components\Grid::make(['default' => 4])->schema([
+                                        TextInput::make('total_carb')->label('Carbo (g)')->columnSpan(['default' => 3]),
+                                        TextInput::make('total_carb_dv')->label('%VD')->columnSpan(['default' => 1]),
 
-                                        TextInput::make('total_sugars')->label('Açúcares Tot (g)')->columnSpan(4),
-                                        TextInput::make('added_sugars')->label('Açúcares Add (g)')->columnSpan(3),
-                                        TextInput::make('added_sugars_dv')->label('%VD')->columnSpan(1),
+                                        // Total spans 4 para ocupar a linha toda
+                                        TextInput::make('total_sugars')->label('Açúcares Tot (g)')->columnSpan(['default' => 4]),
 
-                                        TextInput::make('protein')->label('Proteínas (g)')->columnSpan(3),
-                                        TextInput::make('protein_dv')->label('%VD')->columnSpan(1),
+                                        TextInput::make('added_sugars')->label('Açúcares Add (g)')->columnSpan(['default' => 3]),
+                                        TextInput::make('added_sugars_dv')->label('%VD')->columnSpan(['default' => 1]),
+
+                                        TextInput::make('protein')->label('Proteínas (g)')->columnSpan(['default' => 3]),
+                                        TextInput::make('protein_dv')->label('%VD')->columnSpan(['default' => 1]),
                                     ]),
                                 ]),
 
                                 Group::make()->schema([
-                                    Forms\Components\Grid::make(4)->schema([
-                                        TextInput::make('total_fat')->label('Gorduras Totais (g)')->columnSpan(3),
-                                        TextInput::make('total_fat_dv')->label('%VD')->columnSpan(1),
+                                    // Mesma trava aqui
+                                    Forms\Components\Grid::make(['default' => 4])->schema([
+                                        TextInput::make('total_fat')->label('Gorduras Totais (g)')->columnSpan(['default' => 3]),
+                                        TextInput::make('total_fat_dv')->label('%VD')->columnSpan(['default' => 1]),
 
-                                        TextInput::make('sat_fat')->label('Gord. Sat (g)')->columnSpan(3),
-                                        TextInput::make('sat_fat_dv')->label('%VD')->columnSpan(1),
+                                        TextInput::make('sat_fat')->label('Gord. Sat (g)')->columnSpan(['default' => 3]),
+                                        TextInput::make('sat_fat_dv')->label('%VD')->columnSpan(['default' => 1]),
 
-                                        TextInput::make('trans_fat')->label('Gord. Trans (g)')->columnSpan(3),
-                                        TextInput::make('trans_fat_dv')->label('%VD')->columnSpan(1),
+                                        TextInput::make('trans_fat')->label('Gord. Trans (g)')->columnSpan(['default' => 3]),
+                                        TextInput::make('trans_fat_dv')->label('%VD')->columnSpan(['default' => 1]),
 
-                                        TextInput::make('fiber')->label('Fibras (g)')->columnSpan(3),
-                                        TextInput::make('fiber_dv')->label('%VD')->columnSpan(1),
+                                        TextInput::make('fiber')->label('Fibras (g)')->columnSpan(['default' => 3]),
+                                        TextInput::make('fiber_dv')->label('%VD')->columnSpan(['default' => 1]),
 
-                                        TextInput::make('sodium')->label('Sódio (mg)')->columnSpan(3),
-                                        TextInput::make('sodium_dv')->label('%VD')->columnSpan(1),
+                                        TextInput::make('sodium')->label('Sódio (mg)')->columnSpan(['default' => 3]),
+                                        TextInput::make('sodium_dv')->label('%VD')->columnSpan(['default' => 1]),
 
-                                        TextInput::make('cholesterol')->label('Colesterol (mg)')->columnSpan(3),
-                                        TextInput::make('cholesterol_dv')->label('%VD')->columnSpan(1),
+                                        TextInput::make('cholesterol')->label('Colesterol (mg)')->columnSpan(['default' => 3]),
+                                        TextInput::make('cholesterol_dv')->label('%VD')->columnSpan(['default' => 1]),
                                     ]),
                                 ]),
                             ]),
@@ -196,38 +160,23 @@ class ProductResource extends Resource
                 Section::make('Rotulagem e Ingredientes')
                     ->compact()
                     ->schema([
-                        Forms\Components\Grid::make(2)->schema([
-                            // Lado Esquerdo: PT-BR
-                            Group::make()->schema([
-                                Textarea::make('ingredients_pt')
-                                    ->label('Lista de Ingredientes (PT-BR)')
-                                    ->placeholder('Ingredientes em português...')
-                                    ->rows(5),
-                                
-                                TextInput::make('allergens_contains_pt')
-                                    ->label('CONTÉM (PT-BR)'),
-                                
-                                TextInput::make('allergens_may_contain_pt')
-                                    ->label('PODE CONTER (PT-BR)'),
-                            ])->columnSpan(1),
+                        // REMOVIDOS OS CAMPOS PT-BR conforme solicitado
+                        Group::make()->schema([
+                            Textarea::make('ingredients')
+                                ->label('Lista de Ingredientes (Original/EN)')
+                                ->placeholder('Ingredientes originais ou em inglês...')
+                                ->rows(5),
 
-                            // Lado Direito: EN
-                            Group::make()->schema([
-                                Textarea::make('ingredients')
-                                    ->label('Lista de Ingredientes (Original/EN)')
-                                    ->placeholder('Ingredientes originais ou em inglês...')
-                                    ->rows(5),
-                                
-                                TextInput::make('allergens_contains')
-                                    ->label('CONTÉM (EN)'),
-                                
-                                TextInput::make('allergens_may_contain')
-                                    ->label('PODE CONTER (EN)'),
-                            ])->columnSpan(1),
-                        ]),
+                            TextInput::make('allergens_contains')
+                                ->label('CONTÉM (EN)'),
+
+                            TextInput::make('allergens_may_contain')
+                                ->label('PODE CONTER (EN)'),
+                        ])->columnSpanFull(),
                     ]),
 
                 Section::make('Micronutrientes (Vitaminas e Minerais)')
+                    // ... Mantenha todo o seu schema de Micronutrientes intacto aqui ...
                     ->collapsible()
                     ->collapsed()
                     ->compact()
@@ -237,38 +186,33 @@ class ProductResource extends Resource
                             TextInput::make('calcium')->label('Cálcio (mg)'),
                             TextInput::make('iron')->label('Ferro (mg)'),
                             TextInput::make('potassium')->label('Potássio (mg)'),
-
                             TextInput::make('vitamin_a')->label('Vit A (mcg)'),
                             TextInput::make('vitamin_c')->label('Vit C (mg)'),
                             TextInput::make('vitamin_e')->label('Vit E (mg)'),
                             TextInput::make('vitamin_k')->label('Vit K (mcg)'),
-
                             TextInput::make('thiamin')->label('Tiamina B1 (mg)'),
                             TextInput::make('riboflavin')->label('Riboflavina B2 (mg)'),
                             TextInput::make('niacin')->label('Niacina B3 (mg)'),
                             TextInput::make('vitamin_b6')->label('Vit B6 (mg)'),
-
                             TextInput::make('folate')->label('Folato (mcg)'),
                             TextInput::make('vitamin_b12')->label('Vit B12 (mcg)'),
                             TextInput::make('biotin')->label('Biotina (mcg)'),
                             TextInput::make('pantothenic_acid')->label('Ác. Pantotênico (mg)'),
-
                             TextInput::make('phosphorus')->label('Fósforo (mg)'),
                             TextInput::make('iodine')->label('Iodo (mcg)'),
                             TextInput::make('magnesium')->label('Magnésio (mg)'),
                             TextInput::make('zinc')->label('Zinco (mg)'),
-
                             TextInput::make('selenium')->label('Selênio (mcg)'),
                             TextInput::make('copper')->label('Cobre (mcg)'),
                             TextInput::make('manganese')->label('Manganês (mg)'),
                             TextInput::make('chromium')->label('Cromo (mcg)'),
-
                             TextInput::make('molybdenum')->label('Molibdênio (mcg)'),
                             TextInput::make('chloride')->label('Cloreto'),
                         ]),
                     ]),
 
                 Section::make('Imagem do Rótulo')
+                    // ... Mantenha intacto ...
                     ->description('Visualize a imagem capturada pelo scanner ou anexe manualmente.')
                     ->collapsible()
                     ->collapsed(false)
@@ -288,6 +232,118 @@ class ProductResource extends Resource
                             ->columnSpanFull(),
                     ]),
             ]);
+    }
+
+    // NOVO MÉTODO: Schema exclusivo para a tela de Detalhes e Cadastro
+    public static function getDetailsFormSchema(): array
+    {
+        return [
+            Section::make('Detalhes Principais do Produto')
+                ->schema([
+                    Forms\Components\Grid::make(12)
+                        ->schema([
+                            TextInput::make('codprod')
+                                ->label('Cód. WinThor')
+                                ->required()
+                                ->numeric()
+                                ->unique(ignoreRecord: true)
+                                ->columnSpan(3),
+
+                            TextInput::make('barcode')
+                                ->label('Cód. Barras')
+                                ->unique(ignoreRecord: true)
+                                ->columnSpan(3)
+                                ->suffixAction(self::getOpenFoodFactsAction()),
+
+                            Select::make('curve')
+                                ->label('Curva')
+                                ->options([
+                                    'A' => 'Curva A',
+                                    'B' => 'Curva B',
+                                    'C' => 'Curva C',
+                                ])
+                                ->columnSpan(2),
+
+                            Select::make('import_status')
+                                ->label('Status')
+                                ->options([
+                                    'Bloqueado' => 'Bloqueado',
+                                    'Dados via API' => 'Dados via API',
+                                    'Processado (IA)' => 'Processado (IA)',
+                                    'Em Análise' => 'Em Análise',
+                                    'Liberado' => 'Liberado',
+                                ])
+                                ->default('Bloqueado')
+                                ->required()
+                                ->columnSpan(4)
+                                ->selectablePlaceholder(false),
+
+                            TextInput::make('product_name')
+                                ->label('Nome do Produto')
+                                ->required()
+                                ->columnSpan(12),
+                        ]),
+                ]),
+
+            Section::make('Dados Logísticos e Fiscais')
+                ->schema([
+                    Forms\Components\Grid::make(4)
+                        ->schema([
+                            TextInput::make('ncm')
+                                ->label('NCM')
+                                ->numeric()
+                                ->maxLength(8),
+
+                            TextInput::make('pesoliq')
+                                ->label('Peso Líquido')
+                                ->numeric(),
+
+                            TextInput::make('unidade')
+                                ->label('Unidade (Ex: CX, UN)'),
+
+                            TextInput::make('qtunitcx')
+                                ->label('Qtd. Unit. na Caixa')
+                                ->numeric(),
+                        ]),
+                ]),
+        ];
+    }
+
+    // Extraí a action da API para podermos reutilizar nas duas telas!
+    public static function getOpenFoodFactsAction(): Action
+    {
+        return Action::make('searchApi')
+            ->icon('heroicon-o-cloud-arrow-down')
+            ->tooltip('Buscar dados na Open Food Facts')
+            ->color('info')
+            ->action(function ($state, Set $set, $record) {
+                // Se a action for chamada no input disabled, $state vem null. Precisamos buscar do $record.
+                $barcode = $state ?? $record?->barcode;
+
+                if (!$barcode) {
+                    Notification::make()->title('Preencha o código de barras primeiro')->warning()->send();
+                    return;
+                }
+
+                $service = new OpenFoodFactsService();
+                $data = $service->fetchProductData($barcode);
+
+                if (!$data) {
+                    Notification::make()->title('Produto não encontrado na API')->danger()->send();
+                    return;
+                }
+
+                foreach ($data as $key => $value) {
+                    if ($value !== null) {
+                        if ($key === 'image_nutritional') {
+                            $set($key, [$value]);
+                        } else {
+                            $set($key, $value);
+                        }
+                    }
+                }
+                Notification::make()->title('Dados importados com sucesso!')->success()->send();
+            });
     }
 
     public static function table(Table $table): Table
@@ -399,7 +455,18 @@ class ProductResource extends Resource
                     })
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                // Botão 1: Tabela Nutricional (Tela Atual)
+                Tables\Actions\EditAction::make()
+                    ->label('Tabela Nutri')
+                    ->icon('heroicon-o-clipboard-document-list')
+                    ->color('primary'),
+
+                // Botão 2: Nova Tela de Detalhes
+                Tables\Actions\Action::make('edit_details')
+                    ->label('Detalhes')
+                    ->icon('heroicon-o-cog-6-tooth')
+                    ->color('warning')
+                    ->url(fn(Product $record): string => ProductResource::getUrl('edit-details', ['record' => $record])),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -421,11 +488,11 @@ class ProductResource extends Resource
                                 }
 
                                 $data = $service->fetchProductData($record->barcode);
-                                
+
                                 if ($data) {
                                     $record->update($data);
                                     $count++;
-                                    usleep(200000); 
+                                    usleep(200000);
                                 } else {
                                     $failed++;
                                 }
@@ -491,17 +558,14 @@ class ProductResource extends Resource
             ]);
     }
 
-    public static function getRelations(): array
-    {
-        return [];
-    }
-
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListProducts::route('/'),
             'create' => Pages\CreateProduct::route('/create'),
             'edit' => Pages\EditProduct::route('/{record}/edit'),
+            // Registrar a nova página de Detalhes
+            'edit-details' => Pages\EditProductDetails::route('/{record}/edit-details'),
         ];
     }
 }

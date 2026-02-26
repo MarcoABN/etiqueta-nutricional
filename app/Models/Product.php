@@ -36,6 +36,10 @@ class Product extends Model
         'codprod',
         'barcode',         // EAN/GTIN
         'curve',           // A, B, C
+        'ncm',
+        'pesoliq',
+        'unidade',
+        'qtunitcx',
         'import_status',   // Bloqueado, Em Análise, Liberado
         'product_name',
         'product_name_en',
