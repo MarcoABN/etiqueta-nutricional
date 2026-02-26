@@ -40,7 +40,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     {
         return $form
             ->schema([
-                Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Novo Item')
+                Forms\Components\Section::make(fn() => $this->editingItemId ? 'Editar Item' : 'Adicionar Novo Item')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(12)
@@ -54,8 +54,8 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                         return Product::query()
                                             ->where(function ($query) use ($search) {
                                                 $query->where('product_name', 'ilike', "%{$search}%")
-                                                      ->orWhereRaw("CAST(codprod AS TEXT) ILIKE ?", ["%{$search}%"])
-                                                      ->orWhere('barcode', 'ilike', "%{$search}%");
+                                                    ->orWhereRaw("CAST(codprod AS TEXT) ILIKE ?", ["%{$search}%"])
+                                                    ->orWhere('barcode', 'ilike', "%{$search}%");
                                             })
                                             ->orderByRaw("
                                                 CASE 
@@ -66,9 +66,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                             ", [$search, "{$search}%"])
                                             ->limit(50)
                                             ->get()
-                                            ->mapWithKeys(fn ($p) => [$p->id => "{$p->codprod} - {$p->product_name}"]);
+                                            ->mapWithKeys(fn($p) => [$p->id => "{$p->codprod} - {$p->product_name}"]);
                                     })
-                                    ->getOptionLabelUsing(fn ($value): ?string => Product::find($value)?->product_name)
+                                    ->getOptionLabelUsing(fn($value): ?string => Product::find($value)?->product_name)
                                     ->afterStateUpdated(function ($state, Forms\Set $set) {
                                         if ($product = Product::find($state)) {
                                             $set('product_name', $product->product_name);
@@ -91,7 +91,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
                                 Forms\Components\Select::make('packaging')
                                     ->label('Emb')
-                                    ->options(['CX'=>'CX', 'UN'=>'UN', 'DP'=>'DP', 'PCT'=>'PCT', 'FD'=>'FD'])
+                                    ->options(['CX' => 'CX', 'UN' => 'UN', 'DP' => 'DP', 'PCT' => 'PCT', 'FD' => 'FD'])
                                     ->default('CX')
                                     ->required()
                                     ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 1]),
@@ -108,21 +108,21 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
-                                        ->label(fn () => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
-                                        ->icon(fn () => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
-                                        ->color(fn () => $this->editingItemId ? 'warning' : 'primary')
-                                        ->action(fn () => $this->saveItem()),
+                                        ->label(fn() => $this->editingItemId ? 'ATUALIZAR' : 'INCLUIR')
+                                        ->icon(fn() => $this->editingItemId ? 'heroicon-m-check' : 'heroicon-m-plus')
+                                        ->color(fn() => $this->editingItemId ? 'warning' : 'primary')
+                                        ->action(fn() => $this->saveItem()),
 
                                     Forms\Components\Actions\Action::make('cancel')
                                         ->label('CANCELAR')
                                         ->icon('heroicon-m-x-mark')
                                         ->color('gray')
-                                        ->action(fn () => $this->resetInput())
-                                        ->visible(fn () => $this->editingItemId !== null),
+                                        ->action(fn() => $this->resetInput())
+                                        ->visible(fn() => $this->editingItemId !== null),
                                 ])
-                                ->columnSpan(['default' => 12, 'md' => 3, 'lg' => 3])
-                                ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2']) 
-                                ->alignRight(),
+                                    ->columnSpan(['default' => 12, 'md' => 3, 'lg' => 3])
+                                    ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2'])
+                                    ->alignRight(),
                             ]),
                     ])
             ]);
@@ -136,7 +136,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
         if ($prodId) {
             $exists = RequestItem::where('request_id', $this->record->id)
                 ->where('product_id', $prodId)
-                ->when($this->editingItemId, fn ($q) => $q->where('id', '!=', $this->editingItemId))
+                ->when($this->editingItemId, fn($q) => $q->where('id', '!=', $this->editingItemId))
                 ->exists();
 
             if ($exists) {
@@ -173,7 +173,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
         if (!$item) return;
 
         $this->editingItemId = $itemId;
-        
+
         $this->form->fill([
             'product_id' => $item->product_id,
             'product_name' => $item->product_name,
@@ -209,19 +209,24 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             ->columns([
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
-                    ->description(fn ($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
+                    ->description(fn($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
                     ->weight('bold')
                     ->wrap()
                     ->sortable()
-                    ->searchable(),
-                
+                    // Define a busca personalizada para Nome OU Código WinThor
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query
+                            ->where('product_name', 'ilike', "%{$search}%")
+                            ->orWhereRaw("CAST(winthor_code AS TEXT) ILIKE ?", ["%{$search}%"]);
+                    }),
+
                 Tables\Columns\TextColumn::make('quantity')
                     ->label('Qtd')
                     ->alignCenter(),
-                
+
                 Tables\Columns\TextColumn::make('packaging')
                     ->label('Emb'),
-                
+
                 Tables\Columns\TextColumn::make('unit_price')
                     ->label('Valor UN')
                     ->money('BRL')
@@ -231,7 +236,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                 Tables\Columns\TextColumn::make('observation')
                     ->label('Obs')
                     ->limit(20)
-                    ->tooltip(fn ($state) => $state),
+                    ->tooltip(fn($state) => $state),
             ])
             ->filters([
                 Filter::make('product_type')
@@ -247,8 +252,8 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
-                            ->when($data['type'] === 'registered', fn (Builder $query) => $query->whereNotNull('product_id'))
-                            ->when($data['type'] === 'manual', fn (Builder $query) => $query->whereNull('product_id'));
+                            ->when($data['type'] === 'registered', fn(Builder $query) => $query->whereNotNull('product_id'))
+                            ->when($data['type'] === 'manual', fn(Builder $query) => $query->whereNull('product_id'));
                     }),
             ])
             ->actions([
@@ -256,7 +261,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
                     ->color('warning')
-                    ->action(fn (RequestItem $record) => $this->editItem($record->id)),
+                    ->action(fn(RequestItem $record) => $this->editItem($record->id)),
 
                 Tables\Actions\DeleteAction::make()
                     ->label('')
