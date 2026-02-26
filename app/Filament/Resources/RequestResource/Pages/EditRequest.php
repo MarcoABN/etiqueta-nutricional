@@ -14,7 +14,6 @@ class EditRequest extends EditRecord
 {
     protected static string $resource = RequestResource::class;
 
-    // --- ADICIONADO: Renderiza o widget de itens no rodapé da página ---
     protected function getFooterWidgets(): array
     {
         return [
@@ -25,6 +24,67 @@ class EditRequest extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            // --- AÇÃO: EXPORTAR INVOICE ---
+            Actions\Action::make('export_invoice')
+                ->label('Exportar Invoice')
+                ->icon('heroicon-o-document-text')
+                ->color('info')
+                ->action(function (Request $record) {
+                    return response()->streamDownload(function () use ($record) {
+                        echo "\xEF\xBB\xBF"; 
+                        $handle = fopen('php://output', 'w');
+                        
+                        fputcsv($handle, ['ITENS', 'NCM', 'DESCRIPTION', 'UNID', 'QTDE', 'Vlr Unitario', 'TOTAL'], ';');
+
+                        $items = $record->items()->with('product')->get();
+
+                        $sequential = 1;
+                        $sumQtde = 0;
+                        $sumTotal = 0;
+
+                        foreach ($items as $item) {
+                            $ncm = $item->product ? $item->product->ncm : '';
+                            
+                            // Busca o nome em inglês. Se estiver vazio ou for item manual, usa o nome padrão
+                            $description = $item->product_name; 
+                            if ($item->product && !empty($item->product->product_name_en)) {
+                                $description = $item->product->product_name_en;
+                            }
+                            
+                            $unid = $item->packaging;
+                            $qtde = $item->quantity;
+                            $vlrUnit = $item->unit_price ?? 0;
+                            $total = $qtde * $vlrUnit;
+
+                            $sumQtde += $qtde;
+                            $sumTotal += $total;
+
+                            fputcsv($handle, [
+                                $sequential++,
+                                $ncm,
+                                $description,
+                                $unid,
+                                number_format($qtde, 2, ',', ''),
+                                number_format($vlrUnit, 2, ',', ''),
+                                number_format($total, 2, ',', '')
+                            ], ';');
+                        }
+
+                        fputcsv($handle, [
+                            '',             
+                            '',             
+                            '',             
+                            'TOTAIS',       
+                            number_format($sumQtde, 2, ',', ''), 
+                            '',             
+                            number_format($sumTotal, 2, ',', '') 
+                        ], ';');
+
+                        fclose($handle);
+                    }, "invoice_{$record->display_id}.csv");
+                }),
+
+            // --- AÇÃO: EXPORTAR EXCEL (PADRÃO) ---
             Actions\Action::make('export_csv')
                 ->label('Exportar Excel')
                 ->icon('heroicon-o-arrow-down-tray')
@@ -108,6 +168,7 @@ class EditRequest extends EditRecord
                     }, "pedido_{$record->display_id}.csv");
                 }),
 
+            // --- AÇÃO: IMPRIMIR ---
             Actions\Action::make('print')
                 ->label('Imprimir')
                 ->icon('heroicon-o-printer')
