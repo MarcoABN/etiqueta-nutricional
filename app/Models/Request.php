@@ -18,21 +18,23 @@ class Request extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            // Lógica para gerar ID legível: SOL-{ANO}-{SEQUENCIA}
+            // Lógica para gerar ID objetivo: {ANO}{SEQUENCIA} (Ex: 2026001)
             $year = date('Y');
-            // Busca o último número deste ano (Postgres safe)
+            
+            // Busca o último número deste ano
             $last = DB::table('requests')
-                ->where('display_id', 'like', "SOL-{$year}-%")
+                ->where('display_id', 'like', "{$year}%")
                 ->orderBy('display_id', 'desc')
                 ->first();
 
             $sequence = 1;
             if ($last) {
-                $parts = explode('-', $last->display_id);
-                $sequence = intval(end($parts)) + 1;
+                // Remove os 4 primeiros caracteres (o ano) para pegar apenas a sequência numérica
+                $sequence = intval(substr($last->display_id, 4)) + 1;
             }
 
-            $model->display_id = sprintf('SOL-%s-%04d', $year, $sequence);
+            // Formata a string combinando o ano com uma sequência de 3 dígitos (001, 002, etc.)
+            $model->display_id = sprintf('%s%03d', $year, $sequence);
         });
     }
 

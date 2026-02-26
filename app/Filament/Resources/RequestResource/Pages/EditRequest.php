@@ -6,35 +6,30 @@ use App\Filament\Resources\RequestResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use App\Models\Request;
-use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Radio;
-use Filament\Forms\Components\Select; // [ADICIONADO] Import do Select
+use Filament\Forms\Components\Select;
 use Livewire\Component;
 
 class EditRequest extends EditRecord
 {
     protected static string $resource = RequestResource::class;
 
+    // --- ADICIONADO: Renderiza o widget de itens no rodapé da página ---
+    protected function getFooterWidgets(): array
+    {
+        return [
+            \App\Livewire\RequestItemsWidget::class,
+        ];
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            // --- AÇÃO DE EXPORTAR ---
             Actions\Action::make('export_csv')
                 ->label('Exportar Excel')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('success')
                 ->form([
-                    CheckboxList::make('shipping_types')
-                        ->label('Selecione os tipos para exportar:')
-                        ->options([
-                            'Maritimo' => 'Maritimo',
-                            'Aereo' => 'Aereo',
-                            'Avaliar' => 'Avaliar',
-                        ])
-                        ->default(['Maritimo', 'Aereo', 'Avaliar'])
-                        ->required()
-                        ->columns(3),
-
                     Radio::make('filter_type')
                         ->label('Filtrar por origem:')
                         ->options([
@@ -51,7 +46,7 @@ class EditRequest extends EditRecord
                         echo "\xEF\xBB\xBF"; 
                         $handle = fopen('php://output', 'w');
                         
-                        $query = $record->items()->whereIn('shipping_type', $data['shipping_types']);
+                        $query = $record->items();
 
                         if ($data['filter_type'] === 'registered') {
                             $query->whereNotNull('product_id');
@@ -66,16 +61,19 @@ class EditRequest extends EditRecord
 
                         if ($registered->isNotEmpty()) {
                             fputcsv($handle, ['--- PRODUTOS CADASTRADOS ---'], ';');
-                            fputcsv($handle, ['ID Pedido', 'Cód WinThor', 'Produto', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
+                            fputcsv($handle, ['ID Pedido', 'Cód WinThor', 'Produto', 'Qtd', 'Valor Un', 'Valor Total', 'Obs'], ';');
 
                             foreach ($registered as $item) {
+                                $valUn = $item->unit_price ? number_format($item->unit_price, 2, ',', '') : '0,00';
+                                $valTot = number_format($item->quantity * ($item->unit_price ?? 0), 2, ',', '');
+
                                 fputcsv($handle, [
                                     $record->display_id,
                                     $item->winthor_code,
                                     $item->product_name,
-                                    number_format($item->quantity, 2, ',', '.'),
-                                    $item->packaging,
-                                    $item->shipping_type,
+                                    number_format($item->quantity, 2, ',', ''),
+                                    $valUn,
+                                    $valTot,
                                     $item->observation
                                 ], ';');
                             }
@@ -88,16 +86,19 @@ class EditRequest extends EditRecord
 
                         if ($manual->isNotEmpty()) {
                             fputcsv($handle, ['--- ITENS MANUAIS ---'], ';');
-                            fputcsv($handle, ['ID Pedido', 'Tipo', 'Descrição do Item', 'Qtd', 'Emb', 'Envio', 'Obs'], ';');
+                            fputcsv($handle, ['ID Pedido', 'Tipo', 'Descrição do Item', 'Qtd', 'Valor Un', 'Valor Total', 'Obs'], ';');
 
                             foreach ($manual as $item) {
+                                $valUn = $item->unit_price ? number_format($item->unit_price, 2, ',', '') : '0,00';
+                                $valTot = number_format($item->quantity * ($item->unit_price ?? 0), 2, ',', '');
+
                                 fputcsv($handle, [
                                     $record->display_id,
                                     'MANUAL',
                                     $item->product_name,
-                                    number_format($item->quantity, 2, ',', '.'),
-                                    $item->packaging,
-                                    $item->shipping_type,
+                                    number_format($item->quantity, 2, ',', ''),
+                                    $valUn,
+                                    $valTot,
                                     $item->observation
                                 ], ';');
                             }
@@ -107,22 +108,10 @@ class EditRequest extends EditRecord
                     }, "pedido_{$record->display_id}.csv");
                 }),
 
-            // --- AÇÃO DE IMPRIMIR ---
             Actions\Action::make('print')
                 ->label('Imprimir')
                 ->icon('heroicon-o-printer')
                 ->form([
-                    CheckboxList::make('shipping_types')
-                        ->label('Selecione os tipos para imprimir:')
-                        ->options([
-                            'Maritimo' => 'Maritimo',
-                            'Aereo' => 'Aereo',
-                            'Avaliar' => 'Avaliar',
-                        ])
-                        ->default(['Maritimo', 'Aereo', 'Avaliar'])
-                        ->required()
-                        ->columns(3),
-
                     Radio::make('filter_type')
                         ->label('Filtrar por origem:')
                         ->options([
@@ -134,23 +123,21 @@ class EditRequest extends EditRecord
                         ->inline()
                         ->required(),
 
-                    // [ADICIONADO] Campo de ordenação
                     Select::make('order_by')
                         ->label('Ordenação dos Itens')
                         ->options([
                             'product_name' => 'Descrição do Produto (Alfabética)',
                             'created_at' => 'Ordem de Inserção (Cronológica)',
                         ])
-                        ->default('product_name') // Padrão solicitado
+                        ->default('product_name')
                         ->required()
                         ->native(false),
                 ])
                 ->action(function (Request $record, array $data, Component $livewire) {
                     $url = route('request.print', [
                         'record' => $record,
-                        'types' => $data['shipping_types'],
                         'filter_type' => $data['filter_type'],
-                        'order_by' => $data['order_by'] // [ADICIONADO] Envio do parâmetro
+                        'order_by' => $data['order_by']
                     ]);
                     
                     $livewire->js("window.open('$url', '_blank')");

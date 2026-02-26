@@ -3,20 +3,17 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\RequestResource\Pages;
-use App\Livewire\RequestItemsWidget;
 use App\Models\Request;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Livewire;
 use Filament\Forms\Components\Grid;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Livewire\Component;
 
 class RequestResource extends Resource
 {
@@ -41,7 +38,7 @@ class RequestResource extends Resource
                             ->dehydrated(false)
                             ->prefix('#')
                             ->extraInputAttributes(['style' => 'font-weight: bold; font-size: 1.1em;'])
-                            ->columnSpan(3), // Mantido o ajuste para não cortar o número
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
 
                         Select::make('status')
                             ->label('Status')
@@ -53,22 +50,28 @@ class RequestResource extends Resource
                             ->required()
                             ->native(false)
                             ->selectablePlaceholder(false)
-                            ->columnSpan(3),
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
+
+                        Select::make('shipping_type')
+                            ->label('Tipo de Envio')
+                            ->options([
+                                'Maritimo' => 'Marítimo', 
+                                'Aereo' => 'Aéreo',
+                                'Avaliar' => 'Avaliar'
+                            ])
+                            ->default('Maritimo')
+                            ->required()
+                            ->native(false)
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
 
                         TextInput::make('created_at')
                             ->label('Data Criação')
                             ->disabled()
                             ->formatStateUsing(fn ($record) => $record?->created_at?->format('d/m/Y H:i'))
-                            ->columnSpan(3),
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
                     ])
                     ->hidden(fn (string $operation) => $operation === 'create')
                     ->columnSpanFull(),
-
-                Livewire::make(RequestItemsWidget::class)
-                    ->key('items-widget')
-                    ->data(fn (?Request $record) => ['record' => $record])
-                    ->columnSpanFull()
-                    ->hidden(fn (string $operation) => $operation === 'create'),
             ]);
     }
 
@@ -92,6 +95,17 @@ class RequestResource extends Resource
                     ->counts('items')
                     ->badge(),
 
+                Tables\Columns\TextColumn::make('shipping_type')
+                    ->label('Envio')
+                    ->badge()
+                    ->color(fn ($state) => match ($state) {
+                        'Aereo' => 'warning',
+                        'Maritimo' => 'info',
+                        'Avaliar' => 'gray',
+                        default => 'gray',
+                    })
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -106,7 +120,6 @@ class RequestResource extends Resource
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
-                // Apenas o botão Editar foi mantido na listagem
                 Tables\Actions\EditAction::make(),
             ])
             ->bulkActions([

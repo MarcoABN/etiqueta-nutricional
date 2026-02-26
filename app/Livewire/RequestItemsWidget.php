@@ -13,31 +13,28 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
-use Livewire\Component;
+use Filament\Widgets\Widget;
 
-class RequestItemsWidget extends Component implements HasForms, HasTable
+class RequestItemsWidget extends Widget implements HasForms, HasTable
 {
     use InteractsWithForms;
     use InteractsWithTable;
 
-    public Request $requestRecord;
+    protected static string $view = 'livewire.request-items-widget';
+    protected int | string | array $columnSpan = 'full';
+
+    public ?Request $record = null;
     public ?string $editingItemId = null;
 
     public $product_id;
     public $product_name;
     public $quantity = 1;
     public $packaging = 'CX';
-    public $shipping_type = 'Maritimo';
+    public $unit_price;
     public $observation;
-
-    public function mount(Request $record)
-    {
-        $this->requestRecord = $record;
-    }
 
     public function form(Form $form): Form
     {
@@ -46,7 +43,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 Forms\Components\Section::make(fn () => $this->editingItemId ? 'Editar Item' : 'Adicionar Novo Item')
                     ->compact()
                     ->schema([
-                        Forms\Components\Grid::make(24)
+                        Forms\Components\Grid::make(12)
                             ->schema([
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
@@ -56,15 +53,17 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                     ->getSearchResultsUsing(function (string $search) {
                                         return Product::query()
                                             ->where(function ($query) use ($search) {
-                                                $query->where(function ($subQuery) use ($search) {
-                                                    $terms = array_filter(explode(' ', $search));
-                                                    foreach ($terms as $term) {
-                                                        $subQuery->where('product_name', 'ilike', "%{$term}%");
-                                                    }
-                                                });
-                                                $query->orWhereRaw("CAST(codprod AS TEXT) ILIKE ?", ["%{$search}%"]);
-                                                $query->orWhere('barcode', 'ilike', "%{$search}%");
+                                                $query->where('product_name', 'ilike', "%{$search}%")
+                                                      ->orWhereRaw("CAST(codprod AS TEXT) ILIKE ?", ["%{$search}%"])
+                                                      ->orWhere('barcode', 'ilike', "%{$search}%");
                                             })
+                                            ->orderByRaw("
+                                                CASE 
+                                                    WHEN CAST(codprod AS TEXT) = ? THEN 0 
+                                                    WHEN CAST(codprod AS TEXT) ILIKE ? THEN 1 
+                                                    ELSE 2 
+                                                END
+                                            ", [$search, "{$search}%"])
                                             ->limit(50)
                                             ->get()
                                             ->mapWithKeys(fn ($p) => [$p->id => "{$p->codprod} - {$p->product_name}"]);
@@ -76,41 +75,36 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                             $set('packaging', $product->serving_size_unit ?? 'CX');
                                         }
                                     })
-                                    ->columnSpan(7),
+                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]),
 
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
-                                    ->columnSpan(8),
+                                    ->columnSpan(['default' => 12, 'md' => 8, 'lg' => 5]),
 
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
                                     ->default(1)
                                     ->required()
-                                    ->columnSpan(3),
+                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 1]),
 
                                 Forms\Components\Select::make('packaging')
                                     ->label('Emb')
                                     ->options(['CX'=>'CX', 'UN'=>'UN', 'DP'=>'DP', 'PCT'=>'PCT', 'FD'=>'FD'])
                                     ->default('CX')
                                     ->required()
-                                    ->columnSpan(3),
+                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 1]),
 
-                                Forms\Components\Select::make('shipping_type')
-                                    ->label('Envio')
-                                    ->options([
-                                        'Maritimo' => 'Mar', 
-                                        'Aereo' => 'Aér',
-                                        'Avaliar' => 'Avaliar'
-                                    ])
-                                    ->default('Maritimo')
-                                    ->required()
-                                    ->columnSpan(3),
+                                Forms\Components\TextInput::make('unit_price')
+                                    ->label('Valor UN(R$)')
+                                    ->numeric()
+                                    ->prefix('R$')
+                                    ->columnSpan(['default' => 12, 'md' => 3, 'lg' => 2]),
 
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação')
-                                    ->columnSpan(18),
+                                    ->columnSpan(['default' => 12, 'md' => 6, 'lg' => 9]),
 
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
@@ -126,7 +120,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                                         ->action(fn () => $this->resetInput())
                                         ->visible(fn () => $this->editingItemId !== null),
                                 ])
-                                ->columnSpan(6)
+                                ->columnSpan(['default' => 12, 'md' => 3, 'lg' => 3])
                                 ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2']) 
                                 ->alignRight(),
                             ]),
@@ -140,7 +134,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         $prodId = $data['product_id'] ?? null;
 
         if ($prodId) {
-            $exists = RequestItem::where('request_id', $this->requestRecord->id)
+            $exists = RequestItem::where('request_id', $this->record->id)
                 ->where('product_id', $prodId)
                 ->when($this->editingItemId, fn ($q) => $q->where('id', '!=', $this->editingItemId))
                 ->exists();
@@ -152,12 +146,12 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         }
 
         $itemData = [
-            'request_id' => $this->requestRecord->id,
+            'request_id' => $this->record->id,
             'product_id' => $prodId,
             'product_name' => $data['product_name'],
             'quantity' => $data['quantity'],
             'packaging' => $data['packaging'],
-            'shipping_type' => $data['shipping_type'],
+            'unit_price' => $data['unit_price'],
             'observation' => $data['observation'],
             'winthor_code' => Product::find($prodId)?->codprod,
         ];
@@ -185,7 +179,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
             'product_name' => $item->product_name,
             'quantity' => $item->quantity,
             'packaging' => $item->packaging,
-            'shipping_type' => $item->shipping_type,
+            'unit_price' => $item->unit_price,
             'observation' => $item->observation,
         ]);
     }
@@ -198,7 +192,7 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
             'product_name' => '',
             'quantity' => 1,
             'packaging' => 'CX',
-            'shipping_type' => 'Maritimo',
+            'unit_price' => null,
             'observation' => '',
         ]);
     }
@@ -208,9 +202,9 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
         return $table
             ->query(
                 RequestItem::query()
-                    ->where('request_id', $this->requestRecord->id)
+                    ->where('request_id', $this->record->id)
             )
-            ->defaultSort('product_name', 'asc') // [ADICIONADO/ALTERADO] Alterado de 'created_at' para 'product_name'
+            ->defaultSort('product_name', 'asc')
             ->heading('Itens Gravados')
             ->columns([
                 Tables\Columns\TextColumn::make('product_name')
@@ -228,15 +222,10 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                 Tables\Columns\TextColumn::make('packaging')
                     ->label('Emb'),
                 
-                Tables\Columns\TextColumn::make('shipping_type')
-                    ->label('Envio')
-                    ->badge()
-                    ->color(fn ($state) => match ($state) {
-                        'Aereo' => 'warning',
-                        'Maritimo' => 'info',
-                        'Avaliar' => 'gray',
-                        default => 'gray',
-                    })
+                Tables\Columns\TextColumn::make('unit_price')
+                    ->label('Valor UN')
+                    ->money('BRL')
+                    ->alignRight()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('observation')
@@ -261,14 +250,6 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                             ->when($data['type'] === 'registered', fn (Builder $query) => $query->whereNotNull('product_id'))
                             ->when($data['type'] === 'manual', fn (Builder $query) => $query->whereNull('product_id'));
                     }),
-
-                SelectFilter::make('shipping_type')
-                    ->label('Tipo de Envio')
-                    ->options([
-                        'Maritimo' => 'Marítimo',
-                        'Aereo' => 'Aéreo',
-                        'Avaliar' => 'Avaliar',
-                    ]),
             ])
             ->actions([
                 Tables\Actions\Action::make('edit_line')
@@ -287,10 +268,5 @@ class RequestItemsWidget extends Component implements HasForms, HasTable
                     }),
             ])
             ->paginated(false);
-    }
-
-    public function render()
-    {
-        return view('livewire.request-items-widget');
     }
 }

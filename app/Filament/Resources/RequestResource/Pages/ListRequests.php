@@ -14,19 +14,16 @@ class ListRequests extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            // Substituímos o CreateAction padrão por este Action customizado
             Actions\Action::make('novo_pedido')
                 ->label('Nova Solicitação')
                 ->icon('heroicon-o-plus')
                 ->action(function () {
-                    // 1. Cria o registro com os padrões definidos
-                    // O Model já tem o evento 'creating' para gerar o ID (SOL-2026...)
                     $record = Request::create([
                         'status' => 'aberto',
+                        'shipping_type' => 'Maritimo',
                         'created_at' => now(),
                     ]);
 
-                    // 2. Redireciona direto para a tela de Edição (onde estão os itens)
                     return redirect()->to(RequestResource::getUrl('edit', ['record' => $record]));
                 }),
         ];

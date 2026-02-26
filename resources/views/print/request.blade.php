@@ -22,6 +22,7 @@
         th { background-color: #f9f9f9; font-weight: bold; }
         
         .manual-item { color: #555; font-style: italic; }
+        .text-right { text-align: right; }
 
         @media print { 
             .no-print { display: none; } 
@@ -45,30 +46,27 @@
     <div class="info">
         <strong>Data:</strong> {{ $record->created_at->format('d/m/Y H:i') }} <br>
         <strong>Status:</strong> {{ ucfirst($record->status) }} <br>
+        <strong>Tipo de Envio:</strong> {{ ucfirst($record->shipping_type) }} <br>
     </div>
 
     @php
         $filterType = request('filter_type', 'all');
-        $orderBy = request('order_by', 'product_name'); // [ADICIONADO] Captura a ordenação
+        $orderBy = request('order_by', 'product_name'); 
 
-        // Carrega todos os itens
         $items = $record->items;
 
-        // [ADICIONADO] Aplica a ordenação na coleção inteira
         if ($orderBy === 'product_name') {
             $items = $items->sortBy('product_name', SORT_NATURAL | SORT_FLAG_CASE);
         } else {
             $items = $items->sortBy('created_at');
         }
 
-        // Aplica o filtro de tipo, mantendo a ordem definida acima
         if ($filterType === 'registered') {
             $items = $items->filter(fn($item) => !empty($item->product_id));
         } elseif ($filterType === 'manual') {
             $items = $items->filter(fn($item) => empty($item->product_id));
         }
 
-        // Separa as coleções para exibição
         $registeredItems = $items->filter(fn($item) => !empty($item->product_id));
         $manualItems = $items->filter(fn($item) => empty($item->product_id));
     @endphp
@@ -81,9 +79,9 @@
                 <tr>
                     <th style="width: 10%">Cód.</th>
                     <th style="width: 45%">Produto</th>
-                    <th style="width: 10%">Qtd</th>
-                    <th style="width: 10%">Emb.</th>
-                    <th style="width: 10%">Envio</th>
+                    <th style="width: 8%">Qtd</th>
+                    <th style="width: 11%" class="text-right">Valor Un</th>
+                    <th style="width: 11%" class="text-right">Valor Total</th>
                     <th style="width: 15%">Obs</th>
                 </tr>
             </thead>
@@ -93,8 +91,8 @@
                     <td>{{ $item->winthor_code }}</td>
                     <td>{{ $item->product_name }}</td>
                     <td>{{ number_format($item->quantity, 2, ',', '.') }}</td>
-                    <td>{{ $item->packaging }}</td>
-                    <td>{{ $item->shipping_type }}</td>
+                    <td class="text-right">R$ {{ number_format($item->unit_price ?? 0, 2, ',', '.') }}</td>
+                    <td class="text-right">R$ {{ number_format($item->quantity * ($item->unit_price ?? 0), 2, ',', '.') }}</td>
                     <td>{{ $item->observation }}</td>
                 </tr>
                 @endforeach
@@ -109,9 +107,9 @@
             <thead>
                 <tr>
                     <th style="width: 55%">Descrição do Item</th>
-                    <th style="width: 10%">Qtd</th>
-                    <th style="width: 10%">Emb.</th>
-                    <th style="width: 10%">Envio</th>
+                    <th style="width: 8%">Qtd</th>
+                    <th style="width: 11%" class="text-right">Valor Un</th>
+                    <th style="width: 11%" class="text-right">Valor Total</th>
                     <th style="width: 15%">Obs</th>
                 </tr>
             </thead>
@@ -120,8 +118,8 @@
                 <tr class="manual-item">
                     <td>{{ $item->product_name }}</td>
                     <td>{{ number_format($item->quantity, 2, ',', '.') }}</td>
-                    <td>{{ $item->packaging }}</td>
-                    <td>{{ $item->shipping_type }}</td>
+                    <td class="text-right">R$ {{ number_format($item->unit_price ?? 0, 2, ',', '.') }}</td>
+                    <td class="text-right">R$ {{ number_format($item->quantity * ($item->unit_price ?? 0), 2, ',', '.') }}</td>
                     <td>{{ $item->observation }}</td>
                 </tr>
                 @endforeach
