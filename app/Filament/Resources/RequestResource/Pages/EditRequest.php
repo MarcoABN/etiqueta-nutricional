@@ -24,17 +24,32 @@ class EditRequest extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            // --- AÇÃO: EXPORTAR INVOICE ---
             Actions\Action::make('export_invoice')
                 ->label('Exportar Invoice')
                 ->icon('heroicon-o-document-text')
                 ->color('info')
                 ->action(function (Request $record) {
                     return response()->streamDownload(function () use ($record) {
-                        echo "\xEF\xBB\xBF"; 
-                        $handle = fopen('php://output', 'w');
-                        
-                        fputcsv($handle, ['ITENS', 'NCM', 'DESCRIPTION', 'UNID', 'QTDE', 'Vlr Unitario', 'TOTAL'], ';');
+
+                        $writer = new \OpenSpout\Writer\XLSX\Writer();
+                        $writer->openToFile('php://output');
+
+                        // ==========================================
+                        // ABA 1: INVOICE
+                        // ==========================================
+                        $sheet1 = $writer->getCurrentSheet();
+                        $sheet1->setName('Invoice');
+
+                        // Cabeçalho Aba 1
+                        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues([
+                            'ITENS',
+                            'NCM',
+                            'DESCRIPTION',
+                            'UNID',
+                            'QTDE',
+                            'Vlr Unitario',
+                            'TOTAL'
+                        ]));
 
                         $items = $record->items()->with('product')->get();
 
@@ -42,46 +57,112 @@ class EditRequest extends EditRecord
                         $sumQtde = 0;
                         $sumTotal = 0;
 
+                        // Variáveis para guardar os dados da Aba 2
+                        $sumNetWeight = 0;
+                        $sheet2Data = [];
+
                         foreach ($items as $item) {
                             $ncm = $item->product ? $item->product->ncm : '';
-                            
-                            // Busca o nome em inglês. Se estiver vazio ou for item manual, usa o nome padrão
-                            $description = $item->product_name; 
+
+                            // Busca o nome em inglês. Se vazio ou item manual, usa o nome padrão
+                            $description = $item->product_name;
                             if ($item->product && !empty($item->product->product_name_en)) {
                                 $description = $item->product->product_name_en;
                             }
-                            
+
                             $unid = $item->packaging;
-                            $qtde = $item->quantity;
-                            $vlrUnit = $item->unit_price ?? 0;
+                            $qtde = (float) $item->quantity;
+                            $vlrUnit = (float) ($item->unit_price ?? 0);
                             $total = $qtde * $vlrUnit;
 
                             $sumQtde += $qtde;
                             $sumTotal += $total;
 
-                            fputcsv($handle, [
-                                $sequential++,
+                            // Escreve a linha na Aba 1
+                            $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues([
+                                $sequential,
                                 $ncm,
                                 $description,
                                 $unid,
-                                number_format($qtde, 2, ',', ''),
-                                number_format($vlrUnit, 2, ',', ''),
-                                number_format($total, 2, ',', '')
-                            ], ';');
+                                $qtde,
+                                $vlrUnit,
+                                $total
+                            ]));
+
+                            // ------------------------------------------------
+                            // CÁLCULOS PARA A ABA 2 (PACKING LIST)
+                            // ------------------------------------------------
+                            $pesoliq = 0;
+                            $qtunitcx = 1;
+
+                            if ($item->product) {
+                                // Converte string "1,5" para float "1.5" para evitar erros de cálculo
+                                $pesoliq = (float) str_replace(',', '.', $item->product->pesoliq ?? '0');
+                                $qtunitcx = (float) str_replace(',', '.', $item->product->qtunitcx ?? '1');
+                            }
+
+                            // Qtd. Unit. na Caixa * Peso Líquido * Quantidade de Caixas
+                            $netWeight = $qtunitcx * $pesoliq * $qtde;
+                            $sumNetWeight += $netWeight;
+
+                            // Guarda a linha na memória para escrever depois
+                            $sheet2Data[] = [
+                                $sequential,
+                                $ncm,
+                                $description,
+                                $netWeight, // NET W.
+                                '',         // GROSS W. (Vazio)
+                                $qtde       // BOXES QTY
+                            ];
+
+                            $sequential++;
                         }
 
-                        fputcsv($handle, [
-                            '',             
-                            '',             
-                            '',             
-                            'TOTAIS',       
-                            number_format($sumQtde, 2, ',', ''), 
-                            '',             
-                            number_format($sumTotal, 2, ',', '') 
-                        ], ';');
+                        // Linha de Totais da Aba 1
+                        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues([
+                            '',
+                            '',
+                            '',
+                            'TOTAIS',
+                            $sumQtde,
+                            '',
+                            $sumTotal
+                        ]));
 
-                        fclose($handle);
-                    }, "invoice_{$record->display_id}.csv");
+
+                        // ==========================================
+                        // ABA 2: PACKING LIST (PESOS E CAIXAS)
+                        // ==========================================
+                        $sheet2 = $writer->addNewSheetAndMakeItCurrent();
+                        $sheet2->setName('Packing List');
+
+                        // Cabeçalho Aba 2
+                        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues([
+                            'ITENS',
+                            'NCM',
+                            'DESCRIPTION',
+                            'NET W.',
+                            'GROSS W.',
+                            'BOXES QTY'
+                        ]));
+
+                        // Escreve os dados que estavam guardados
+                        foreach ($sheet2Data as $row) {
+                            $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($row));
+                        }
+
+                        // Linha de Totais da Aba 2
+                        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues([
+                            '',
+                            '',
+                            'TOTAIS',
+                            $sumNetWeight,
+                            '',
+                            $sumQtde
+                        ]));
+
+                        $writer->close();
+                    }, "invoice_{$record->display_id}.xlsx");
                 }),
 
             // --- AÇÃO: EXPORTAR EXCEL (PADRÃO) ---
@@ -103,9 +184,9 @@ class EditRequest extends EditRecord
                 ])
                 ->action(function (Request $record, array $data) {
                     return response()->streamDownload(function () use ($record, $data) {
-                        echo "\xEF\xBB\xBF"; 
+                        echo "\xEF\xBB\xBF";
                         $handle = fopen('php://output', 'w');
-                        
+
                         $query = $record->items();
 
                         if ($data['filter_type'] === 'registered') {
@@ -140,8 +221,8 @@ class EditRequest extends EditRecord
                         }
 
                         if ($registered->isNotEmpty() && $manual->isNotEmpty()) {
-                            fputcsv($handle, [], ';'); 
-                            fputcsv($handle, [], ';'); 
+                            fputcsv($handle, [], ';');
+                            fputcsv($handle, [], ';');
                         }
 
                         if ($manual->isNotEmpty()) {
@@ -200,7 +281,7 @@ class EditRequest extends EditRecord
                         'filter_type' => $data['filter_type'],
                         'order_by' => $data['order_by']
                     ]);
-                    
+
                     $livewire->js("window.open('$url', '_blank')");
                 }),
 

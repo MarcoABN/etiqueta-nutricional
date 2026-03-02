@@ -197,6 +197,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
         ]);
     }
 
+
     public function table(Table $table): Table
     {
         return $table
@@ -207,18 +208,24 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             ->defaultSort('product_name', 'asc')
             ->heading('Itens Gravados')
             ->columns([
+                // NOVA COLUNA 1: Código isolado e ordenável
+                Tables\Columns\TextColumn::make('winthor_code')
+                    ->label('Código')
+                    ->default('Manual') // Preenche os itens sem código automaticamente
+                    ->badge(fn($record) => empty($record->winthor_code)) // Opcional: deixa o texto 'Manual' com um fundo cinza para diferenciar rápido
+                    ->color(fn($record) => empty($record->winthor_code) ? 'gray' : null)
+                    ->sortable()
+                    ->searchable()
+                    ->alignCenter(),
+
+                // NOVA COLUNA 2: Descrição isolada e limpa
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
-                    ->description(fn($record) => $record->winthor_code ? "Cód: {$record->winthor_code}" : "Manual")
                     ->weight('bold')
-                    ->wrap()
+                    ->limit(45) // Limite ajustado para dar espaço à coluna de código sem quebrar linha
+                    ->tooltip(fn($record) => $record->product_name)
                     ->sortable()
-                    // Define a busca personalizada para Nome OU Código WinThor
-                    ->searchable(query: function (Builder $query, string $search): Builder {
-                        return $query
-                            ->where('product_name', 'ilike', "%{$search}%")
-                            ->orWhereRaw("CAST(winthor_code AS TEXT) ILIKE ?", ["%{$search}%"]);
-                    }),
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('quantity')
                     ->label('Qtd')
