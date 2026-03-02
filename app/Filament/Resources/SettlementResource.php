@@ -88,7 +88,9 @@ class SettlementResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Hidden::make('show_in_usd')->default(false),
+                Forms\Components\Hidden::make('show_in_usd')
+                    ->default(false)
+                    ->dehydrated(false),
                 Forms\Components\Hidden::make('initial_total'),
                 Forms\Components\Hidden::make('total_value'),
                 Forms\Components\Hidden::make('total_expenses'),
