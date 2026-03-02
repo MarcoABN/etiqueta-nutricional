@@ -20,7 +20,7 @@ class ConsumableResource extends Resource
     protected static ?string $modelLabel = 'Recurso Consumível';
     protected static ?string $pluralModelLabel = 'Recursos Consumíveis';
     protected static ?string $navigationGroup = 'Gestão';
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     public static function form(Form $form): Form
     {

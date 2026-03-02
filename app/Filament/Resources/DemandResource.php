@@ -19,10 +19,10 @@ class DemandResource extends Resource
 {
     protected static ?string $model = Demand::class;
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
-    protected static ?string $modelLabel = 'Demanda';
-    protected static ?string $pluralModelLabel = 'Demandas';
+    protected static ?string $modelLabel = 'Tarefa';
+    protected static ?string $pluralModelLabel = 'Tarefas';
     protected static ?string $navigationGroup = 'Gestão';
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form
     {

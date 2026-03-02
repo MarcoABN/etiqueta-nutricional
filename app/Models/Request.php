@@ -42,4 +42,9 @@ class Request extends Model
     {
         return $this->hasMany(RequestItem::class);
     }
+
+    public function settlement()
+    {
+        return $this->hasOne(Settlement::class);
+    }
 }
