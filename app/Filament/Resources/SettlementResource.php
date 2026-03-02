@@ -208,10 +208,11 @@ class SettlementResource extends Resource
                     ->schema([
                         TableRepeater::make('expenses')
                             ->relationship('expenses')
-                            ->hiddenLabel() // Esconde o label principal "Expenses"
+                            ->orderColumn('expense_number') // <-- ADICIONE ESTA LINHA
+                            ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
-                            ->reorderable(false) // Desativa o botão de arrastar linhas
-                            ->live(debounce: 500) // Dispara a atualização dos totais em tempo real
+                            ->reorderable(true) // Recomendado: permite arrastar para reordenar
+                            ->live(debounce: 500)
                             ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                             ->colStyles([
                                 'description' => 'width: 75%;',
