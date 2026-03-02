@@ -7,6 +7,7 @@ use App\Models\Settlement;
 use App\Observers\ProductObserver;
 use App\Observers\SettlementObserver;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,5 +26,8 @@ class AppServiceProvider extends ServiceProvider
     {
         Product::observe(ProductObserver::class);
         Settlement::observe(SettlementObserver::class);
+        if (config('app.env') === 'production') {
+            URL::forceScheme('https');
+        }
     }
 }
