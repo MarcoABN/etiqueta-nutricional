@@ -10,11 +10,7 @@ class Settlement extends Model
 {
     use HasUuids, SoftDeletes;
 
-    protected $guarded = ['id'];
-    protected $fillable = [
-        // ... seus outros campos
-        'overall_total',
-    ];
+    protected $guarded = [];
 
     public function request()
     {
