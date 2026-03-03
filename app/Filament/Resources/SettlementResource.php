@@ -68,7 +68,7 @@ class SettlementResource extends Resource
         $set($prefix . 'expense_percentage', round($expensePercentage, 3));
         $set($prefix . 'overall_total', round($overallTotal, 2));
 
-        // Campos de exibição (agora sempre recebem a base em R$)
+        // Campos de exibição (sempre recebem a base em R$)
         $set($prefix . 'display_initial_total', number_format($initialTotal, 2, '.', ''));
         $set($prefix . 'display_total_value', number_format($totalValue, 2, '.', ''));
         $set($prefix . 'display_total_expenses', number_format($totalExpenses, 2, '.', ''));
@@ -91,7 +91,8 @@ class SettlementResource extends Resource
 
                 Forms\Components\Section::make('Dados e Totais do Fechamento')
                     ->schema([
-                        Forms\Components\Grid::make(['default' => 1, 'sm' => 2, 'lg' => 5])
+                        // GRID AJUSTADO PARA 10 COLUNAS
+                        Forms\Components\Grid::make(['default' => 1, 'sm' => 2, 'lg' => 10])
                             ->schema([
                                 Forms\Components\Select::make('request_id')
                                     ->label('Solicitação')
@@ -102,7 +103,8 @@ class SettlementResource extends Resource
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Não é permitido criar mais de um fechamento por solicitação.'),
+                                    ->hintIconTooltip('Não é permitido criar mais de um fechamento por solicitação.')
+                                    ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 2]), // Tamanho normal
 
                                 Forms\Components\TextInput::make('usd_quote')
                                     ->label('Cotação USD')
@@ -124,7 +126,8 @@ class SettlementResource extends Resource
                                     )
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Valor da cotação. Clique para alternar as moedas.'),
+                                    ->hintIconTooltip('Valor da cotação. Clique para alternar as moedas.')
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 2]), // Tamanho normal
 
                                 Forms\Components\TextInput::make('calculation_factor')
                                     ->label('Fator (%)')
@@ -134,8 +137,22 @@ class SettlementResource extends Resource
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Porcentagem usada para retornar ao valor original do produto.'),
+                                    ->hintIconTooltip('Porcentagem usada para retornar ao valor original.')
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 1]), // Reduzido pela metade
 
+                                // Movido para antes de Despesas
+                                Forms\Components\TextInput::make('display_expense_percentage')
+                                    ->label('% Despesa')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->expense_percentage, 3, '.', '') : '0.000'))
+                                    ->suffix('%')
+                                    ->helperText(' ')
+                                    ->hintIcon('heroicon-m-question-mark-circle')
+                                    ->hintIconTooltip('Representatividade das despesas sobre o Total Parcial.')
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 1]), // Reduzido pela metade
+
+                                // Movido para o final da linha
                                 Forms\Components\TextInput::make('display_total_expenses')
                                     ->label('Despesas (Soma)')
                                     ->disabled()
@@ -152,17 +169,8 @@ class SettlementResource extends Resource
                                     })
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Soma de todas as despesas listadas.'),
-
-                                Forms\Components\TextInput::make('display_expense_percentage')
-                                    ->label('% Despesa')
-                                    ->disabled()
-                                    ->dehydrated(false)
-                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->expense_percentage, 3, '.', '') : '0.000'))
-                                    ->suffix('%')
-                                    ->helperText(' ')
-                                    ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Representatividade das despesas sobre o Total Parcial.'),
+                                    ->hintIconTooltip('Soma de todas as despesas listadas.')
+                                    ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 4]), // Tamanho dobrado para caber R$ e US$ juntos
                             ]),
 
                         Forms\Components\Grid::make(['default' => 1, 'sm' => 3, 'lg' => 3])
@@ -234,7 +242,7 @@ class SettlementResource extends Resource
                             ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
                             ->reorderable(true)
-                            ->live() // Escuta o clique do botão de moeda
+                            ->live() 
                             ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                             ->colStyles([
                                 'description' => 'width: 75%;',
@@ -249,7 +257,7 @@ class SettlementResource extends Resource
                                 Forms\Components\TextInput::make('amount')
                                     ->label('Valor')
                                     ->numeric()
-                                    ->prefix('R$') // Preservado para manter consistência
+                                    ->prefix('R$')
                                     ->required()
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
