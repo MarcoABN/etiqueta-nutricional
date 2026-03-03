@@ -61,19 +61,19 @@ class SettlementResource extends Resource
         $isRepeater = $get('request_id') === null;
         $prefix = $isRepeater ? '../../' : '';
 
-        // Campos reais salvos no banco
+        // Campos reais salvos no banco (Matemática pura, sem formatação)
         $set($prefix . 'initial_total', round($initialTotal, 2));
         $set($prefix . 'total_value', round($totalValue, 2));
         $set($prefix . 'total_expenses', round($totalExpenses, 2));
         $set($prefix . 'expense_percentage', round($expensePercentage, 3));
         $set($prefix . 'overall_total', round($overallTotal, 2));
 
-        // Campos de exibição (sempre recebem a base em R$)
-        $set($prefix . 'display_initial_total', number_format($initialTotal, 2, '.', ''));
-        $set($prefix . 'display_total_value', number_format($totalValue, 2, '.', ''));
-        $set($prefix . 'display_total_expenses', number_format($totalExpenses, 2, '.', ''));
-        $set($prefix . 'display_overall_total', number_format($overallTotal, 2, '.', ''));
-        $set($prefix . 'display_expense_percentage', number_format($expensePercentage, 3, '.', ''));
+        // Campos de exibição visual com máscara no padrão Brasileiro (16.700,99)
+        $set($prefix . 'display_initial_total', number_format($initialTotal, 2, ',', '.'));
+        $set($prefix . 'display_total_value', number_format($totalValue, 2, ',', '.'));
+        $set($prefix . 'display_total_expenses', number_format($totalExpenses, 2, ',', '.'));
+        $set($prefix . 'display_overall_total', number_format($overallTotal, 2, ',', '.'));
+        $set($prefix . 'display_expense_percentage', number_format($expensePercentage, 3, ',', '.'));
     }
 
     public static function form(Form $form): Form
@@ -91,7 +91,6 @@ class SettlementResource extends Resource
 
                 Forms\Components\Section::make('Dados e Totais do Fechamento')
                     ->schema([
-                        // GRID AJUSTADO PARA 12 COLUNAS (Padrão ouro de UI)
                         Forms\Components\Grid::make(['default' => 1, 'sm' => 2, 'lg' => 12])
                             ->schema([
                                 Forms\Components\Select::make('request_id')
@@ -144,7 +143,7 @@ class SettlementResource extends Resource
                                     ->label('% Despesa')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->expense_percentage, 3, '.', '') : '0.000'))
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->expense_percentage, 3, ',', '.') : '0,000'))
                                     ->suffix('%')
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
@@ -155,13 +154,14 @@ class SettlementResource extends Resource
                                     ->label('Despesas (Soma)')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_expenses, 2, '.', '') : '0.00'))
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_expenses, 2, ',', '.') : '0,00'))
                                     ->prefix('R$')
-                                    ->suffix(function (Get $get, $state): string {
+                                    ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
                                         $quote = (float) $get('usd_quote');
-                                        if ($isUsd && $quote > 0 && (float) $state > 0) {
-                                            return '≈ US$ ' . number_format((float) $state / $quote, 2, ',', '.');
+                                        $val = (float) $get('total_expenses'); // Pega o número limpo direto do campo Hidden
+                                        if ($isUsd && $quote > 0 && $val > 0) {
+                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
                                         }
                                         return '';
                                     })
@@ -177,13 +177,14 @@ class SettlementResource extends Resource
                                     ->label('Total Inicial')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->items()->sum('initial_value'), 2, '.', '') : '0.00'))
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->items()->sum('initial_value'), 2, ',', '.') : '0,00'))
                                     ->prefix('R$')
-                                    ->suffix(function (Get $get, $state): string {
+                                    ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
                                         $quote = (float) $get('usd_quote');
-                                        if ($isUsd && $quote > 0 && (float) $state > 0) {
-                                            return '≈ US$ ' . number_format((float) $state / $quote, 2, ',', '.');
+                                        $val = (float) $get('initial_total'); // Pega o número limpo direto do campo Hidden
+                                        if ($isUsd && $quote > 0 && $val > 0) {
+                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
                                         }
                                         return '';
                                     })
@@ -196,13 +197,14 @@ class SettlementResource extends Resource
                                     ->label('Total Parcial (Produtos)')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_value, 2, '.', '') : '0.00'))
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_value, 2, ',', '.') : '0,00'))
                                     ->prefix('R$')
-                                    ->suffix(function (Get $get, $state): string {
+                                    ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
                                         $quote = (float) $get('usd_quote');
-                                        if ($isUsd && $quote > 0 && (float) $state > 0) {
-                                            return '≈ US$ ' . number_format((float) $state / $quote, 2, ',', '.');
+                                        $val = (float) $get('total_value'); // Pega o número limpo direto do campo Hidden
+                                        if ($isUsd && $quote > 0 && $val > 0) {
+                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
                                         }
                                         return '';
                                     })
@@ -215,13 +217,14 @@ class SettlementResource extends Resource
                                     ->label('Total Geral (Produtos + Despesas)')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_value + $record->total_expenses, 2, '.', '') : '0.00'))
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_value + $record->total_expenses, 2, ',', '.') : '0,00'))
                                     ->prefix('R$')
-                                    ->suffix(function (Get $get, $state): string {
+                                    ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
                                         $quote = (float) $get('usd_quote');
-                                        if ($isUsd && $quote > 0 && (float) $state > 0) {
-                                            return '≈ US$ ' . number_format((float) $state / $quote, 2, ',', '.');
+                                        $val = (float) $get('overall_total'); // Pega o número limpo direto do campo Hidden
+                                        if ($isUsd && $quote > 0 && $val > 0) {
+                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
                                         }
                                         return '';
                                     })
@@ -262,7 +265,7 @@ class SettlementResource extends Resource
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('../../show_in_usd');
                                         $quote = (float) $get('../../usd_quote');
-                                        $val = (float) $get('amount');
+                                        $val = (float) $get('amount'); // Mantido como numeric limpo
                                         
                                         if ($isUsd && $quote > 0 && $val > 0) {
                                             return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
