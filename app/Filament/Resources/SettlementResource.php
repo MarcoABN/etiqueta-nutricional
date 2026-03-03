@@ -208,12 +208,12 @@ class SettlementResource extends Resource
                     ->schema([
                         TableRepeater::make('expenses')
                             ->relationship('expenses')
-                            ->orderColumn('expense_number') // <-- ADICIONE ESTA LINHA
+                            ->orderColumn('expense_number')
                             ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
-                            ->reorderable(true) // Recomendado: permite arrastar para reordenar
-                            //->live(debounce: 500)
-                            //->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
+                            ->reorderable(true)
+                            ->live() // 1. Devolvemos a reatividade ao Repeater para ele atualizar o prefixo (R$/US$)
+                            ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                             ->colStyles([
                                 'description' => 'width: 75%;',
                                 'amount' => 'width: 25%;',
@@ -229,7 +229,7 @@ class SettlementResource extends Resource
                                     ->numeric()
                                     ->prefix(fn(Get $get) => $get('../../show_in_usd') && floatval($get('../../usd_quote')) > 0 ? 'US$' : 'R$')
                                     ->required()
-                                    ->live(debounce: 1000)
+                                    ->live(onBlur: true) // 2. O SEGREDO: Só recalcula quando o usuário sai do campo, impedindo que os dígitos sumam!
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
                             ])
                             ->deleteAction(
