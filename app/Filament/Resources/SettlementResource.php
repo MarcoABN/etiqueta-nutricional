@@ -116,8 +116,8 @@ class SettlementResource extends Resource
                                 Forms\Components\TextInput::make('usd_quote')
                                     ->label('Cotação USD')
                                     ->numeric()
-                                    ->step(0.0001) // Adicionado: Pula de 1 em 1 centavo
-                                    ->minValue(0) // Adicionado: Impede cotação negativa
+                                    ->step(0.0001) // Pula de 1 em 1 centavo
+                                    ->minValue(0) // Impede cotação negativa
                                     ->live(debounce: 500)
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                                     ->prefixAction(
@@ -212,7 +212,7 @@ class SettlementResource extends Resource
                             ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
                             ->reorderable(true)
-                            ->live() // 1. Devolvemos a reatividade ao Repeater para ele atualizar o prefixo (R$/US$)
+                            ->live() // Mantém o Repeater reativo para atualizar o sufixo quando o Dólar é ativado
                             ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                             ->colStyles([
                                 'description' => 'width: 75%;',
@@ -227,10 +227,22 @@ class SettlementResource extends Resource
                                 Forms\Components\TextInput::make('amount')
                                     ->label('Valor')
                                     ->numeric()
-                                    ->prefix(fn(Get $get) => $get('../../show_in_usd') && floatval($get('../../usd_quote')) > 0 ? 'US$' : 'R$')
+                                    ->prefix('R$') // Mantido fixo em R$ para garantir a integridade dos dados salvos no banco
                                     ->required()
-                                    ->live(onBlur: true) // 2. O SEGREDO: Só recalcula quando o usuário sai do campo, impedindo que os dígitos sumam!
-                                    ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
+                                    ->live(onBlur: true) // Só envia a requisição após o usuário sair do campo (evita engolir dígitos)
+                                    ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
+                                    ->suffix(function (Get $get): string {
+                                        // Busca as variáveis de forma segura ignorando a injeção falha do plugin
+                                        $isUsd = (bool) $get('../../show_in_usd');
+                                        $quote = (float) $get('../../usd_quote');
+                                        $val = (float) $get('amount');
+                                        
+                                        if ($isUsd && $quote > 0 && $val > 0) {
+                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
+                                        }
+                                        
+                                        return ''; // Sempre retorna string vazia para não quebrar a view
+                                    }),
                             ])
                             ->deleteAction(
                                 fn(\Filament\Forms\Components\Actions\Action $action) => $action
