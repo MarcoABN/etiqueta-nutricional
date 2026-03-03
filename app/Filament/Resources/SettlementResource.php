@@ -116,7 +116,7 @@ class SettlementResource extends Resource
                                 Forms\Components\TextInput::make('usd_quote')
                                     ->label('Cotação USD')
                                     ->numeric()
-                                    ->step(0.01) // Adicionado: Pula de 1 em 1 centavo
+                                    ->step(0.0001) // Adicionado: Pula de 1 em 1 centavo
                                     ->minValue(0) // Adicionado: Impede cotação negativa
                                     ->live(debounce: 500)
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
@@ -212,8 +212,8 @@ class SettlementResource extends Resource
                             ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
                             ->reorderable(true) // Recomendado: permite arrastar para reordenar
-                            ->live(debounce: 500)
-                            ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
+                            //->live(debounce: 500)
+                            //->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                             ->colStyles([
                                 'description' => 'width: 75%;',
                                 'amount' => 'width: 25%;',
@@ -228,7 +228,9 @@ class SettlementResource extends Resource
                                     ->label('Valor')
                                     ->numeric()
                                     ->prefix(fn(Get $get) => $get('../../show_in_usd') && floatval($get('../../usd_quote')) > 0 ? 'US$' : 'R$')
-                                    ->required(),
+                                    ->required()
+                                    ->live(debounce: 1000)
+                                    ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
                             ])
                             ->deleteAction(
                                 fn(\Filament\Forms\Components\Actions\Action $action) => $action
@@ -268,7 +270,10 @@ class SettlementResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('request.display_id')->label('Solicitação')->sortable()->searchable(),
-                Tables\Columns\TextColumn::make('usd_quote')->label('Cot. USD')->money('USD'),
+                Tables\Columns\TextColumn::make('usd_quote')
+                    ->label('Cot. USD')
+                    ->formatStateUsing(fn($state) => 'US$ ' . number_format((float) $state, 4, ',', '.'))
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('total_value')->label('Total Parcial')->money('BRL'),
 
                 Tables\Columns\TextColumn::make('overall_total')
@@ -324,7 +329,7 @@ class SettlementResource extends Resource
                                 'Modalidade Envio:',
                                 $record->request->shipping_type ?? 'Não Informado',
                                 'Cotação USD:',
-                                round($usdQuote, 2),
+                                round($usdQuote, 4),
                                 'Fator de Cálculo:',
                                 round((float) $record->calculation_factor, 2) . '%',
                             ]));
@@ -411,7 +416,7 @@ class SettlementResource extends Resource
                                 'Modalidade Envio:',
                                 $record->request->shipping_type ?? 'Não Informado',
                                 'Cotação USD:',
-                                round($usdQuote, 2), // Cotação não é convertida
+                                round($usdQuote, 4), // Cotação não é convertida
                                 'Fator de Cálculo:',
                                 round((float) $record->calculation_factor, 2) . '%',
                             ]));
