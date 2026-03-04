@@ -40,7 +40,7 @@ class EditSettlement extends EditRecord
                         $items = $record->items()->with('requestItem.product')->get();
                         $totalVal = (float) $record->total_value;
 
-                        // Função helper para converter e arredondar para Dólar de forma segura
+                        // Função helper para converter e arredondar para Dólar global de forma segura
                         $usdQuote = (float) $record->usd_quote;
                         $toUsd = fn($value) => $usdQuote > 0 ? round((float) $value / $usdQuote, 2) : 0;
 
@@ -56,8 +56,8 @@ class EditSettlement extends EditRecord
                             $record->request->display_id ?? '-',
                             'Modalidade Envio:',
                             $record->request->shipping_type ?? 'Não Informado',
-                            'Cotação USD:',
-                            round($usdQuote, 2),
+                            'Cotação USD Global:',
+                            round($usdQuote, 4),
                             'Fator de Cálculo:',
                             round((float) $record->calculation_factor, 2) . '%',
                         ]));
@@ -137,14 +137,25 @@ class EditSettlement extends EditRecord
                         $sheet3 = $writer->addNewSheetAndMakeItCurrent();
                         $sheet3->setName('Resumo e Despesas (US$)');
 
+                        // Recalcular o Total das Despesas em USD respeitando cotações personalizadas
+                        $totalExpensesUsd = 0;
+                        foreach ($expenses as $exp) {
+                            $quoteToUse = ($exp->use_custom_quote && $exp->custom_usd_quote > 0) ? (float) $exp->custom_usd_quote : $usdQuote;
+                            if ($quoteToUse > 0) {
+                                $totalExpensesUsd += ((float) $exp->amount / $quoteToUse);
+                            }
+                        }
+
+                        $totalGeralUsd = $toUsd($record->total_value) + $totalExpensesUsd;
+
                         $writer->addRow(Row::fromValues(['Fechamento (Valores em Dólar)']));
                         $writer->addRow(Row::fromValues([
                             'Solicitação:',
                             $record->request->display_id ?? '-',
                             'Modalidade Envio:',
                             $record->request->shipping_type ?? 'Não Informado',
-                            'Cotação USD:',
-                            round($usdQuote, 2), // Cotação não é convertida
+                            'Cotação USD Global:',
+                            round($usdQuote, 4),
                             'Fator de Cálculo:',
                             round((float) $record->calculation_factor, 2) . '%',
                         ]));
@@ -155,22 +166,34 @@ class EditSettlement extends EditRecord
                             'Total Parcial:',
                             $toUsd($record->total_value),
                             'Total Despesas:',
-                            $toUsd($record->total_expenses),
+                            round($totalExpensesUsd, 2),
                             '% Despesa:',
-                            round((float) $record->expense_percentage, 2) . '%', // Porcentagem é mantida
+                            round((float) $record->expense_percentage, 2) . '%',
                             'Total Geral:',
-                            $toUsd($overallTotal)
+                            round($totalGeralUsd, 2)
                         ]));
 
                         $writer->addRow(Row::fromValues([]));
                         $writer->addRow(Row::fromValues(['Despesas']));
-                        $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Valor (US$)']));
+                        $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Cotação Utilizada', 'Valor (US$)']));
 
                         if ($expenses->isEmpty()) {
-                            $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', 0]));
+                            $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', '-', 0]));
                         } else {
                             foreach ($expenses as $exp) {
-                                $writer->addRow(Row::fromValues([$exp->description, $toUsd($exp->amount)]));
+                                $useCustom = (bool) $exp->use_custom_quote;
+                                $customQuote = (float) $exp->custom_usd_quote;
+                                $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $usdQuote;
+                                
+                                $usdAmount = $quoteToUse > 0 ? round((float) $exp->amount / $quoteToUse, 2) : 0;
+                                
+                                $cotacaoStr = $useCustom ? 'Específica (' . round($customQuote, 4) . ')' : 'Global (' . round($usdQuote, 4) . ')';
+
+                                $writer->addRow(Row::fromValues([
+                                    $exp->description,
+                                    $cotacaoStr,
+                                    $usdAmount
+                                ]));
                             }
                         }
 

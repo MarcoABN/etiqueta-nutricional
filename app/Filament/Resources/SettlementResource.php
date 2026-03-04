@@ -106,12 +106,22 @@ class SettlementResource extends Resource
                                     ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 3]),
 
                                 Forms\Components\TextInput::make('usd_quote')
-                                    ->label('Cotação USD')
+                                    ->label('Cotação USD Global')
                                     ->numeric()
                                     ->step(0.0001)
                                     ->minValue(0)
                                     ->live(debounce: 500)
-                                    ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
+                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                        // 1. Sincroniza a cotação global com as despesas que NÃO estão personalizadas
+                                        $expenses = $get('expenses') ?? [];
+                                        foreach ($expenses as $key => $expense) {
+                                            if (!($expense['use_custom_quote'] ?? false)) {
+                                                $set("expenses.{$key}.custom_usd_quote", $state);
+                                            }
+                                        }
+                                        // 2. Atualiza os totais globais
+                                        self::updateTotals($get, $set);
+                                    })
                                     ->prefixAction(
                                         Forms\Components\Actions\Action::make('toggle_currency')
                                             ->label('US$')
@@ -125,7 +135,7 @@ class SettlementResource extends Resource
                                     )
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Valor da cotação. Clique para alternar as moedas.')
+                                    ->hintIconTooltip('Cotação padrão. Usada para itens e despesas sem cotação específica.')
                                     ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 2]),
 
                                 Forms\Components\TextInput::make('calculation_factor')
@@ -158,12 +168,25 @@ class SettlementResource extends Resource
                                     ->prefix('R$')
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
-                                        $quote = (float) $get('usd_quote');
-                                        $val = (float) $get('total_expenses'); // Pega o número limpo direto do campo Hidden
-                                        if ($isUsd && $quote > 0 && $val > 0) {
-                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
+                                        if (!$isUsd) return '';
+
+                                        $expenses = $get('expenses') ?? [];
+                                        $globalQuote = (float) $get('usd_quote');
+                                        $totalUsd = 0;
+
+                                        foreach ($expenses as $exp) {
+                                            $val = (float) ($exp['amount'] ?? 0);
+                                            $useCustom = (bool) ($exp['use_custom_quote'] ?? false);
+                                            $customQuote = (float) ($exp['custom_usd_quote'] ?? 0);
+
+                                            $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $globalQuote;
+
+                                            if ($quoteToUse > 0) {
+                                                $totalUsd += ($val / $quoteToUse);
+                                            }
                                         }
-                                        return '';
+
+                                        return $totalUsd > 0 ? '≈ US$ ' . number_format($totalUsd, 2, ',', '.') : '';
                                     })
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
@@ -182,7 +205,7 @@ class SettlementResource extends Resource
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
                                         $quote = (float) $get('usd_quote');
-                                        $val = (float) $get('initial_total'); // Pega o número limpo direto do campo Hidden
+                                        $val = (float) $get('initial_total');
                                         if ($isUsd && $quote > 0 && $val > 0) {
                                             return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
                                         }
@@ -202,7 +225,7 @@ class SettlementResource extends Resource
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
                                         $quote = (float) $get('usd_quote');
-                                        $val = (float) $get('total_value'); // Pega o número limpo direto do campo Hidden
+                                        $val = (float) $get('total_value');
                                         if ($isUsd && $quote > 0 && $val > 0) {
                                             return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
                                         }
@@ -222,11 +245,25 @@ class SettlementResource extends Resource
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
                                         $quote = (float) $get('usd_quote');
-                                        $val = (float) $get('overall_total'); // Pega o número limpo direto do campo Hidden
-                                        if ($isUsd && $quote > 0 && $val > 0) {
-                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
+                                        $valProd = (float) $get('total_value');
+
+                                        $totalUsd = 0;
+                                        if ($isUsd && $quote > 0) {
+                                            $totalUsd += ($valProd / $quote);
+
+                                            $expenses = $get('expenses') ?? [];
+                                            foreach ($expenses as $exp) {
+                                                $val = (float) ($exp['amount'] ?? 0);
+                                                $useCustom = (bool) ($exp['use_custom_quote'] ?? false);
+                                                $customQuote = (float) ($exp['custom_usd_quote'] ?? 0);
+                                                $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $quote;
+                                                if ($quoteToUse > 0) {
+                                                    $totalUsd += ($val / $quoteToUse);
+                                                }
+                                            }
                                         }
-                                        return '';
+
+                                        return $totalUsd > 0 ? '≈ US$ ' . number_format($totalUsd, 2, ',', '.') : '';
                                     })
                                     ->extraInputAttributes(['class' => 'text-2xl bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 font-extrabold', 'style' => '-webkit-text-fill-color: currentcolor; opacity: 1; padding-top: 1rem; padding-bottom: 1rem; height: auto;'])
                                     ->helperText(' ')
@@ -243,11 +280,13 @@ class SettlementResource extends Resource
                             ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
                             ->reorderable(true)
-                            ->live() 
+                            ->live()
                             ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                             ->colStyles([
-                                'description' => 'width: 75%;',
-                                'amount' => 'width: 25%;',
+                                'description'      => 'width: 52%; vertical-align: middle;',
+                                'amount'           => 'width: 30%; vertical-align: middle;',
+                                'custom_usd_quote' => 'width: 10%; vertical-align: middle;', // Reduzido em ~30%
+                                'use_custom_quote' => 'width: 8%; vertical-align: middle; text-align: center;', // Espaço ajustado para o Checkbox
                             ])
                             ->schema([
                                 Forms\Components\TextInput::make('description')
@@ -256,7 +295,7 @@ class SettlementResource extends Resource
                                     ->required(),
 
                                 Forms\Components\TextInput::make('amount')
-                                    ->label('Valor')
+                                    ->label('Valor (R$)')
                                     ->numeric()
                                     ->prefix('R$')
                                     ->required()
@@ -264,14 +303,48 @@ class SettlementResource extends Resource
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('../../show_in_usd');
-                                        $quote = (float) $get('../../usd_quote');
-                                        $val = (float) $get('amount'); // Mantido como numeric limpo
-                                        
-                                        if ($isUsd && $quote > 0 && $val > 0) {
-                                            return '≈ US$ ' . number_format($val / $quote, 2, ',', '.');
+                                        $val = (float) $get('amount');
+
+                                        if ($isUsd && $val > 0) {
+                                            $globalQuote = (float) $get('../../usd_quote');
+                                            $useCustom = (bool) $get('use_custom_quote');
+                                            $customQuote = (float) $get('custom_usd_quote');
+
+                                            $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : ($customQuote > 0 ? $customQuote : $globalQuote);
+
+                                            if ($quoteToUse > 0) {
+                                                return '≈ US$ ' . number_format($val / $quoteToUse, 2, ',', '.');
+                                            }
                                         }
-                                        
                                         return '';
+                                    }),
+
+                                Forms\Components\TextInput::make('custom_usd_quote')
+                                    ->label('Cotação')
+                                    ->numeric()
+                                    ->step(0.0001)
+                                    ->maxValue(99.9999)
+                                    ->default(fn(Get $get) => $get('../../usd_quote'))
+                                    ->disabled(fn(Get $get) => !$get('use_custom_quote'))
+                                    ->dehydrated()
+                                    ->extraInputAttributes([
+                                        'maxlength' => 7,
+                                        'class' => 'text-right px-1' // px-1 diminui as bordas internas para caber melhor
+                                    ])
+                                    ->required()
+                                    ->live(debounce: 500)
+                                    ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
+
+                                // Substituído o Toggle por Checkbox
+                                Forms\Components\Checkbox::make('use_custom_quote')
+                                    ->label('*')
+                                    ->extraAttributes(['class' => 'flex justify-center items-center pt-2']) // Centraliza e alinha com a linha do input
+                                    ->live()
+                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
+                                        if (!$state) {
+                                            $set('custom_usd_quote', $get('../../usd_quote'));
+                                        }
+                                        self::updateTotals($get, $set);
                                     }),
                             ])
                             ->deleteAction(
@@ -360,18 +433,27 @@ class SettlementResource extends Resource
 
                             $writer->addRow(Row::fromValues(['Fechamento']));
                             $writer->addRow(Row::fromValues([
-                                'Solicitação:', $record->request->display_id ?? '-',
-                                'Modalidade Envio:', $record->request->shipping_type ?? 'Não Informado',
-                                'Cotação USD:', round($usdQuote, 4),
-                                'Fator de Cálculo:', round((float) $record->calculation_factor, 2) . '%',
+                                'Solicitação:',
+                                $record->request->display_id ?? '-',
+                                'Modalidade Envio:',
+                                $record->request->shipping_type ?? 'Não Informado',
+                                'Cotação USD:',
+                                round($usdQuote, 4),
+                                'Fator de Cálculo:',
+                                round((float) $record->calculation_factor, 2) . '%',
                             ]));
 
                             $writer->addRow(Row::fromValues([
-                                'Total Inicial:', round((float) $initialTotal, 2),
-                                'Total Parcial:', round((float) $record->total_value, 2),
-                                'Total Despesas:', round((float) $record->total_expenses, 2),
-                                '% Despesa:', round((float) $record->expense_percentage, 2) . '%',
-                                'Total Geral:', round((float) $overallTotal, 2)
+                                'Total Inicial:',
+                                round((float) $initialTotal, 2),
+                                'Total Parcial:',
+                                round((float) $record->total_value, 2),
+                                'Total Despesas:',
+                                round((float) $record->total_expenses, 2),
+                                '% Despesa:',
+                                round((float) $record->expense_percentage, 2) . '%',
+                                'Total Geral:',
+                                round((float) $overallTotal, 2)
                             ]));
 
                             $writer->addRow(Row::fromValues([]));
@@ -391,8 +473,18 @@ class SettlementResource extends Resource
                             $sheet2->setName('Detalhamento (R$)');
 
                             $headersBrl = [
-                                'Cód. Winthor', 'Nome PT', 'Nome EN', 'Cód. Barras', 'Qtd Caixa', 'QTD',
-                                'V. UN (R$)', 'Valor Inicial (R$)', 'Valor Parcial (R$)', 'Rateio Despesas (R$)', '% Participação rateio', 'Valor Final (R$)'
+                                'Cód. Winthor',
+                                'Nome PT',
+                                'Nome EN',
+                                'Cód. Barras',
+                                'Qtd Caixa',
+                                'QTD',
+                                'V. UN (R$)',
+                                'Valor Inicial (R$)',
+                                'Valor Parcial (R$)',
+                                'Rateio Despesas (R$)',
+                                '% Participação rateio',
+                                'Valor Final (R$)'
                             ];
                             $writer->addRow(Row::fromValues($headersBrl));
 
@@ -422,31 +514,62 @@ class SettlementResource extends Resource
                             $sheet3 = $writer->addNewSheetAndMakeItCurrent();
                             $sheet3->setName('Resumo e Despesas (US$)');
 
+                            // Recalcular Totais em USD respeitando cotações personalizadas das despesas
+                            $totalExpensesUsd = 0;
+                            foreach ($expenses as $exp) {
+                                $quoteToUse = ($exp->use_custom_quote && $exp->custom_usd_quote > 0) ? (float) $exp->custom_usd_quote : $usdQuote;
+                                if ($quoteToUse > 0) {
+                                    $totalExpensesUsd += ((float) $exp->amount / $quoteToUse);
+                                }
+                            }
+
+                            $totalGeralUsd = $toUsd($record->total_value) + $totalExpensesUsd;
+
                             $writer->addRow(Row::fromValues(['Fechamento (Valores em Dólar)']));
                             $writer->addRow(Row::fromValues([
-                                'Solicitação:', $record->request->display_id ?? '-',
-                                'Modalidade Envio:', $record->request->shipping_type ?? 'Não Informado',
-                                'Cotação USD:', round($usdQuote, 4),
-                                'Fator de Cálculo:', round((float) $record->calculation_factor, 2) . '%',
+                                'Solicitação:',
+                                $record->request->display_id ?? '-',
+                                'Modalidade Envio:',
+                                $record->request->shipping_type ?? 'Não Informado',
+                                'Cotação USD:',
+                                round($usdQuote, 4),
+                                'Fator de Cálculo:',
+                                round((float) $record->calculation_factor, 2) . '%',
                             ]));
 
                             $writer->addRow(Row::fromValues([
-                                'Total Inicial:', $toUsd($initialTotal),
-                                'Total Parcial:', $toUsd($record->total_value),
-                                'Total Despesas:', $toUsd($record->total_expenses),
-                                '% Despesa:', round((float) $record->expense_percentage, 2) . '%',
-                                'Total Geral:', $toUsd($overallTotal)
+                                'Total Inicial:',
+                                $toUsd($initialTotal),
+                                'Total Parcial:',
+                                $toUsd($record->total_value),
+                                'Total Despesas:',
+                                round($totalExpensesUsd, 2),
+                                '% Despesa:',
+                                round((float) $record->expense_percentage, 2) . '%',
+                                'Total Geral:',
+                                round($totalGeralUsd, 2)
                             ]));
 
                             $writer->addRow(Row::fromValues([]));
                             $writer->addRow(Row::fromValues(['Despesas']));
-                            $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Valor (US$)']));
+                            $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Cotação Utilizada', 'Valor (US$)']));
 
                             if ($expenses->isEmpty()) {
-                                $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', 0]));
+                                $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', '-', 0]));
                             } else {
                                 foreach ($expenses as $exp) {
-                                    $writer->addRow(Row::fromValues([$exp->description, $toUsd($exp->amount)]));
+                                    $useCustom = (bool) $exp->use_custom_quote;
+                                    $customQuote = (float) $exp->custom_usd_quote;
+                                    $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $usdQuote;
+
+                                    $usdAmount = $quoteToUse > 0 ? round((float) $exp->amount / $quoteToUse, 2) : 0;
+                                    $cotacaoStr = $useCustom ? 'Específica (' . round($customQuote, 4) . ')' : 'Global (' . round($usdQuote, 4) . ')';
+
+                                    $writer->addRow(Row::fromValues([
+                                        $exp->description,
+                                        $cotacaoStr,
+                                        $usdAmount
+                                    ]));
                                 }
                             }
 
@@ -455,8 +578,18 @@ class SettlementResource extends Resource
                             $sheet4->setName('Detalhamento (US$)');
 
                             $headersUsd = [
-                                'Cód. Winthor', 'Nome PT', 'Nome EN', 'Cód. Barras', 'Qtd Caixa', 'QTD',
-                                'V. UN (US$)', 'Valor Inicial (US$)', 'Valor Parcial (US$)', 'Rateio Despesas (US$)', '% Participação rateio', 'Valor Final (US$)'
+                                'Cód. Winthor',
+                                'Nome PT',
+                                'Nome EN',
+                                'Cód. Barras',
+                                'Qtd Caixa',
+                                'QTD',
+                                'V. UN (US$)',
+                                'Valor Inicial (US$)',
+                                'Valor Parcial (US$)',
+                                'Rateio Despesas (US$)',
+                                '% Participação rateio',
+                                'Valor Final (US$)'
                             ];
                             $writer->addRow(Row::fromValues($headersUsd));
 
