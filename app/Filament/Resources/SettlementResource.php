@@ -111,17 +111,7 @@ class SettlementResource extends Resource
                                     ->step(0.0001)
                                     ->minValue(0)
                                     ->live(debounce: 500)
-                                    ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                        // 1. Sincroniza a cotação global com as despesas que NÃO estão personalizadas
-                                        $expenses = $get('expenses') ?? [];
-                                        foreach ($expenses as $key => $expense) {
-                                            if (!($expense['use_custom_quote'] ?? false)) {
-                                                $set("expenses.{$key}.custom_usd_quote", $state);
-                                            }
-                                        }
-                                        // 2. Atualiza os totais globais
-                                        self::updateTotals($get, $set);
-                                    })
+                                    ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                                     ->prefixAction(
                                         Forms\Components\Actions\Action::make('toggle_currency')
                                             ->label('US$')
@@ -324,15 +314,15 @@ class SettlementResource extends Resource
                                     ->numeric()
                                     ->step(0.0001)
                                     ->maxValue(99.9999)
-                                    ->default(fn(Get $get) => $get('../../usd_quote')) // Seguro, roda apenas ao adicionar NOVA linha
-                                    ->afterStateHydrated(function ($component, $state, ?\App\Models\SettlementExpense $record) {
-                                        // Usa o $record para evitar o erro de hidratação cruzada
-                                        if ($record && !$record->use_custom_quote) {
-                                            $component->state($record->settlement->usd_quote ?? null);
-                                        }
-                                    })
                                     ->disabled(fn(Get $get) => !$get('use_custom_quote'))
-                                    ->dehydrated()
+                                    ->dehydrated() // Garante que salvará "null" no banco se a flag estiver desmarcada
+                                    ->formatStateUsing(function ($state, Get $get) {
+                                        // MÁGICA AQUI: Apenas mostra o valor global visualmente, sem alterar o estado interno do Livewire
+                                        if (!$get('use_custom_quote')) {
+                                            return $get('../../usd_quote');
+                                        }
+                                        return $state;
+                                    })
                                     ->extraInputAttributes([
                                         'maxlength' => 7,
                                         'class' => 'text-right px-1'
@@ -343,13 +333,15 @@ class SettlementResource extends Resource
 
                                 Forms\Components\Checkbox::make('use_custom_quote')
                                     ->label('Personalizar')
-                                    ->default(false)
-                                    ->afterStateHydrated(fn($component, $state) => $component->state((bool) $state)) // Força o cast para evitar falhas com null
                                     ->extraAttributes(['class' => 'flex justify-center items-center pt-2'])
                                     ->live()
                                     ->afterStateUpdated(function (Get $get, Set $set, $state) {
-                                        if (!$state) {
+                                        if ($state) {
+                                            // Se o usuário MARCAR, puxamos o valor global como ponto de partida para ele editar
                                             $set('custom_usd_quote', $get('../../usd_quote'));
+                                        } else {
+                                            // Se DESMARCAR, limpamos o valor real. O formatStateUsing acima assumirá o controle visual.
+                                            $set('custom_usd_quote', null);
                                         }
                                         self::updateTotals($get, $set);
                                     }),
