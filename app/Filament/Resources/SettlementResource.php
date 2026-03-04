@@ -324,21 +324,28 @@ class SettlementResource extends Resource
                                     ->numeric()
                                     ->step(0.0001)
                                     ->maxValue(99.9999)
-                                    ->default(fn(Get $get) => $get('../../usd_quote'))
+                                    // 1. Usa a hidratação segura no lugar de default()
+                                    ->afterStateHydrated(function ($component, $state, Get $get) {
+                                        // Se for despesa antiga (null) ou se a flag estiver desmarcada, herda do pai
+                                        if (!$get('use_custom_quote') || empty($state)) {
+                                            $component->state($get('../../usd_quote'));
+                                        }
+                                    })
                                     ->disabled(fn(Get $get) => !$get('use_custom_quote'))
                                     ->dehydrated()
                                     ->extraInputAttributes([
                                         'maxlength' => 7,
-                                        'class' => 'text-right px-1' // px-1 diminui as bordas internas para caber melhor
+                                        'class' => 'text-right px-1'
                                     ])
-                                    ->required()
+                                    // 2. Só obriga o preenchimento SE a flag estiver marcada
+                                    ->required(fn(Get $get) => (bool) $get('use_custom_quote'))
                                     ->live(debounce: 500)
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
 
-                                // Substituído o Toggle por Checkbox
                                 Forms\Components\Checkbox::make('use_custom_quote')
-                                    ->label('*')
-                                    ->extraAttributes(['class' => 'flex justify-center items-center pt-2']) // Centraliza e alinha com a linha do input
+                                    ->label('Personalizar')
+                                    ->default(false) // 3. Garante que o Livewire inicie as novas despesas com false (0)
+                                    ->extraAttributes(['class' => 'flex justify-center items-center pt-2'])
                                     ->live()
                                     ->afterStateUpdated(function (Get $get, Set $set, $state) {
                                         if (!$state) {
