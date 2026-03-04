@@ -9,8 +9,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SettlementExpense extends Model
 {
     use HasFactory;
+
     protected $guarded = ['id'];
-    protected $fillable = [ ];
+    // Remova a linha "protected $fillable = [];"
 
     protected $casts = [
         'use_custom_quote' => 'boolean',

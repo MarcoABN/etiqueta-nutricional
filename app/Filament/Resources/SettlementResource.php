@@ -324,11 +324,11 @@ class SettlementResource extends Resource
                                     ->numeric()
                                     ->step(0.0001)
                                     ->maxValue(99.9999)
-                                    // 1. Usa a hidratação segura no lugar de default()
-                                    ->afterStateHydrated(function ($component, $state, Get $get) {
-                                        // Se for despesa antiga (null) ou se a flag estiver desmarcada, herda do pai
-                                        if (!$get('use_custom_quote') || empty($state)) {
-                                            $component->state($get('../../usd_quote'));
+                                    ->default(fn(Get $get) => $get('../../usd_quote')) // Seguro, roda apenas ao adicionar NOVA linha
+                                    ->afterStateHydrated(function ($component, $state, ?\App\Models\SettlementExpense $record) {
+                                        // Usa o $record para evitar o erro de hidratação cruzada
+                                        if ($record && !$record->use_custom_quote) {
+                                            $component->state($record->settlement->usd_quote ?? null);
                                         }
                                     })
                                     ->disabled(fn(Get $get) => !$get('use_custom_quote'))
@@ -337,14 +337,14 @@ class SettlementResource extends Resource
                                         'maxlength' => 7,
                                         'class' => 'text-right px-1'
                                     ])
-                                    // 2. Só obriga o preenchimento SE a flag estiver marcada
                                     ->required(fn(Get $get) => (bool) $get('use_custom_quote'))
                                     ->live(debounce: 500)
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
 
                                 Forms\Components\Checkbox::make('use_custom_quote')
                                     ->label('Personalizar')
-                                    ->default(false) // 3. Garante que o Livewire inicie as novas despesas com false (0)
+                                    ->default(false)
+                                    ->afterStateHydrated(fn($component, $state) => $component->state((bool) $state)) // Força o cast para evitar falhas com null
                                     ->extraAttributes(['class' => 'flex justify-center items-center pt-2'])
                                     ->live()
                                     ->afterStateUpdated(function (Get $get, Set $set, $state) {
