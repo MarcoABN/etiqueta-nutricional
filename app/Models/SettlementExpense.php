@@ -10,14 +10,7 @@ class SettlementExpense extends Model
 {
     use HasFactory;
     protected $guarded = ['id'];
-    protected $fillable = [
-        'settlement_id',
-        'expense_number',
-        'description',
-        'amount',
-        'use_custom_quote',
-        'custom_usd_quote',
-    ];
+    protected $fillable = [ ];
 
     protected $casts = [
         'use_custom_quote' => 'boolean',
