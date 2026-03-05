@@ -596,8 +596,14 @@ class SettlementResource extends Resource
                             foreach ($items as $item) {
                                 $reqItem = $item->requestItem;
                                 $product = $reqItem?->product;
+
+                                // Calcula o percentual de participação do item
                                 $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
-                                $totalApportionment = $item->final_value - $item->partial_value;
+
+                                // Calcula os valores em USD baseados no percentual, e não na conversão direta do BRL final
+                                $partialUsd = $toUsd($item->partial_value);
+                                $apportionmentUsd = round($percentage * $totalExpensesUsd, 2);
+                                $finalUsd = $partialUsd + $apportionmentUsd;
 
                                 $writer->addRow(Row::fromValues([
                                     $reqItem?->winthor_code ?? $product?->codprod ?? '-',
@@ -608,10 +614,10 @@ class SettlementResource extends Resource
                                     round((float) ($reqItem?->quantity ?? 0), 2),
                                     $toUsd($reqItem?->unit_price ?? 0),
                                     $toUsd($item->initial_value),
-                                    $toUsd($item->partial_value),
-                                    $toUsd($totalApportionment),
+                                    $partialUsd,                              // V. Parcial calculado
+                                    $apportionmentUsd,                        // Rateio proporcional em USD real
                                     round((float) ($percentage * 100), 2),
-                                    $toUsd($item->final_value),
+                                    $finalUsd,                                // V. Final preciso
                                 ]));
                             }
 

@@ -184,9 +184,9 @@ class EditSettlement extends EditRecord
                                 $useCustom = (bool) $exp->use_custom_quote;
                                 $customQuote = (float) $exp->custom_usd_quote;
                                 $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $usdQuote;
-                                
+
                                 $usdAmount = $quoteToUse > 0 ? round((float) $exp->amount / $quoteToUse, 2) : 0;
-                                
+
                                 $cotacaoStr = $useCustom ? 'Específica (' . round($customQuote, 4) . ')' : 'Global (' . round($usdQuote, 4) . ')';
 
                                 $writer->addRow(Row::fromValues([
@@ -222,8 +222,14 @@ class EditSettlement extends EditRecord
                         foreach ($items as $item) {
                             $reqItem = $item->requestItem;
                             $product = $reqItem?->product;
+
+                            // Calcula o percentual de participação do item
                             $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
-                            $totalApportionment = $item->final_value - $item->partial_value;
+
+                            // Calcula os valores em USD baseados no percentual, e não na conversão direta do BRL final
+                            $partialUsd = $toUsd($item->partial_value);
+                            $apportionmentUsd = round($percentage * $totalExpensesUsd, 2);
+                            $finalUsd = $partialUsd + $apportionmentUsd;
 
                             $writer->addRow(Row::fromValues([
                                 $reqItem?->winthor_code ?? $product?->codprod ?? '-',
@@ -232,12 +238,12 @@ class EditSettlement extends EditRecord
                                 $product?->barcode ?? $product?->ean ?? '-',
                                 $product?->qtunitcx ?? '-',
                                 round((float) ($reqItem?->quantity ?? 0), 2),
-                                $toUsd($reqItem?->unit_price ?? 0),       // V. UN
-                                $toUsd($item->initial_value),             // V. Inicial
-                                $toUsd($item->partial_value),             // V. Parcial
-                                $toUsd($totalApportionment),              // Rateio
-                                round((float) ($percentage * 100), 2),    // A porcentagem de rateio não sofre conversão cambial
-                                $toUsd($item->final_value),               // V. Final
+                                $toUsd($reqItem?->unit_price ?? 0),
+                                $toUsd($item->initial_value),
+                                $partialUsd,                              // V. Parcial calculado
+                                $apportionmentUsd,                        // Rateio proporcional em USD real
+                                round((float) ($percentage * 100), 2),
+                                $finalUsd,                                // V. Final preciso
                             ]));
                         }
 
