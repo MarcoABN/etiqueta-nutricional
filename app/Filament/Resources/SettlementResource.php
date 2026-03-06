@@ -331,7 +331,7 @@ class SettlementResource extends Resource
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
 
                                 Forms\Components\Checkbox::make('use_custom_quote')
-                                    ->label('Personalizar')
+                                    ->label('')
                                     ->extraAttributes(['class' => 'flex justify-center items-center pt-2'])
                                     ->live()
                                     ->afterStateUpdated(function (Get $get, Set $set, $state) {
