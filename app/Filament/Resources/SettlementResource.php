@@ -273,10 +273,10 @@ class SettlementResource extends Resource
                             ->reorderableWithDragAndDrop(false)
                             ->reorderable(true)
                             ->colStyles([
-                                'description'      => 'width: 52%; vertical-align: middle;',
-                                'amount'           => 'width: 30%; vertical-align: middle;',
-                                'custom_usd_quote' => 'width: 10%; vertical-align: middle;', 
-                                'use_custom_quote' => 'width: 8%; vertical-align: middle; text-align: center;', 
+                                'description'      => 'width: auto; vertical-align: middle;', // "Engole" todo o espaço vazio da tela
+                                'amount'           => 'width: 25%; min-width: 220px; vertical-align: middle;', // Espaço confortável para o Valor + Cotação ≈
+                                'custom_usd_quote' => 'width: 120px; vertical-align: middle;', // Espaço fixo e exato para o input numérico
+                                'use_custom_quote' => 'width: 1%; white-space: nowrap; vertical-align: middle; text-align: center;', // Encolhe a coluna para abraçar perfeitamente a palavra "Personalizar"
                             ])
                             ->schema([
                                 Forms\Components\TextInput::make('description')
@@ -315,7 +315,7 @@ class SettlementResource extends Resource
                                     ->step(0.0001)
                                     ->maxValue(99.9999)
                                     ->disabled(fn(Get $get) => !$get('use_custom_quote'))
-                                    ->dehydrated() 
+                                    ->dehydrated()
                                     ->formatStateUsing(function ($state, Get $get) {
                                         if (!$get('use_custom_quote')) {
                                             return $get('../../usd_quote');
@@ -417,7 +417,7 @@ class SettlementResource extends Resource
                             $initialTotal = $record->items()->sum('initial_value');
                             $overallTotal = $record->overall_total;
                             $expenses = $record->expenses()->orderBy('expense_number')->get();
-                            
+
                             // Itens ordenados alfabeticamente pelo nome do produto em Português
                             $items = $record->items()
                                 ->with('requestItem.product')
@@ -425,7 +425,7 @@ class SettlementResource extends Resource
                                 ->sortBy(function ($item) {
                                     return strtolower($item->requestItem?->product_name ?? '');
                                 });
-                                
+
                             $totalVal = (float) $record->total_value;
 
                             $usdQuote = (float) $record->usd_quote;
