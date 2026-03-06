@@ -276,7 +276,7 @@ class SettlementResource extends Resource
                                 'description'      => 'width: 100%; vertical-align: middle;', // Funciona como uma mola, empurrando tudo para a direita
                                 'amount'           => 'width: 280px; min-width: 280px; vertical-align: middle;', // Tamanho fixo e seguro
                                 'custom_usd_quote' => 'width: 120px; min-width: 120px; vertical-align: middle;', // Tamanho fixo e seguro
-                                'use_custom_quote' => 'width: 100px; min-width: 100px; vertical-align: middle; text-align: center;', // Largura exata para o texto "Personalizar" e o checkbox
+                                'use_custom_quote' => 'width: 25px; min-width: 25px; vertical-align: middle; text-align: center;', // Largura exata para o texto "Personalizar" e o checkbox
                             ])
                             ->schema([
                                 Forms\Components\TextInput::make('description')
