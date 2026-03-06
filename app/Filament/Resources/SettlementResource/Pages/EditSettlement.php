@@ -37,7 +37,15 @@ class EditSettlement extends EditRecord
                         $initialTotal = $record->items()->sum('initial_value');
                         $overallTotal = $record->overall_total;
                         $expenses = $record->expenses()->orderBy('expense_number')->get();
-                        $items = $record->items()->with('requestItem.product')->get();
+                        
+                        // Itens ordenados alfabeticamente pelo nome do produto em Português
+                        $items = $record->items()
+                            ->with('requestItem.product')
+                            ->get()
+                            ->sortBy(function ($item) {
+                                return strtolower($item->requestItem?->product_name ?? '');
+                            });
+                            
                         $totalVal = (float) $record->total_value;
 
                         // Função helper para converter e arredondar para Dólar global de forma segura

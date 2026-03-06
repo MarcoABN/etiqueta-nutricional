@@ -19,7 +19,6 @@ use OpenSpout\Writer\XLSX\Options;
 use OpenSpout\Writer\XLSX\Writer;
 use Icetalker\FilamentTableRepeater\Forms\Components\TableRepeater;
 
-
 class SettlementResource extends Resource
 {
     protected static ?string $model = Settlement::class;
@@ -271,13 +270,11 @@ class SettlementResource extends Resource
                             ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
                             ->reorderable(true)
-                            ->live()
-                            ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
                             ->colStyles([
                                 'description'      => 'width: 52%; vertical-align: middle;',
                                 'amount'           => 'width: 30%; vertical-align: middle;',
-                                'custom_usd_quote' => 'width: 10%; vertical-align: middle;', // Reduzido em ~30%
-                                'use_custom_quote' => 'width: 8%; vertical-align: middle; text-align: center;', // Espaço ajustado para o Checkbox
+                                'custom_usd_quote' => 'width: 10%; vertical-align: middle;', 
+                                'use_custom_quote' => 'width: 8%; vertical-align: middle; text-align: center;', 
                             ])
                             ->schema([
                                 Forms\Components\TextInput::make('description')
@@ -316,9 +313,8 @@ class SettlementResource extends Resource
                                     ->step(0.0001)
                                     ->maxValue(99.9999)
                                     ->disabled(fn(Get $get) => !$get('use_custom_quote'))
-                                    ->dehydrated() // Garante que salvará "null" no banco se a flag estiver desmarcada
+                                    ->dehydrated() 
                                     ->formatStateUsing(function ($state, Get $get) {
-                                        // MÁGICA AQUI: Apenas mostra o valor global visualmente, sem alterar o estado interno do Livewire
                                         if (!$get('use_custom_quote')) {
                                             return $get('../../usd_quote');
                                         }
@@ -338,10 +334,8 @@ class SettlementResource extends Resource
                                     ->live()
                                     ->afterStateUpdated(function (Get $get, Set $set, $state) {
                                         if ($state) {
-                                            // Se o usuário MARCAR, puxamos o valor global como ponto de partida para ele editar
                                             $set('custom_usd_quote', $get('../../usd_quote'));
                                         } else {
-                                            // Se DESMARCAR, limpamos o valor real. O formatStateUsing acima assumirá o controle visual.
                                             $set('custom_usd_quote', null);
                                         }
                                         self::updateTotals($get, $set);
@@ -389,15 +383,15 @@ class SettlementResource extends Resource
                     ->label('Cot. USD')
                     ->formatStateUsing(fn($state) => 'US$ ' . number_format((float) $state, 4, ',', '.'))
                     ->sortable(),
-                Tables\Columns\TextColumn::make('total_value')->label('Total Parcial')->money('BRL'),
+                Tables\Columns\TextColumn::make('total_value')->label('Total Parcial')->money('BRL')->sortable(),
 
                 Tables\Columns\TextColumn::make('overall_total')
                     ->label('Total Geral')
                     ->money('BRL')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('total_expenses')->label('Despesas')->money('BRL'),
-                Tables\Columns\TextColumn::make('expense_percentage')->label('% Despesa')->suffix('%'),
+                Tables\Columns\TextColumn::make('total_expenses')->label('Despesas')->money('BRL')->sortable(),
+                Tables\Columns\TextColumn::make('expense_percentage')->label('% Despesa')->suffix('%')->sortable(),
                 Tables\Columns\TextColumn::make('created_at')->label('Data')->dateTime('d/m/Y H:i')->sortable(),
             ])
             ->filters([
@@ -421,7 +415,15 @@ class SettlementResource extends Resource
                             $initialTotal = $record->items()->sum('initial_value');
                             $overallTotal = $record->overall_total;
                             $expenses = $record->expenses()->orderBy('expense_number')->get();
-                            $items = $record->items()->with('requestItem.product')->get();
+                            
+                            // Itens ordenados alfabeticamente pelo nome do produto em Português
+                            $items = $record->items()
+                                ->with('requestItem.product')
+                                ->get()
+                                ->sortBy(function ($item) {
+                                    return strtolower($item->requestItem?->product_name ?? '');
+                                });
+                                
                             $totalVal = (float) $record->total_value;
 
                             $usdQuote = (float) $record->usd_quote;
