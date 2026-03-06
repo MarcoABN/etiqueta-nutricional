@@ -37,12 +37,12 @@
 
 @if(!empty($itemsData))
     <div 
+        {{-- O wire:key dinâmico força o Livewire a recriar a tabela quando o Dólar for ativado/desativado --}}
+        wire:key="items-preview-{{ $requestId }}-{{ $isUsd ? 'usd' : 'brl' }}-{{ $usd }}"
         x-data="{
             sortCol: 'name',
             sortAsc: true,
             items: @js($itemsData),
-            usd: {{ $usd ?: 1 }},
-            isUsd: {{ $isUsd ? 'true' : 'false' }},
             
             sortBy(col) {
                 if (this.sortCol === col) {
@@ -109,38 +109,38 @@
                         
                         <td class="px-4 py-2 align-top whitespace-nowrap">
                             R$ <span x-text="formatBRL(item.vUnit)"></span>
-                            <template x-if="isUsd">
-                                <div><span class="text-xs text-gray-500 dark:text-gray-400">≈ US$ <span x-text="formatBRL(item.vUnit / usd)"></span></span></div>
-                            </template>
+                            @if($isUsd)
+                                <br><span class="text-xs text-gray-500 dark:text-gray-400">≈ US$ <span x-text="formatBRL(item.vUnit / {{ $usd ?: 1 }})"></span></span>
+                            @endif
                         </td>
                         
                         <td class="px-4 py-2 font-medium align-top whitespace-nowrap">
                             R$ <span x-text="formatBRL(item.initial)"></span>
-                            <template x-if="isUsd">
-                                <div><span class="text-xs text-gray-500 dark:text-gray-400">≈ US$ <span x-text="formatBRL(item.initial / usd)"></span></span></div>
-                            </template>
+                            @if($isUsd)
+                                <br><span class="text-xs text-gray-500 dark:text-gray-400">≈ US$ <span x-text="formatBRL(item.initial / {{ $usd ?: 1 }})"></span></span>
+                            @endif
                         </td>
                         
                         <td class="px-4 py-2 text-blue-600 align-top whitespace-nowrap">
                             R$ <span x-text="formatBRL(item.partial)"></span>
-                            <template x-if="isUsd">
-                                <div><span class="text-xs text-blue-400/80">≈ US$ <span x-text="formatBRL(item.partial / usd)"></span></span></div>
-                            </template>
+                            @if($isUsd)
+                                <br><span class="text-xs text-blue-400/80">≈ US$ <span x-text="formatBRL(item.partial / {{ $usd ?: 1 }})"></span></span>
+                            @endif
                         </td>
                         
                         <td class="px-4 py-2 text-orange-600 align-top whitespace-nowrap">
                             R$ <span x-text="formatBRL(item.apportionment)"></span>
                             <span class="text-xs text-gray-400 dark:text-gray-500 ml-1">(<span x-text="formatBRL(item.percentage)"></span>%)</span>
-                            <template x-if="isUsd">
-                                <div><span class="text-xs text-orange-400/80">≈ US$ <span x-text="formatBRL(item.apportionment / usd)"></span></span></div>
-                            </template>
+                            @if($isUsd)
+                                <br><span class="text-xs text-orange-400/80">≈ US$ <span x-text="formatBRL(item.apportionment / {{ $usd ?: 1 }})"></span></span>
+                            @endif
                         </td>
                         
                         <td class="px-4 py-2 text-green-600 font-bold align-top whitespace-nowrap">
                             R$ <span x-text="formatBRL(item.final)"></span>
-                            <template x-if="isUsd">
-                                <div><span class="text-xs text-green-500/80 font-normal">≈ US$ <span x-text="formatBRL(item.final / usd)"></span></span></div>
-                            </template>
+                            @if($isUsd)
+                                <br><span class="text-xs text-green-500/80 font-normal">≈ US$ <span x-text="formatBRL(item.final / {{ $usd ?: 1 }})"></span></span>
+                            @endif
                         </td>
                     </tr>
                 </template>
