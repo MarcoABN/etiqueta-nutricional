@@ -273,10 +273,10 @@ class SettlementResource extends Resource
                             ->reorderableWithDragAndDrop(false)
                             ->reorderable(true)
                             ->colStyles([
-                                'description'      => 'width: auto; vertical-align: middle;', // "Engole" todo o espaço vazio da tela
-                                'amount'           => 'width: 25%; min-width: 220px; vertical-align: middle;', // Espaço confortável para o Valor + Cotação ≈
-                                'custom_usd_quote' => 'width: 120px; vertical-align: middle;', // Espaço fixo e exato para o input numérico
-                                'use_custom_quote' => 'width: 1%; white-space: nowrap; vertical-align: middle; text-align: center;', // Encolhe a coluna para abraçar perfeitamente a palavra "Personalizar"
+                                'description'      => 'width: 100%; vertical-align: middle;', // Funciona como uma mola, empurrando tudo para a direita
+                                'amount'           => 'width: 280px; min-width: 280px; vertical-align: middle;', // Tamanho fixo e seguro
+                                'custom_usd_quote' => 'width: 120px; min-width: 120px; vertical-align: middle;', // Tamanho fixo e seguro
+                                'use_custom_quote' => 'width: 100px; min-width: 100px; vertical-align: middle; text-align: center;', // Largura exata para o texto "Personalizar" e o checkbox
                             ])
                             ->schema([
                                 Forms\Components\TextInput::make('description')
