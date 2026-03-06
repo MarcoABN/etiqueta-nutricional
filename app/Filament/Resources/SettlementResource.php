@@ -269,6 +269,7 @@ class SettlementResource extends Resource
                             ->orderColumn('expense_number')
                             ->hiddenLabel()
                             ->addActionLabel('Adicionar Despesa')
+                            ->reorderableWithButtons()
                             ->reorderable(true)
                             ->colStyles([
                                 'description'      => 'width: 52%; vertical-align: middle;',
