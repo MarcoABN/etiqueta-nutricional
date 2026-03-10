@@ -17,6 +17,7 @@ use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Widgets\Widget;
+use Illuminate\Support\HtmlString;
 
 class RequestItemsWidget extends Widget implements HasForms, HasTable
 {
@@ -36,12 +37,45 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     public $unit_price;
     public $observation;
 
+    // Variáveis do produto
     public $pesoliq;
     public $unidade;
     public $qtunitcx;
 
+    // Novas variáveis para o modo NF (Peso)
+    public $is_weight_mode = false;
+    public $nf_weight;
+    public $nf_total;
+
     public function form(Form $form): Form
     {
+        // Função anônima que executa o cálculo de caixas e valor unitário
+        $calcNf = function (Forms\Get $get, Forms\Set $set) {
+            $parseNumber = fn($val) => (float) str_replace(',', '.', (string) $val);
+
+            $weight = $parseNumber($get('nf_weight'));
+            $total = $parseNumber($get('nf_total'));
+            $pesoliq = $parseNumber($get('pesoliq'));
+            $qtunitcx = $parseNumber($get('qtunitcx'));
+
+            if ($weight > 0 && $pesoliq > 0 && $qtunitcx > 0) {
+                // Total Kg / Peso Líquido UN = Total de Unidades
+                $units = $weight / $pesoliq;
+                // Total Unidades / Qtd por Caixa = Total de Caixas
+                $boxes = $units / $qtunitcx;
+
+                $set('quantity', round($boxes, 4));
+
+                if ($boxes > 0 && $total > 0) {
+                    // Valor Total / Total de Caixas = Valor Unitário da Caixa
+                    $unitPrice = $total / $boxes;
+                    $set('unit_price', round($unitPrice, 4));
+                } else {
+                    $set('unit_price', null);
+                }
+            }
+        };
+
         return $form
             ->schema([
                 Forms\Components\Section::make(fn() => $this->editingItemId ? 'Editar Item' : 'Adicionar Novo Item')
@@ -49,6 +83,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
+                                // ==========================================
+                                // LINHA 1: DADOS DO PRODUTO
+                                // ==========================================
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
                                     ->placeholder('Digite Nome ou Código...')
@@ -112,15 +149,27 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->dehydrated(false)
                                     ->columnSpan(['default' => 4, 'lg' => 2]),
 
+                                // ==========================================
+                                // LINHA 2: INFORMAÇÕES DO USUÁRIO
+                                // ==========================================
+                                Forms\Components\Toggle::make('is_weight_mode')
+                                    ->label('NF (Peso)')
+                                    ->live()
+                                    ->inline(false)
+                                    ->afterStateUpdated($calcNf)
+                                    ->columnSpan(['default' => 3, 'md' => 2, 'lg' => 1]), // Ocupa apenas 1 coluna
+
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação do Produto')
-                                    ->columnSpan(['default' => 12, 'md' => 12, 'lg' => 4]),
+                                    ->columnSpan(['default' => 9, 'md' => 10, 'lg' => 3]), // Reduzido para dar espaço ao Toggle
 
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
+                                    ->step('0.0001') // Permite salvar decimais quebrados gerados pela NF
                                     ->default(1)
                                     ->required()
+                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode')) // Fica somente leitura se o modo NF estiver ativo
                                     ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 1]),
 
                                 Forms\Components\Select::make('packaging')
@@ -133,8 +182,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                 Forms\Components\TextInput::make('unit_price')
                                     ->label('Valor UN(R$)')
                                     ->numeric()
-                                    ->step('0.0001') // Permite inserir e subir de 4 em 4 casas (ex: 0.0001)
+                                    ->step('0.0001')
                                     ->prefix('R$')
+                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode')) // Fica somente leitura se o modo NF estiver ativo
                                     ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]),
 
                                 Forms\Components\Actions::make([
@@ -154,6 +204,42 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 2])
                                     ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2'])
                                     ->alignRight(),
+
+                                // ==========================================
+                                // LINHA 3: CÁLCULO NF (Aparece apenas se a chave estiver ativa)
+                                // ==========================================
+                                Forms\Components\Grid::make(12)
+                                    ->schema([
+                                        Forms\Components\TextInput::make('nf_weight')
+                                            ->label('Peso Total NF (Kg)')
+                                            ->numeric()
+                                            ->step('0.001')
+                                            ->live(debounce: 500) // Aguarda o usuário parar de digitar por 500ms
+                                            ->afterStateUpdated($calcNf)
+                                            ->columnSpan(['default' => 6, 'lg' => 3]),
+
+                                        Forms\Components\TextInput::make('nf_total')
+                                            ->label('Valor Total NF (R$)')
+                                            ->numeric()
+                                            ->step('0.01')
+                                            ->prefix('R$')
+                                            ->live(debounce: 500)
+                                            ->afterStateUpdated($calcNf)
+                                            ->columnSpan(['default' => 6, 'lg' => 3]),
+
+                                        Forms\Components\Placeholder::make('info')
+                                            ->hiddenLabel()
+                                            ->content(fn(Forms\Get $get) => new HtmlString(
+                                                "<div class='text-xs text-gray-500 mt-6'>" .
+                                                    (!$get('pesoliq') || !$get('qtunitcx') ?
+                                                        "<span class='text-danger-600 dark:text-danger-400'>⚠️ O produto selecionado não possui Peso Líquido ou Qtd/CX. O cálculo por peso não funcionará.</span>" :
+                                                        "ℹ️ Digite o Peso e o Valor Total da NF. A <strong>Qtd</strong> e o <strong>Valor UN</strong> serão calculados usando Peso Líq ({$get('pesoliq')}Kg) e Qtd/CX ({$get('qtunitcx')}).") .
+                                                    "</div>"
+                                            ))
+                                            ->columnSpan(['default' => 12, 'lg' => 6]),
+                                    ])
+                                    ->visible(fn(Forms\Get $get) => $get('is_weight_mode'))
+                                    ->columnSpanFull(),
                             ]),
                     ])
             ]);
@@ -216,11 +302,19 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'pesoliq' => $product?->pesoliq,
             'unidade' => $product?->unidade,
             'qtunitcx' => $product?->qtunitcx,
+
+            // Reseta a chave e campos auxiliares ao editar
+            'is_weight_mode' => false,
+            'nf_weight' => null,
+            'nf_total' => null,
         ]);
     }
 
     public function resetInput()
     {
+        // Captura se a chave estava ligada ou desligada antes de limpar
+        $currentWeightMode = $this->is_weight_mode;
+
         $this->editingItemId = null;
         $this->form->fill([
             'product_id' => null,
@@ -232,6 +326,11 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'pesoliq' => null,
             'unidade' => null,
             'qtunitcx' => null,
+
+            // Devolve o estado para a chave
+            'is_weight_mode' => $currentWeightMode,
+            'nf_weight' => null,
+            'nf_total' => null,
         ]);
     }
 
