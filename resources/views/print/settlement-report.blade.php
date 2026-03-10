@@ -46,9 +46,9 @@
                 <th class="text-center w-[12%]">Cot. USD</th>
                 <th class="text-center w-[10%]">Fator</th>
                 <th class="text-right w-[18%]">Total Inicial</th>
-                <th class="text-right w-[20%]">Total Parcial (Produtos)</th>
+                <th class="text-right w-[20%]">Total Real (Produtos)</th>
                 <th class="text-right w-[20%]">Total Despesas</th>
-                <th class="text-right w-[20%] bg-highlight border-green-200">Total Geral</th>
+                <th class="text-right w-[20%] bg-highlight border-green-200">Total Final</th>
             </tr>
             <tr>
                 <td class="text-center font-medium" style="vertical-align: middle;">R$ {{ number_format($usdQuote, 4, ',', '.') }}</td>

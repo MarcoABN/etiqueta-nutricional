@@ -147,7 +147,7 @@ class SettlementResource extends Resource
                                     ->suffix('%')
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Representatividade das despesas sobre o Total Parcial.')
+                                    ->hintIconTooltip('Representatividade das despesas sobre o Total Real.')
                                     ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 2]),
 
                                 Forms\Components\TextInput::make('display_total_expenses')
@@ -207,7 +207,7 @@ class SettlementResource extends Resource
                                     ->hintIconTooltip('Soma dos Valores Iniciais. Reflete o valor da NF Emitida.'),
 
                                 Forms\Components\TextInput::make('display_total_value')
-                                    ->label('Total Parcial (Produtos)')
+                                    ->label('Total Real (Produtos)')
                                     ->disabled()
                                     ->dehydrated(false)
                                     ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_value, 2, ',', '.') : '0,00'))
@@ -227,7 +227,7 @@ class SettlementResource extends Resource
                                     ->hintIconTooltip('Valor total do pedido com correção aplicada SEM despesas.'),
 
                                 Forms\Components\TextInput::make('display_overall_total')
-                                    ->label('Total Geral (Produtos + Despesas)')
+                                    ->label('Total Final (Produtos + Despesas)')
                                     ->disabled()
                                     ->dehydrated(false)
                                     ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_value + $record->total_expenses, 2, ',', '.') : '0,00'))
@@ -354,7 +354,7 @@ class SettlementResource extends Resource
                     ->heading(new HtmlString('
                         <div class="flex items-center gap-2">
                             Pré-visualização dos Itens Rateados
-                            <span x-data="{}" x-tooltip="\'O rateio das despesas é calculado de acordo com a % que o valor partial de cada produto representa do total parcial.\'">
+                            <span x-data="{}" x-tooltip="\'O rateio das despesas é calculado de acordo com a % que o valor partial de cada produto representa do total Real.\'">
                                 <svg class="h-5 w-5 text-gray-400 hover:text-gray-500 cursor-help outline-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.94 6.94a.75.75 0 11-1.061-1.061 3 3 0 112.871 5.026v.345a.75.75 0 01-1.5 0v-.518a1 1 0 001-1 1.5 1.5 0 10-1.31-1.792zm-.44 9.06a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
                                 </svg>
@@ -385,10 +385,10 @@ class SettlementResource extends Resource
                     ->label('Cot. USD')
                     ->formatStateUsing(fn($state) => 'US$ ' . number_format((float) $state, 4, ',', '.'))
                     ->sortable(),
-                Tables\Columns\TextColumn::make('total_value')->label('Total Parcial')->money('BRL')->sortable(),
+                Tables\Columns\TextColumn::make('total_value')->label('Total Real')->money('BRL')->sortable(),
 
                 Tables\Columns\TextColumn::make('overall_total')
-                    ->label('Total Geral')
+                    ->label('Total Final')
                     ->money('BRL')
                     ->sortable(),
 
@@ -450,13 +450,13 @@ class SettlementResource extends Resource
                             $writer->addRow(Row::fromValues([
                                 'Total Inicial:',
                                 round((float) $initialTotal, 2),
-                                'Total Parcial:',
+                                'Total Real:',
                                 round((float) $record->total_value, 2),
                                 'Total Despesas:',
                                 round((float) $record->total_expenses, 2),
                                 '% Despesa:',
                                 round((float) $record->expense_percentage, 2) . '%',
-                                'Total Geral:',
+                                'Total Final:',
                                 round((float) $overallTotal, 2)
                             ]));
 
@@ -550,7 +550,7 @@ class SettlementResource extends Resource
                                 round($totalExpensesUsd, 2),
                                 '% Despesa:',
                                 round((float) $record->expense_percentage, 2) . '%',
-                                'Total Geral:',
+                                'Total Final:',
                                 round($totalGeralUsd, 2)
                             ]));
 

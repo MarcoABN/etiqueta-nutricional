@@ -80,13 +80,13 @@ class EditSettlement extends EditRecord
                         $writer->addRow(Row::fromValues([
                             'Total Inicial:',
                             round((float) $initialTotal, 2),
-                            'Total Parcial:',
+                            'Total Real:',
                             round((float) $record->total_value, 2),
                             'Total Despesas:',
                             round((float) $record->total_expenses, 2),
                             '% Despesa:',
                             round((float) $record->expense_percentage, 2) . '%',
-                            'Total Geral:',
+                            'Total Final:',
                             round((float) $overallTotal, 2)
                         ]));
 
@@ -178,13 +178,13 @@ class EditSettlement extends EditRecord
                         $writer->addRow(Row::fromValues([
                             'Total Inicial:',
                             $toUsd($initialTotal),
-                            'Total Parcial:',
+                            'Total Real:',
                             $toUsd($record->total_value),
                             'Total Despesas:',
                             round($totalExpensesUsd, 2),
                             '% Despesa:',
                             round((float) $record->expense_percentage, 2) . '%',
-                            'Total Geral:',
+                            'Total Final:',
                             round($totalGeralUsd, 2)
                         ]));
 
