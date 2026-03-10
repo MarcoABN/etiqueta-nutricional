@@ -278,7 +278,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                 Tables\Columns\TextColumn::make('total_value')
                     ->label('Valor Total')
                     ->state(fn($record) => $record->quantity * ($record->unit_price ?? 0))
-                    ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 4, ',', '.') : null)
+                    ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 2, ',', '.') : null)
                     ->alignRight()
                     ->weight('bold'),
 
