@@ -91,12 +91,12 @@
                         Valor Inicial <span x-show="sortCol === 'initial'" x-text="sortAsc ? '↑' : '↓'"></span>
                     </th>
                     <th @click="sortBy('partial')" class="px-4 py-2 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Valor Inicial / Fator">
-                        Valor Parcial <span x-show="sortCol === 'partial'" x-text="sortAsc ? '↑' : '↓'"></span>
+                        Valor Real <span x-show="sortCol === 'partial'" x-text="sortAsc ? '↑' : '↓'"></span>
                     </th>
                     <th @click="sortBy('apportionment')" class="px-4 py-2 text-orange-600 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Valor rateado + % de participação">
                         Rateio Despesas <span x-show="sortCol === 'apportionment'" x-text="sortAsc ? '↑' : '↓'"></span>
                     </th>
-                    <th @click="sortBy('final')" class="px-4 py-2 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Valor Parcial + Rateio das Despesas">
+                    <th @click="sortBy('final')" class="px-4 py-2 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Valor Real + Rateio das Despesas">
                         Valor Final <span x-show="sortCol === 'final'" x-text="sortAsc ? '↑' : '↓'"></span>
                     </th>
                 </tr>
