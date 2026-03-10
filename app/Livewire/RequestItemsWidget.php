@@ -51,7 +51,19 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     {
         // Função anônima que executa o cálculo de caixas e valor unitário
         $calcNf = function (Forms\Get $get, Forms\Set $set) {
-            $parseNumber = fn($val) => (float) str_replace(',', '.', (string) $val);
+
+            // Nova lógica inteligente para entender valores com e sem casa de milhar
+            $parseNumber = function ($val) {
+                $val = (string) $val;
+
+                // Se existe vírgula, tratamos como padrão brasileiro
+                if (str_contains($val, ',')) {
+                    $val = str_replace('.', '', $val); // Remove o ponto de milhar
+                    $val = str_replace(',', '.', $val); // Transforma a vírgula em ponto decimal
+                }
+
+                return (float) $val;
+            };
 
             $weight = $parseNumber($get('nf_weight'));
             $total = $parseNumber($get('nf_total'));
@@ -157,19 +169,19 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->live()
                                     ->inline(false)
                                     ->afterStateUpdated($calcNf)
-                                    ->columnSpan(['default' => 3, 'md' => 2, 'lg' => 1]), // Ocupa apenas 1 coluna
+                                    ->columnSpan(['default' => 3, 'md' => 2, 'lg' => 1]),
 
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação do Produto')
-                                    ->columnSpan(['default' => 9, 'md' => 10, 'lg' => 3]), // Reduzido para dar espaço ao Toggle
+                                    ->columnSpan(['default' => 9, 'md' => 10, 'lg' => 3]),
 
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
-                                    ->step('0.0001') // Permite salvar decimais quebrados gerados pela NF
+                                    ->step('0.0001')
                                     ->default(1)
                                     ->required()
-                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode')) // Fica somente leitura se o modo NF estiver ativo
+                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode'))
                                     ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 1]),
 
                                 Forms\Components\Select::make('packaging')
@@ -184,7 +196,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->numeric()
                                     ->step('0.0001')
                                     ->prefix('R$')
-                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode')) // Fica somente leitura se o modo NF estiver ativo
+                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode'))
                                     ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]),
 
                                 Forms\Components\Actions::make([
@@ -206,22 +218,18 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->alignRight(),
 
                                 // ==========================================
-                                // LINHA 3: CÁLCULO NF (Aparece apenas se a chave estiver ativa)
+                                // LINHA 3: CÁLCULO NF
                                 // ==========================================
                                 Forms\Components\Grid::make(12)
                                     ->schema([
                                         Forms\Components\TextInput::make('nf_weight')
                                             ->label('Peso Total NF (Kg)')
-                                            ->numeric()
-                                            ->step('0.001')
-                                            ->live(debounce: 500) // Aguarda o usuário parar de digitar por 500ms
+                                            ->live(debounce: 500)
                                             ->afterStateUpdated($calcNf)
                                             ->columnSpan(['default' => 6, 'lg' => 3]),
 
                                         Forms\Components\TextInput::make('nf_total')
                                             ->label('Valor Total NF (R$)')
-                                            ->numeric()
-                                            ->step('0.01')
                                             ->prefix('R$')
                                             ->live(debounce: 500)
                                             ->afterStateUpdated($calcNf)
@@ -303,7 +311,6 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'unidade' => $product?->unidade,
             'qtunitcx' => $product?->qtunitcx,
 
-            // Reseta a chave e campos auxiliares ao editar
             'is_weight_mode' => false,
             'nf_weight' => null,
             'nf_total' => null,
@@ -312,7 +319,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
     public function resetInput()
     {
-        // Captura se a chave estava ligada ou desligada antes de limpar
+        // Salva o estado atual do toggle antes de limpar
         $currentWeightMode = $this->is_weight_mode;
 
         $this->editingItemId = null;
@@ -327,7 +334,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'unidade' => null,
             'qtunitcx' => null,
 
-            // Devolve o estado para a chave
+            // Mantém a chave como estava antes do salvamento
             'is_weight_mode' => $currentWeightMode,
             'nf_weight' => null,
             'nf_total' => null,
