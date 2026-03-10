@@ -485,7 +485,7 @@ class SettlementResource extends Resource
                                 'QTD',
                                 'V. UN (R$)',
                                 'Valor Inicial (R$)',
-                                'Valor Parcial (R$)',
+                                'Valor Real (R$)',
                                 'Rateio Despesas (R$)',
                                 '% Participação rateio',
                                 'Valor Final (R$)'
@@ -544,7 +544,7 @@ class SettlementResource extends Resource
                             $writer->addRow(Row::fromValues([
                                 'Total Inicial:',
                                 $toUsd($initialTotal),
-                                'Total Parcial:',
+                                'Total Real:',
                                 $toUsd($record->total_value),
                                 'Total Despesas:',
                                 round($totalExpensesUsd, 2),
@@ -590,7 +590,7 @@ class SettlementResource extends Resource
                                 'QTD',
                                 'V. UN (US$)',
                                 'Valor Inicial (US$)',
-                                'Valor Parcial (US$)',
+                                'Valor Real (US$)',
                                 'Rateio Despesas (US$)',
                                 '% Participação rateio',
                                 'Valor Final (US$)'

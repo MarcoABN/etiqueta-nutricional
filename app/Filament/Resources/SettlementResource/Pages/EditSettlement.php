@@ -117,7 +117,7 @@ class EditSettlement extends EditRecord
                             'QTD',
                             'V. UN (R$)',
                             'Valor Inicial (R$)',
-                            'Valor Parcial (R$)',
+                            'Valor Real (R$)',
                             'Rateio Despesas (R$)',
                             '% Participação rateio',
                             'Valor Final (R$)'
@@ -227,7 +227,7 @@ class EditSettlement extends EditRecord
                             'QTD',
                             'V. UN (US$)',
                             'Valor Inicial (US$)',
-                            'Valor Parcial (US$)',
+                            'Valor Real (US$)',
                             'Rateio Despesas (US$)',
                             '% Participação rateio',
                             'Valor Final (US$)'
