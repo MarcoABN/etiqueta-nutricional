@@ -114,7 +114,7 @@
                 <th class="text-center w-[6%]">Qtd</th>
                 <th class="text-center w-[8%]">% Rateio</th>
                 <th class="text-right w-[12%]">V. Unitário</th>
-                <th class="text-right w-[13%]">V. Parcial</th>
+                <th class="text-right w-[13%]">V. Real</th>
                 <th class="text-right w-[12%]">Rateio Desp.</th>
                 <th class="text-right w-[13%] bg-gray-100">Valor Final</th>
             </tr>
