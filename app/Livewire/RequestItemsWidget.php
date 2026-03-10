@@ -35,8 +35,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     public $packaging = 'CX';
     public $unit_price;
     public $observation;
-    
-    // Variáveis para exibição dos dados do produto na tela
+
     public $pesoliq;
     public $unidade;
     public $qtunitcx;
@@ -50,9 +49,6 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
-                                // ==========================================
-                                // LINHA 1: DADOS DO PRODUTO (Soma: 12 colunas)
-                                // ==========================================
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
                                     ->placeholder('Digite Nome ou Código...')
@@ -116,12 +112,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->dehydrated(false)
                                     ->columnSpan(['default' => 4, 'lg' => 2]),
 
-                                // ==========================================
-                                // LINHA 2: INFORMAÇÕES DO USUÁRIO (Soma: 12 colunas)
-                                // ==========================================
                                 Forms\Components\TextInput::make('observation')
                                     ->label('Observação do Produto')
-                                    ->columnSpan(['default' => 12, 'md' => 12, 'lg' => 4]), // Reduzido de 5 para 4
+                                    ->columnSpan(['default' => 12, 'md' => 12, 'lg' => 4]),
 
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
@@ -135,14 +128,14 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->options(['CX' => 'CX', 'UN' => 'UN', 'DP' => 'DP', 'PCT' => 'PCT', 'FD' => 'FD'])
                                     ->default('CX')
                                     ->required()
-                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 2]), // Aumentado de 1 para 2 para dar respiro
+                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 2]),
 
                                 Forms\Components\TextInput::make('unit_price')
                                     ->label('Valor UN(R$)')
                                     ->numeric()
-                                    ->step('0.01') // Permite subir de centavo em centavo (.00)
+                                    ->step('0.0001') // Permite inserir e subir de 4 em 4 casas (ex: 0.0001)
                                     ->prefix('R$')
-                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]), // Aumentado de 2 para 3
+                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]),
 
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
@@ -158,7 +151,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                         ->action(fn() => $this->resetInput())
                                         ->visible(fn() => $this->editingItemId !== null),
                                 ])
-                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 2]) // Reduzido de 3 para 2, eliminando o espaço vazio
+                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 2])
                                     ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2'])
                                     ->alignRight(),
                             ]),
@@ -278,14 +271,14 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
                 Tables\Columns\TextColumn::make('unit_price')
                     ->label('Valor UN')
-                    ->money('BRL')
+                    ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 4, ',', '.') : null)
                     ->alignRight()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('total_value')
                     ->label('Valor Total')
-                    ->state(fn ($record) => $record->quantity * ($record->unit_price ?? 0))
-                    ->money('BRL')
+                    ->state(fn($record) => $record->quantity * ($record->unit_price ?? 0))
+                    ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 4, ',', '.') : null)
                     ->alignRight()
                     ->weight('bold'),
 
