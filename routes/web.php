@@ -6,6 +6,7 @@ use App\Services\GeminiFdaTranslator;
 use Illuminate\Support\Facades\Route;
 use App\Models\Produto;
 use App\Models\Request;
+use App\Models\Settlement;
 
 Route::get('/', function () {
     return redirect('/admin/login');
@@ -49,3 +50,49 @@ Route::get('/admin/requests/{record}/print', function (Request $record) {
     // Se o arquivo está em resources/views/print/request.blade.php
     return view('print.request', ['record' => $record]);
 })->name('request.print')->middleware('auth');
+
+Route::get('/fechamentos/{settlement}/imprimir', function (Settlement $settlement) {
+    // 1. Carrega as relações para evitar consultas repetidas (N+1)
+    $settlement->load(['request', 'items.requestItem.product', 'expenses']);
+
+    // 2. Prepara os dados iniciais
+    $initialTotal = $settlement->items()->sum('initial_value');
+    $overallTotal = $settlement->overall_total;
+    $expenses = $settlement->expenses()->orderBy('expense_number')->get();
+
+    // 3. Ordena os itens alfabeticamente (igual ao seu Excel)
+    $items = $settlement->items
+        ->sortBy(fn($item) => strtolower($item->requestItem?->product_name ?? ''));
+
+    $totalVal = (float) $settlement->total_value;
+    $usdQuote = (float) $settlement->usd_quote;
+
+    // Helper para converter BRL para USD
+    $toUsd = fn($value) => $usdQuote > 0 ? (float) $value / $usdQuote : 0;
+
+    // 4. Calcula o total de despesas em USD respeitando cotações customizadas
+    $totalExpensesUsd = 0;
+    foreach ($expenses as $exp) {
+        $quoteToUse = ($exp->use_custom_quote && $exp->custom_usd_quote > 0) ? (float) $exp->custom_usd_quote : $usdQuote;
+        if ($quoteToUse > 0) {
+            $totalExpensesUsd += ((float) $exp->amount / $quoteToUse);
+        }
+    }
+
+    // 5. Total Geral em USD
+    $totalGeralUsd = $toUsd($settlement->total_value) + $totalExpensesUsd;
+
+    // 6. Retorna a View passando todas as variáveis
+    return view('print.settlement-report', compact(
+        'settlement',
+        'initialTotal',
+        'overallTotal',
+        'expenses',
+        'items',
+        'totalVal',
+        'usdQuote',
+        'toUsd',
+        'totalExpensesUsd',
+        'totalGeralUsd'
+    ));
+})->name('settlement.print')->middleware(['web', 'auth']);

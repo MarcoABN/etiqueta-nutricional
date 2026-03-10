@@ -19,6 +19,13 @@ class EditSettlement extends EditRecord
         return [
             Actions\DeleteAction::make(),
 
+            Actions\Action::make('print_report')
+                ->label('Imprimir Relatório')
+                ->icon('heroicon-o-printer')
+                ->color('info')
+                ->url(fn(Settlement $record): string => route('settlement.print', $record))
+                ->openUrlInNewTab(), // Muito importante para não fechar o Filament
+
             Actions\Action::make('export_details')
                 ->label('Exportar')
                 ->icon('heroicon-o-document-arrow-down')
@@ -37,7 +44,7 @@ class EditSettlement extends EditRecord
                         $initialTotal = $record->items()->sum('initial_value');
                         $overallTotal = $record->overall_total;
                         $expenses = $record->expenses()->orderBy('expense_number')->get();
-                        
+
                         // Itens ordenados alfabeticamente pelo nome do produto em Português
                         $items = $record->items()
                             ->with('requestItem.product')
@@ -45,7 +52,7 @@ class EditSettlement extends EditRecord
                             ->sortBy(function ($item) {
                                 return strtolower($item->requestItem?->product_name ?? '');
                             });
-                            
+
                         $totalVal = (float) $record->total_value;
 
                         // Função helper para converter e arredondar para Dólar global de forma segura
