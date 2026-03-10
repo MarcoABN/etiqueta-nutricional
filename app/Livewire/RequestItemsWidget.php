@@ -35,6 +35,11 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     public $packaging = 'CX';
     public $unit_price;
     public $observation;
+    
+    // Variáveis para exibição dos dados do produto na tela
+    public $pesoliq;
+    public $unidade;
+    public $qtunitcx;
 
     public function form(Form $form): Form
     {
@@ -45,6 +50,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
+                                // ==========================================
+                                // LINHA 1: DADOS DO PRODUTO (Soma: 12 colunas)
+                                // ==========================================
                                 Forms\Components\Select::make('product_id')
                                     ->label('Buscar Produto')
                                     ->placeholder('Digite Nome ou Código...')
@@ -73,6 +81,14 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                         if ($product = Product::find($state)) {
                                             $set('product_name', $product->product_name);
                                             $set('packaging', $product->serving_size_unit ?? 'CX');
+                                            $set('pesoliq', $product->pesoliq);
+                                            $set('unidade', $product->unidade);
+                                            $set('qtunitcx', $product->qtunitcx);
+                                        } else {
+                                            $set('product_name', null);
+                                            $set('pesoliq', null);
+                                            $set('unidade', null);
+                                            $set('qtunitcx', null);
                                         }
                                     })
                                     ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]),
@@ -80,7 +96,32 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                 Forms\Components\TextInput::make('product_name')
                                     ->label('Descrição do Item')
                                     ->required()
-                                    ->columnSpan(['default' => 12, 'md' => 8, 'lg' => 5]),
+                                    ->columnSpan(['default' => 12, 'md' => 8, 'lg' => 4]),
+
+                                Forms\Components\TextInput::make('pesoliq')
+                                    ->label('Peso Líq')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->columnSpan(['default' => 4, 'lg' => 2]),
+
+                                Forms\Components\TextInput::make('unidade')
+                                    ->label('Unidade')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->columnSpan(['default' => 4, 'lg' => 1]),
+
+                                Forms\Components\TextInput::make('qtunitcx')
+                                    ->label('Qtd/CX')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->columnSpan(['default' => 4, 'lg' => 2]),
+
+                                // ==========================================
+                                // LINHA 2: INFORMAÇÕES DO USUÁRIO (Soma: 12 colunas)
+                                // ==========================================
+                                Forms\Components\TextInput::make('observation')
+                                    ->label('Observação do Produto')
+                                    ->columnSpan(['default' => 12, 'md' => 12, 'lg' => 4]), // Reduzido de 5 para 4
 
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
@@ -94,17 +135,14 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->options(['CX' => 'CX', 'UN' => 'UN', 'DP' => 'DP', 'PCT' => 'PCT', 'FD' => 'FD'])
                                     ->default('CX')
                                     ->required()
-                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 1]),
+                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 2]), // Aumentado de 1 para 2 para dar respiro
 
                                 Forms\Components\TextInput::make('unit_price')
                                     ->label('Valor UN(R$)')
                                     ->numeric()
+                                    ->step('0.01') // Permite subir de centavo em centavo (.00)
                                     ->prefix('R$')
-                                    ->columnSpan(['default' => 12, 'md' => 3, 'lg' => 2]),
-
-                                Forms\Components\TextInput::make('observation')
-                                    ->label('Observação')
-                                    ->columnSpan(['default' => 12, 'md' => 6, 'lg' => 9]),
+                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]), // Aumentado de 2 para 3
 
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
@@ -120,7 +158,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                         ->action(fn() => $this->resetInput())
                                         ->visible(fn() => $this->editingItemId !== null),
                                 ])
-                                    ->columnSpan(['default' => 12, 'md' => 3, 'lg' => 3])
+                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 2]) // Reduzido de 3 para 2, eliminando o espaço vazio
                                     ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2'])
                                     ->alignRight(),
                             ]),
@@ -173,6 +211,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
         if (!$item) return;
 
         $this->editingItemId = $itemId;
+        $product = Product::find($item->product_id);
 
         $this->form->fill([
             'product_id' => $item->product_id,
@@ -181,6 +220,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'packaging' => $item->packaging,
             'unit_price' => $item->unit_price,
             'observation' => $item->observation,
+            'pesoliq' => $product?->pesoliq,
+            'unidade' => $product?->unidade,
+            'qtunitcx' => $product?->qtunitcx,
         ]);
     }
 
@@ -194,9 +236,11 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'packaging' => 'CX',
             'unit_price' => null,
             'observation' => '',
+            'pesoliq' => null,
+            'unidade' => null,
+            'qtunitcx' => null,
         ]);
     }
-
 
     public function table(Table $table): Table
     {
@@ -208,21 +252,19 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             ->defaultSort('product_name', 'asc')
             ->heading('Itens Gravados')
             ->columns([
-                // NOVA COLUNA 1: Código isolado e ordenável
                 Tables\Columns\TextColumn::make('winthor_code')
                     ->label('Código')
-                    ->default('Manual') // Preenche os itens sem código automaticamente
-                    ->badge(fn($record) => empty($record->winthor_code)) // Opcional: deixa o texto 'Manual' com um fundo cinza para diferenciar rápido
+                    ->default('Manual')
+                    ->badge(fn($record) => empty($record->winthor_code))
                     ->color(fn($record) => empty($record->winthor_code) ? 'gray' : null)
                     ->sortable()
                     ->searchable()
                     ->alignCenter(),
 
-                // NOVA COLUNA 2: Descrição isolada e limpa
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
                     ->weight('bold')
-                    ->limit(45) // Limite ajustado para dar espaço à coluna de código sem quebrar linha
+                    ->limit(45)
                     ->tooltip(fn($record) => $record->product_name)
                     ->sortable()
                     ->searchable(),
@@ -239,6 +281,13 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->money('BRL')
                     ->alignRight()
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('total_value')
+                    ->label('Valor Total')
+                    ->state(fn ($record) => $record->quantity * ($record->unit_price ?? 0))
+                    ->money('BRL')
+                    ->alignRight()
+                    ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('observation')
                     ->label('Obs')

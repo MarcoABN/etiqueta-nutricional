@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Textarea;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -38,7 +39,7 @@ class RequestResource extends Resource
                             ->dehydrated(false)
                             ->prefix('#')
                             ->extraInputAttributes(['style' => 'font-weight: bold; font-size: 1.1em;'])
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
 
                         Select::make('status')
                             ->label('Status')
@@ -50,27 +51,33 @@ class RequestResource extends Resource
                             ->required()
                             ->native(false)
                             ->selectablePlaceholder(false)
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
 
                         Select::make('shipping_type')
                             ->label('Tipo de Envio')
                             ->options([
-                                'Maritimo' => 'Marítimo', 
+                                'Maritimo' => 'Marítimo',
                                 'Aereo' => 'Aéreo',
                                 'Avaliar' => 'Avaliar'
                             ])
                             ->default('Maritimo')
                             ->required()
                             ->native(false)
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
 
                         TextInput::make('created_at')
                             ->label('Data Criação')
                             ->disabled()
-                            ->formatStateUsing(fn ($record) => $record?->created_at?->format('d/m/Y H:i'))
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
+                            ->formatStateUsing(fn($record) => $record?->created_at?->format('d/m/Y H:i'))
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
+
+                        // NOVO: A observação agora entra na mesma linha dos campos acima (ocupa as 4 colunas restantes)
+                        TextInput::make('observation')
+                            ->label('Observação da Solicitação')
+                            ->placeholder('Observação geral...')
+                            ->columnSpan(['default' => 12, 'sm' => 12, 'lg' => 4]),
                     ])
-                    ->hidden(fn (string $operation) => $operation === 'create')
+                    ->hidden(fn(string $operation) => $operation === 'create')
                     ->columnSpanFull(),
             ]);
     }
@@ -98,7 +105,7 @@ class RequestResource extends Resource
                 Tables\Columns\TextColumn::make('shipping_type')
                     ->label('Envio')
                     ->badge()
-                    ->color(fn ($state) => match ($state) {
+                    ->color(fn($state) => match ($state) {
                         'Aereo' => 'warning',
                         'Maritimo' => 'info',
                         'Avaliar' => 'gray',
@@ -109,11 +116,18 @@ class RequestResource extends Resource
                 Tables\Columns\TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'aberto' => 'success',
                         'fechado' => 'gray',
                         default => 'gray',
                     }),
+
+                // NOVO: Exibe a observação na listagem de pedidos
+                Tables\Columns\TextColumn::make('observation')
+                    ->label('Observação')
+                    ->limit(40)
+                    ->searchable()
+                    ->toggleable(), // Permite ocultar na engrenagem se a tela ficar cheia
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
@@ -136,7 +150,7 @@ class RequestResource extends Resource
             'edit' => Pages\EditRequest::route('/{record}/edit'),
         ];
     }
-    
+
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
