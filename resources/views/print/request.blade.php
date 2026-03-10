@@ -135,7 +135,7 @@
                 <td>{{ $item->product_name }}</td>
                 <td>{{ number_format($item->quantity, 2, ',', '.') }}</td>
                 <td class="text-right">R$ {{ number_format($item->unit_price ?? 0, 4, ',', '.') }}</td>
-                <td class="text-right">R$ {{ number_format($item->quantity * ($item->unit_price ?? 0), 4, ',', '.') }}</td>
+                <td class="text-right">R$ {{ number_format($item->quantity * ($item->unit_price ?? 0), 2, ',', '.') }}</td>
                 <td>{{ $item->observation }}</td>
             </tr>
             @endforeach
@@ -162,7 +162,7 @@
                 <td>{{ $item->product_name }}</td>
                 <td>{{ number_format($item->quantity, 2, ',', '.') }}</td>
                 <td class="text-right">R$ {{ number_format($item->unit_price ?? 0, 4, ',', '.') }}</td>
-                <td class="text-right">R$ {{ number_format($item->quantity * ($item->unit_price ?? 0), 4, ',', '.') }}</td>
+                <td class="text-right">R$ {{ number_format($item->quantity * ($item->unit_price ?? 0), 2, ',', '.') }}</td>
                 <td>{{ $item->observation }}</td>
             </tr>
             @endforeach
