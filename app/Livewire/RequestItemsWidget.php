@@ -36,7 +36,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     public $packaging = 'CX';
     public $unit_price;
     public $observation;
-    
+
     // Variáveis do produto
     public $pesoliq;
     public $unidade;
@@ -51,19 +51,19 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     {
         // Função anônima que executa o cálculo de caixas e valor unitário
         $calcNf = function (Forms\Get $get, Forms\Set $set) {
-            
+
             // Lógica inteligente para entender valores com e sem casa de milhar
             $parseNumber = function ($val) {
                 $val = (string) $val;
-                
+
                 if (str_contains($val, ',')) {
                     $val = str_replace('.', '', $val); // Remove o ponto de milhar
                     $val = str_replace(',', '.', $val); // Transforma a vírgula em ponto decimal
                 }
-                
+
                 return (float) $val;
             };
-            
+
             $weight = $parseNumber($get('nf_weight'));
             $total = $parseNumber($get('nf_total'));
             $pesoliq = $parseNumber($get('pesoliq'));
@@ -74,7 +74,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                 $units = $weight / $pesoliq;
                 // Total Unidades / Qtd por Caixa = Total de Caixas
                 $boxes = $units / $qtunitcx;
-                
+
                 $set('quantity', round($boxes, 4));
 
                 if ($boxes > 0 && $total > 0) {
@@ -124,10 +124,10 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                         if ($product = Product::find($state)) {
                                             $set('product_name', $product->product_name);
-                                            
+
                                             // Desvinculado do Produto: Mantém o que o usuário preencheu ou força CX
                                             $set('packaging', $get('packaging') ?: 'CX');
-                                            
+
                                             $set('pesoliq', $product->pesoliq);
                                             $set('unidade', $product->unidade);
                                             $set('qtunitcx', $product->qtunitcx);
@@ -183,7 +183,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->step('0.0001')
                                     ->default(1)
                                     ->required()
-                                    ->readOnly(fn (Forms\Get $get) => $get('is_weight_mode'))
+                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode'))
                                     ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 1]),
 
                                 Forms\Components\Select::make('packaging')
@@ -191,15 +191,15 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                     ->options(['CX' => 'CX', 'UN' => 'UN', 'DP' => 'DP', 'PCT' => 'PCT', 'FD' => 'FD'])
                                     ->default('CX')
                                     ->required()
-                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 2]), 
+                                    ->columnSpan(['default' => 6, 'md' => 2, 'lg' => 2]),
 
                                 Forms\Components\TextInput::make('unit_price')
                                     ->label('Valor UN(R$)')
                                     ->numeric()
                                     ->step('0.0001')
                                     ->prefix('R$')
-                                    ->readOnly(fn (Forms\Get $get) => $get('is_weight_mode'))
-                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]), 
+                                    ->readOnly(fn(Forms\Get $get) => $get('is_weight_mode'))
+                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 3]),
 
                                 Forms\Components\Actions::make([
                                     Forms\Components\Actions\Action::make('save')
@@ -215,7 +215,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                         ->action(fn() => $this->resetInput())
                                         ->visible(fn() => $this->editingItemId !== null),
                                 ])
-                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 2]) 
+                                    ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 2])
                                     ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2'])
                                     ->alignRight(),
 
@@ -254,29 +254,29 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                                         $set('pesoliq', $product->pesoliq);
                                                         $set('unidade', $product->unidade);
                                                         $set('qtunitcx', $product->qtunitcx);
-                                                        
+
                                                         // Refaz a fórmula com os dados corrigidos
                                                         $calcNf($get, $set);
-                                                        
+
                                                         Notification::make()->title('Dados do produto atualizados e recalculados!')->success()->send();
                                                     }
                                                 })
                                         ])
-                                        ->columnSpan(['default' => 12, 'lg' => 1])
-                                        ->extraAttributes(['class' => 'mt-8 flex justify-center']),
+                                            ->columnSpan(['default' => 12, 'lg' => 1])
+                                            ->extraAttributes(['class' => 'mt-8 flex justify-center']),
 
                                         Forms\Components\Placeholder::make('info')
                                             ->hiddenLabel()
-                                            ->content(fn (Forms\Get $get) => new HtmlString(
-                                                "<div class='text-xs text-gray-500 mt-6'>" . 
-                                                (!$get('pesoliq') || !$get('qtunitcx') ? 
-                                                    "<span class='text-danger-600 dark:text-danger-400'>⚠️ Falta Peso Líquido ou Qtd/CX. Ajuste no cadastro e clique no botão de recarregar.</span>" : 
-                                                    "ℹ️ Digite o Peso e o Valor da NF. O sistema calculará usando Peso Líq ({$get('pesoliq')}Kg) e Qtd/CX ({$get('qtunitcx')}).") . 
-                                                "</div>"
+                                            ->content(fn(Forms\Get $get) => new HtmlString(
+                                                "<div class='text-xs text-gray-500 mt-6'>" .
+                                                    (!$get('pesoliq') || !$get('qtunitcx') ?
+                                                        "<span class='text-danger-600 dark:text-danger-400'>⚠️ Falta Peso Líquido ou Qtd/CX. Ajuste no cadastro e clique no botão de recarregar.</span>" :
+                                                        "ℹ️ Digite o Peso e o Valor da NF. O sistema calculará usando Peso Líq ({$get('pesoliq')}Kg) e Qtd/CX ({$get('qtunitcx')}).") .
+                                                    "</div>"
                                             ))
-                                            ->columnSpan(['default' => 12, 'lg' => 5]), // Reajustado para abrir espaço pro botão
+                                            ->columnSpan(['default' => 12, 'lg' => 5]),
                                     ])
-                                    ->visible(fn (Forms\Get $get) => $get('is_weight_mode'))
+                                    ->visible(fn(Forms\Get $get) => $get('is_weight_mode'))
                                     ->columnSpanFull(),
                             ]),
                     ])
@@ -340,7 +340,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'pesoliq' => $product?->pesoliq,
             'unidade' => $product?->unidade,
             'qtunitcx' => $product?->qtunitcx,
-            
+
             'is_weight_mode' => false,
             'nf_weight' => null,
             'nf_total' => null,
@@ -363,7 +363,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'pesoliq' => null,
             'unidade' => null,
             'qtunitcx' => null,
-            
+
             // Mantém a chave como estava antes do salvamento
             'is_weight_mode' => $currentWeightMode,
             'nf_weight' => null,
@@ -379,7 +379,38 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->where('request_id', $this->record->id)
             )
             ->defaultSort('product_name', 'asc')
-            ->heading('Itens Gravados')
+
+            // ==========================================
+            // NOVO CABEÇALHO DINÂMICO DA TABELA
+            // ==========================================
+            ->heading(function () {
+                // Busca todos os itens já gravados para essa solicitação
+                $items = RequestItem::where('request_id', $this->record->id)->get();
+
+                // Calcula os totais
+                $totalVolumes = $items->sum('quantity');
+                $totalValue = $items->sum(fn($item) => $item->quantity * ($item->unit_price ?? 0));
+
+                // Remove zeros desnecessários das casas decimais do Volume para ficar mais limpo em tela
+                $formattedVolumes = rtrim(rtrim(number_format($totalVolumes, 4, ',', '.'), '0'), ',');
+                if ($formattedVolumes === '') $formattedVolumes = '0';
+
+                // Formata o valor total em reais
+                $formattedValue = number_format($totalValue, 2, ',', '.');
+
+                // Renderiza o HTML com flexbox para empurrar o bloco de valores para o final da linha
+                return new HtmlString("
+                    <div style='display: flex; justify-content: space-between; align-items: center; width: 100%; min-width: 100%; flex-wrap: wrap; gap: 1rem;'>
+                        <span>Itens Gravados</span>
+                        <div class='text-gray-700 bg-gray-100 px-4 py-1.5 rounded-lg border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 shadow-sm' style='display: flex; gap: 1rem; font-size: 0.875rem; font-weight: 400;'>
+                            <span><strong>Volumes:</strong> {$formattedVolumes}</span>
+                            <span class='text-gray-300 dark:text-gray-600'>|</span>
+                            <span><strong>Valor Total:</strong> R$ {$formattedValue}</span>
+                        </div>
+                    </div>
+                ");
+            })
+
             ->columns([
                 Tables\Columns\TextColumn::make('winthor_code')
                     ->label('Código')
@@ -407,14 +438,14 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
                 Tables\Columns\TextColumn::make('unit_price')
                     ->label('Valor UN')
-                    ->formatStateUsing(fn ($state) => $state !== null ? 'R$ ' . number_format((float) $state, 4, ',', '.') : null)
+                    ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 4, ',', '.') : null)
                     ->alignRight()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('total_value')
                     ->label('Valor Total')
-                    ->state(fn ($record) => $record->quantity * ($record->unit_price ?? 0))
-                    ->formatStateUsing(fn ($state) => $state !== null ? 'R$ ' . number_format((float) $state, 2, ',', '.') : null)
+                    ->state(fn($record) => $record->quantity * ($record->unit_price ?? 0))
+                    ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 2, ',', '.') : null)
                     ->alignRight()
                     ->weight('bold'),
 
