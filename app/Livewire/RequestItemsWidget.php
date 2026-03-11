@@ -164,7 +164,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                 Forms\Components\TextInput::make('quantity')
                                     ->label('Qtd')
                                     ->numeric()
-                                    ->step('0.0001')
+                                    ->step('any')
                                     ->default(1)
                                     ->required()
                                     ->readOnly(fn (Forms\Get $get) => $get('is_weight_mode'))
