@@ -21,4 +21,9 @@ class RequestItem extends Model
     {
         return $this->belongsTo(Product::class);
     }
+
+    public function expirations()
+    {
+        return $this->hasMany(RequestItemExpiration::class);
+    }
 }
