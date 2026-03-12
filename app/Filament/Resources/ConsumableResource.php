@@ -17,10 +17,10 @@ class ConsumableResource extends Resource
     protected static ?string $model = Consumable::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-archive-box';
-    protected static ?string $modelLabel = 'Recurso Consumível';
-    protected static ?string $pluralModelLabel = 'Recursos Consumíveis';
-    protected static ?string $navigationGroup = 'Gestão';
-    protected static ?int $navigationSort = 4;
+    protected static ?string $modelLabel = 'Suprimento';
+    protected static ?string $pluralModelLabel = 'Suprimentos';
+    protected static ?string $navigationGroup = 'Cadastros';
+    protected static ?int $navigationSort = 2;
 
     public static function form(Form $form): Form
     {

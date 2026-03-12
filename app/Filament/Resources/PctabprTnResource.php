@@ -22,6 +22,8 @@ class PctabprTnResource extends Resource
     protected static ?string $modelLabel = 'Produto/Preço';
     protected static ?string $navigationGroup = 'Precificação';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Form $form): Form
     {
         return $form

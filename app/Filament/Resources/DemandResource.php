@@ -21,8 +21,8 @@ class DemandResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
     protected static ?string $modelLabel = 'Tarefa';
     protected static ?string $pluralModelLabel = 'Tarefas';
-    protected static ?string $navigationGroup = 'Gestão';
-    protected static ?int $navigationSort = 3;
+    protected static ?string $navigationGroup = 'Operação';
+    protected static ?int $navigationSort = 4;
 
     public static function form(Form $form): Form
     {

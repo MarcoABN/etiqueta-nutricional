@@ -24,7 +24,7 @@ class RequestResource extends Resource
     protected static ?string $modelLabel = 'Solicitações';
     protected static ?string $pluralModelLabel = 'Solicitações';
 
-    protected static ?string $navigationGroup = 'Gestão';
+    protected static ?string $navigationGroup = 'Operação';
     protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form

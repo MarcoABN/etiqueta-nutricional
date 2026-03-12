@@ -22,6 +22,7 @@ class PriceScanner extends Page implements HasForms
     protected static string $view = 'filament.pages.price-scanner';
 
     protected static ?string $navigationGroup = 'Precificação';
+    protected static bool $shouldRegisterNavigation = false;
 
     // Propriedades públicas
     public ?string $filialId = null;

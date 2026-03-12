@@ -21,7 +21,7 @@ class NutritionalScanner extends Page implements HasForms
     protected static ?string $title = ''; 
     protected static string $view = 'filament.pages.nutritional-scanner';
 
-    protected static ?string $navigationGroup = 'Etiquetas';
+    protected static ?string $navigationGroup = 'Operação';
     protected static ?int $navigationSort = 3;
 
     public $scannedCode = null;

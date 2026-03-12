@@ -35,7 +35,7 @@ class ProductResource extends Resource
     protected static ?string $navigationLabel = 'Produtos';
     protected static ?string $modelLabel = 'Produto';
     protected static ?string $pluralModelLabel = 'Produtos';
-    protected static ?string $navigationGroup = 'Etiquetas';
+    protected static ?string $navigationGroup = 'Cadastros';
     protected static ?int $navigationSort = 1;
 
     // Formulário Padrão (Tabela Nutricional) - Usado pela EditProduct padrão
