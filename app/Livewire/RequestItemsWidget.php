@@ -597,6 +597,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                         Notification::make()->title('Validades salvas com sucesso!')->success()->send();
                     }),
 
+
                 Tables\Actions\DeleteAction::make()
                     ->label('')
                     ->before(function (RequestItem $record) {
@@ -605,6 +606,18 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->using(function (RequestItem $record) {
                         $record->forceDelete();
                     }),
+
+                Tables\Actions\Action::make('go_to_product')
+                    ->label('')
+                    ->icon('heroicon-o-arrow-top-right-on-square') // Ícone de abrir nova aba
+                    ->color('info') // Coloquei azul (info) para diferenciar da lixeira, mas pode usar 'gray'
+                    ->tooltip('Ver Cadastro Nutricional')
+                    // Só exibe se for um produto do WinThor (esconde nos itens manuais)
+                    ->visible(fn(\App\Models\RequestItem $record) => $record->product_id !== null)
+                    // Gera a URL dinâmica para o recurso de Produtos
+                    ->url(fn(\App\Models\RequestItem $record): string => \App\Filament\Resources\ProductResource::getUrl('edit', ['record' => $record->product_id]))
+                    // Abre em nova aba
+                    ->openUrlInNewTab(),
             ])
             ->paginated(false);
     }
