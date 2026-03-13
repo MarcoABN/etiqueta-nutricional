@@ -34,6 +34,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(fn() => new HtmlString(''))
             ->brandName('NX Export')
             ->brandLogo(asset('images/logo.png'))
+            ->favicon(asset('images/favicon.ico'))
             ->brandLogoHeight('6rem')
             ->topNavigation()
             ->login()
