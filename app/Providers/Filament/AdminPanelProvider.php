@@ -32,9 +32,9 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->sidebarCollapsibleOnDesktop()
             ->brandLogo(fn() => new HtmlString(''))
-            ->brandName('TableNutri')
+            ->brandName('NX Export')
             ->brandLogo(asset('images/logo.png'))
-            ->brandLogoHeight('2rem')
+            ->brandLogoHeight('6rem')
             ->topNavigation()
             ->login()
             ->navigationGroups([
