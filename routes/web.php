@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\LabelSetting;
+use App\Models\Pallet;
 use App\Models\Product;
 use App\Services\GeminiFdaTranslator;
 use Illuminate\Support\Facades\Route;
@@ -96,3 +97,7 @@ Route::get('/fechamentos/{settlement}/imprimir', function (Settlement $settlemen
         'totalGeralUsd'
     ));
 })->name('settlement.print')->middleware(['web', 'auth']);
+
+Route::get('/print/pallet/{pallet}', function (Pallet $pallet) {
+    return view('print.pallet-label', compact('pallet'));
+})->name('print.pallet');
