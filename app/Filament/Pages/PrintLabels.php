@@ -7,15 +7,12 @@ use App\Models\LabelSetting;
 use Filament\Pages\Page;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
-use Illuminate\Support\HtmlString;
 
 class PrintLabels extends Page implements HasForms
 {
@@ -31,25 +28,18 @@ class PrintLabels extends Page implements HasForms
 
     // Propriedades do Formulário Principal
     public ?string $search_code = '';
-    public int $quantity = 1;
     public string $labelLayout = 'standard';
     
     // Propriedade para armazenar os ajustes de calibração
-    // Mapeamos os inputs para settingsData.padding_top, etc.
     public array $settingsData = [];
 
     public ?Product $product = null;
 
     public function mount(): void
     {
-        // Ao iniciar, carrega as configurações do layout padrão
         $this->loadSettingsForLayout('standard');
     }
 
-    /**
-     * Hook do Livewire: Disparado automaticamente quando $labelLayout muda.
-     * Isso troca os valores dos inputs de calibração instantaneamente.
-     */
     public function updatedLabelLayout($value)
     {
         $this->loadSettingsForLayout($value);
@@ -61,12 +51,8 @@ class PrintLabels extends Page implements HasForms
             ->send();
     }
 
-    /**
-     * Carrega as configurações do banco para a memória do componente ($settingsData)
-     */
     public function loadSettingsForLayout($layout)
     {
-        // Busca ou cria com valores default seguros
         $settings = LabelSetting::firstOrCreate(
             ['layout' => $layout],
             [
@@ -82,14 +68,11 @@ class PrintLabels extends Page implements HasForms
         $this->settingsData = $settings->toArray();
     }
 
-    /**
-     * Salva as alterações feitas na seção de calibração para o layout atual
-     */
     public function saveSettings()
     {
         LabelSetting::updateOrCreate(
-            ['layout' => $this->labelLayout], // Chave de busca (o layout atual selecionado)
-            $this->settingsData // Os dados do form
+            ['layout' => $this->labelLayout],
+            $this->settingsData 
         );
 
         Notification::make()
@@ -97,18 +80,11 @@ class PrintLabels extends Page implements HasForms
             ->success()
             ->send();
             
-        // Força renderização para atualizar preview se necessário
         $this->dispatch('settings-saved'); 
     }
 
-    /**
-     * Passa os dados para a View Blade (incluindo o Preview)
-     */
     protected function getViewData(): array
     {
-        // Criamos uma instância de LabelSetting com os dados da memória ($this->settingsData).
-        // Assim, o preview reflete o que está nos inputs (se usarmos wire:model.live), 
-        // ou o que está no banco carregado.
         $previewSettings = new LabelSetting($this->settingsData);
 
         return [
@@ -120,8 +96,7 @@ class PrintLabels extends Page implements HasForms
     {
         return $form
             ->schema([
-                // --- SEÇÃO 1: BUSCA E CONTROLE ---
-                Grid::make(5)->schema([
+                Grid::make(12)->schema([
                     TextInput::make('search_code')
                         ->label('Pesquisar Produto')
                         ->placeholder('Cód. WinThor ou Barras')
@@ -133,7 +108,7 @@ class PrintLabels extends Page implements HasForms
                                 ->action(fn() => $this->searchProduct())
                         )
                         ->extraInputAttributes(['wire:keydown.enter' => 'searchProduct'])
-                        ->columnSpan(2),
+                        ->columnSpan(5), // Reduzido para dar espaço
 
                     Select::make('labelLayout')
                         ->label('Layout / Papel')
@@ -143,72 +118,39 @@ class PrintLabels extends Page implements HasForms
                         ])
                         ->default('standard')
                         ->selectablePlaceholder(false)
-                        ->live() // Essencial para disparar updatedLabelLayout
+                        ->live() 
                         ->required()
-                        ->columnSpan(2),
+                        ->columnSpan(5), // Reduzido para dar espaço
 
-                    TextInput::make('quantity')
-                        ->label('Qtd.')
-                        ->numeric()
-                        ->default(1)
-                        ->minValue(1)
-                        ->maxValue(1000)
-                        ->required()
-                        ->columnSpan(1),
+                    // Botão de Calibração que abre um menu ocultável (Slide-over/Modal) ocupando o espaço da antiga "Qtd"
+                    \Filament\Forms\Components\Actions::make([
+                        Action::make('calibrate')
+                            ->label('Calibração')
+                            ->icon('heroicon-o-adjustments-horizontal')
+                            ->color('gray')
+                            ->slideOver() // Abre como um painel lateral limpo
+                            ->modalHeading(fn() => 'Calibração: ' . ucfirst($this->labelLayout))
+                            ->modalDescription('Ajustes finos salvos especificamente para o papel e impressora atuais.')
+                            ->modalSubmitActionLabel('Salvar Ajustes')
+                            ->fillForm(fn() => $this->settingsData)
+                            ->form([
+                                Grid::make(2)->schema([
+                                    TextInput::make('padding_top')->label('Margem Topo (mm)')->numeric()->step(0.1),
+                                    TextInput::make('padding_left')->label('Margem Esq. (mm)')->numeric()->step(0.1),
+                                    TextInput::make('padding_right')->label('Margem Dir. (mm)')->numeric()->step(0.1),
+                                    TextInput::make('padding_bottom')->label('Margem Inf. (mm)')->numeric()->step(0.1),
+                                    TextInput::make('gap_width')->label('Gap Central (mm)')->helperText('Espaço do corte')->numeric()->step(0.1),
+                                    TextInput::make('font_scale')->label('Escala Fonte (%)')->numeric(),
+                                ])
+                            ])
+                            ->action(function (array $data) {
+                                $this->settingsData = $data;
+                                $this->saveSettings();
+                            }),
+                    ])
+                    ->columnSpan(2) // Ocupa o restante do grid
+                    ->verticalAlignment('end'),
                 ]),
-
-                // --- SEÇÃO 2: CALIBRAÇÃO INTEGRADA ---
-                Section::make('Calibração da Impressora')
-                    ->description(fn() => 'Ajustes finos salvos especificamente para: ' . ucfirst($this->labelLayout))
-                    ->icon('heroicon-o-cog-6-tooth')
-                    ->collapsed() // Mantém fechado para não poluir
-                    ->compact()
-                    ->schema([
-                        Grid::make(5)->schema([
-                            TextInput::make('settingsData.padding_top')
-                                ->label('Margem Topo (mm)')
-                                ->numeric()->step(0.1),
-                            
-                            TextInput::make('settingsData.padding_left')
-                                ->label('Margem Esq. (mm)')
-                                ->numeric()->step(0.1),
-
-                            TextInput::make('settingsData.gap_width')
-                                ->label('Gap Central (mm)')
-                                ->helperText('Espaço do corte')
-                                ->numeric()->step(0.1),
-
-                            TextInput::make('settingsData.font_scale')
-                                ->label('Escala Fonte (%)')
-                                ->numeric(),
-
-                            // Botão de Salvar dentro da Grid
-                            \Filament\Forms\Components\Actions::make([
-                                Action::make('save_config')
-                                    ->label('Salvar Ajuste')
-                                    ->action(fn() => $this->saveSettings())
-                                    ->color('primary')
-                                    ->icon('heroicon-m-check'),
-                            ])->alignCenter()->verticalAlignment('end'), // Alinha com os inputs
-                        ]),
-                    ]),
-
-                // --- SEÇÃO 3: STATUS VISUAL ---
-                Placeholder::make('status_display')
-                    ->label('Produto Selecionado')
-                    ->hidden(fn() => !$this->product)
-                    ->content(function () {
-                        if (!$this->product) return '-';
-                        $status = $this->product->import_status ?? 'Indefinido';
-                        $color = match ($status) {
-                            'Liberado' => 'text-green-600',
-                            'Processado (IA)' => 'text-blue-500',
-                            'Bloqueado' => 'text-red-600',
-                            default => 'text-gray-500',
-                        };
-                        return new HtmlString("<div class='flex items-center gap-2'><span class='text-lg font-black {$color}'>{$status}</span> <span class='text-gray-600'>| {$this->product->product_name}</span></div>");
-                    })
-                    ->columnSpanFull(),
             ]);
     }
 
@@ -218,6 +160,7 @@ class PrintLabels extends Page implements HasForms
         $search = trim($this->search_code);
         $maxInt = 2147483647;
 
+        // Com base no histórico, a base é Postgres, então a consulta Eloquent padrão lidará bem com isso.
         $query = Product::query();
 
         if (is_numeric($search) && $search > $maxInt) {

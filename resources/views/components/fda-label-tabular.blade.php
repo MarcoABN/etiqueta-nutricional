@@ -159,7 +159,7 @@
 
                     <div style="font-size: <?php echo 4.5 * $scale; ?>pt; line-height: 1.0; border-top: 1px solid black; padding-top: 1px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0;">
                         <div style="max-width: 65%;">
-                            <?php if(filled($product->imported_by)): ?> IMP: <?php echo nl2br(e($product->imported_by)); ?> <?php else: ?> IMPORTED BY: GO MINAS DISTRIBUTION LLC<br>MARGATE, FL 33063 <?php endif; ?>
+                            <?php if(filled($product->imported_by)): ?> IMP: <?php echo nl2br(e($product->imported_by)); ?> <?php else: ?> IMPORTED BY:<br>GO MINAS DISTRIBUTION LLC<br>2042 NW 55TH AVE, MARGATE, FL33063 <?php endif; ?>
                         </div>
                         <div style="font-weight: bold; text-align: right;">Product of <?php echo $product->origin_country ?? 'Brazil'; ?></div>
                     </div>
