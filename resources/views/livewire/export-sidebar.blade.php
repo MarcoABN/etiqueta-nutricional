@@ -1,36 +1,54 @@
-<x-filament::section>
-    <x-slot name="heading">
-        <div class="flex items-center gap-2">
-            <x-heroicon-o-list-bullet class="w-6 h-6 text-primary-500" />
-            <span class="capitalize">Eventos de {{ $monthName ?: 'Mês Atual' }}</span>
-        </div>
-    </x-slot>
+<div class="bg-white dark:bg-gray-900 rounded-xl shadow-sm ring-1 ring-gray-950/5 dark:ring-white/10 p-5 flex flex-col h-full">
+    <h3 class="text-base font-semibold text-gray-950 dark:text-white mb-4 text-center">Eventos do Mês</h3>
 
-    <div class="flex flex-col gap-4">
-        @forelse($eventsByShipment as $shipmentName => $steps)
-            <div>
-                <h4 class="font-bold text-sm text-gray-700 dark:text-gray-300 mb-2 border-b pb-1 dark:border-gray-800">
-                    {{ $shipmentName }}
-                </h4>
-                <ul class="flex flex-col gap-2">
-                    @foreach($steps as $step)
-                        @php
-                            $isLate = !$step['is_completed'] && \Carbon\Carbon::parse($step['scheduled_date'])->isPast();
-                            $colorClass = $step['is_completed'] 
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30' 
-                                : ($isLate ? 'bg-red-50 text-red-700 dark:bg-red-900/30' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30');
-                        @endphp
+    {{-- Lista de Eventos --}}
+    <div class="flex-1">
+        @if(count($items) > 0)
+            <div class="space-y-4">
+                @foreach($items as $item)
+                    <div class="flex items-start gap-3">
                         
-                        <li class="flex items-center gap-2 text-xs p-2 rounded-md {{ $colorClass }}">
-                            <span class="font-bold shrink-0">{{ \Carbon\Carbon::parse($step['scheduled_date'])->format('d/m') }}</span>
-                            <span class="text-gray-400">-</span>
-                            <span class="truncate" title="{{ $step['name'] }}">{{ $step['name'] }}</span>
-                        </li>
-                    @endforeach
-                </ul>
+                        {{-- Círculo de Status --}}
+                        <div 
+                            class="w-3 h-3 rounded-full shrink-0 mt-1.5 shadow-sm border border-black/10 dark:border-white/10" 
+                            style="background-color: {{ $item['color'] }};"
+                        ></div>
+
+                        {{-- Texto da Etapa --}}
+                        <div class="flex-1">
+                            <p class="text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-normal break-words leading-snug">
+                                {{ $item['title'] }}
+                            </p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {{ $item['date']->format('d/m/Y') }}
+                            </p>
+                        </div>
+
+                    </div>
+                @endforeach
             </div>
-        @empty
-            <p class="text-sm text-gray-500 text-center py-4">Nenhuma remessa agendada para este mês.</p>
-        @endforelse
+        @else
+            <div class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                Nenhum evento programado para este período.
+            </div>
+        @endif
     </div>
-</x-filament::section>
+
+    {{-- Legenda de Cores --}}
+    <div class="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <div class="flex flex-wrap justify-center gap-x-4 gap-y-3">
+            <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 rounded-full shrink-0 shadow-sm border border-black/10 dark:border-white/10" style="background-color: #3b82f6;"></div>
+                <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Aberto</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 rounded-full shrink-0 shadow-sm border border-black/10 dark:border-white/10" style="background-color: #10b981;"></div>
+                <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Concluído</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 rounded-full shrink-0 shadow-sm border border-black/10 dark:border-white/10" style="background-color: #ef4444;"></div>
+                <span class="text-xs font-medium text-gray-600 dark:text-gray-400">Em atraso</span>
+            </div>
+        </div>
+    </div>
+</div>

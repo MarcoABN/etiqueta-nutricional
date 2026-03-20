@@ -82,15 +82,13 @@ class ExportCalendarWidget extends FullCalendarWidget
                         ->label('Data Prevista')
                         ->native(false)
                         ->displayFormat('d/m/Y')
-                        ->dehydrated() 
+                        ->firstDayOfWeek(0) // <-- INICIA NO DOMINGO
+                        ->dehydrated()
                         ->required()
-                        ->default(fn () => session('calendar_selected_date', now()->format('Y-m-d'))),
+                        ->default(fn() => session('calendar_selected_date', now()->format('Y-m-d'))),
                 ])
                 ->after(function () {
-                    // Limpa a sessão após salvar
                     session()->forget('calendar_selected_date');
-
-                    // CORREÇÃO: Comando atualizado do pacote V3
                     $this->refreshRecords();
                 })
                 ->successNotificationTitle('Etapa adicionada ao cronograma!'),
@@ -114,6 +112,7 @@ class ExportCalendarWidget extends FullCalendarWidget
                     ->label('Data Prevista')
                     ->native(false)
                     ->displayFormat('d/m/Y')
+                    ->firstDayOfWeek(0) // <-- INICIA NO DOMINGO
                     ->required(),
                 \Filament\Forms\Components\Toggle::make('is_completed')
                     ->label('Marcar etapa como Concluída')
@@ -121,7 +120,7 @@ class ExportCalendarWidget extends FullCalendarWidget
                     ->offColor('danger')
                     ->inline(false),
             ])
-            ->extraModalFooterActions(fn (\Filament\Actions\Action $action): array => [
+            ->extraModalFooterActions(fn(\Filament\Actions\Action $action): array => [
                 \Filament\Actions\DeleteAction::make('excluir_etapa')
                     ->record($action->getRecord())
                     ->cancelParentActions()
@@ -129,12 +128,10 @@ class ExportCalendarWidget extends FullCalendarWidget
                     ->modalHeading('Excluir Etapa')
                     ->modalDescription('Tem certeza que deseja remover esta etapa do cronograma?')
                     ->successNotificationTitle('Etapa removida com sucesso!')
-                    // CORREÇÃO: Comando atualizado
-                    ->after(fn () => $this->refreshRecords()),
+                    ->after(fn() => $this->refreshRecords()),
             ])
             ->successNotificationTitle('Etapa atualizada com sucesso!')
-            // CORREÇÃO: Comando atualizado
-            ->after(fn () => $this->refreshRecords());
+            ->after(fn() => $this->refreshRecords());
     }
 
     public function fetchEvents(array $fetchInfo): array
