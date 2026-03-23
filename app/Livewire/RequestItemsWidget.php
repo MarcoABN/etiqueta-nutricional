@@ -281,6 +281,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
         $data = $this->form->getState();
         $prodId = $data['product_id'] ?? null;
 
+        // 1. Verifica duplicação se houver um produto selecionado
         if ($prodId) {
             $exists = RequestItem::where('request_id', $this->record->id)
                 ->where('product_id', $prodId)
@@ -293,6 +294,10 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             }
         }
 
+        // 2. DECLARAÇÃO GLOBAL DA VARIÁVEL (Corrige o erro do Intelephense)
+        $product = $prodId ? \App\Models\Product::find($prodId) : null;
+
+        // 3. Montagem dos dados com Snapshot (Fotografia)
         $itemData = [
             'request_id' => $this->record->id,
             'product_id' => $prodId,
@@ -301,9 +306,18 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             'packaging' => $data['packaging'],
             'unit_price' => $data['unit_price'],
             'observation' => $data['observation'],
-            'winthor_code' => Product::find($prodId)?->codprod,
+
+            // --- SNAPSHOT DOS DADOS DO PRODUTO ---
+            'winthor_code' => $product?->codprod,
+            'product_name_en' => $product?->product_name_en,
+            'ncm' => $product?->ncm,
+            'barcode' => $product?->barcode ?? $product?->ean,
+            'pesoliq' => $product ? (float) str_replace(',', '.', (string) ($product->pesoliq ?? '0')) : null,
+            'qtunitcx' => $product ? (float) str_replace(',', '.', (string) ($product->qtunitcx ?? '1')) : null,
+            'unidade' => $product?->unidade,
         ];
 
+        // 4. Salva no banco de dados
         if ($this->editingItemId) {
             RequestItem::find($this->editingItemId)->update($itemData);
             Notification::make()->title('Item atualizado')->success()->send();

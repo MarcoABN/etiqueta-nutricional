@@ -10,8 +10,6 @@ class RequestItem extends Model
 {
     use HasUuids, SoftDeletes;
 
-    protected $guarded = ['id'];
-
     public function request()
     {
         return $this->belongsTo(Request::class);
@@ -26,4 +24,21 @@ class RequestItem extends Model
     {
         return $this->hasMany(RequestItemExpiration::class);
     }
+
+    protected $fillable = [
+        'request_id',
+        'product_id',
+        'winthor_code',
+        'product_name',
+        'product_name_en', // Novo
+        'ncm',             // Novo
+        'barcode',         // Novo
+        'pesoliq',         // Novo
+        'qtunitcx',        // Novo
+        'unidade',         // Novo
+        'quantity',
+        'packaging',
+        'unit_price',
+        'observation',
+    ];
 }

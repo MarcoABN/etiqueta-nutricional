@@ -115,12 +115,9 @@ class EditRequest extends EditRecord
                             $sheet2Data = [];
 
                             foreach ($items as $item) {
-                                $ncm = $item->product ? $item->product->ncm : '';
-
-                                $description = $item->product_name;
-                                if ($item->product && !empty($item->product->product_name_en)) {
-                                    $description = $item->product->product_name_en;
-                                }
+                                // 1. Busca NCM e Descrição primeiro do Snapshot, depois do Produto (Fallback)
+                                $ncm = $item->ncm ?: ($item->product?->ncm ?: '');
+                                $description = $item->product_name_en ?: ($item->product?->product_name_en ?: $item->product_name);
 
                                 $unid = $item->packaging;
                                 $qtde = (float) $item->quantity;
@@ -140,14 +137,10 @@ class EditRequest extends EditRecord
                                     $total
                                 ]));
 
-                                // Cálculos Aba 2
-                                $pesoliq = 0;
-                                $qtunitcx = 1;
-
-                                if ($item->product) {
-                                    $pesoliq = (float) str_replace(',', '.', $item->product->pesoliq ?? '0');
-                                    $qtunitcx = (float) str_replace(',', '.', $item->product->qtunitcx ?? '1');
-                                }
+                                // 2. Cálculos Aba 2 (SEM O IF)
+                                // Lê do snapshot. Se for nulo, tenta ler do produto formatando a string. Se não tiver produto, assume 0 (ou 1 para caixa).
+                                $pesoliq = (float) ($item->pesoliq ?? ($item->product ? str_replace(',', '.', (string) ($item->product->pesoliq ?? '0')) : 0));
+                                $qtunitcx = (float) ($item->qtunitcx ?? ($item->product ? str_replace(',', '.', (string) ($item->product->qtunitcx ?? '1')) : 1));
 
                                 $netWeight = $qtunitcx * $pesoliq * $qtde;
                                 $sumNetWeight += $netWeight;
@@ -221,15 +214,9 @@ class EditRequest extends EditRecord
                             foreach ($record->items as $item) {
                                 $qtdCx = (float) $item->quantity;
 
-                                // Valores padrão caso não haja produto atrelado (Produto Manual)
-                                $qtunitcx = 1;
-                                $pesoliq = 0;
-
-                                if ($item->product) {
-                                    // Prevenção de erros no PHP 8.2+ e tratamento de vírgulas
-                                    $pesoliq = (float) str_replace(',', '.', (string) ($item->product->pesoliq ?? '0'));
-                                    $qtunitcx = (float) str_replace(',', '.', (string) ($item->product->qtunitcx ?? '1'));
-                                }
+                                // SEM O IF: Pega o Snapshot, faz Fallback para o Produto e, se tudo falhar, assume 0/1 (Produto Manual Exclusivo)
+                                $pesoliq = (float) ($item->pesoliq ?? ($item->product ? str_replace(',', '.', (string) ($item->product->pesoliq ?? '0')) : 0));
+                                $qtunitcx = (float) ($item->qtunitcx ?? ($item->product ? str_replace(',', '.', (string) ($item->product->qtunitcx ?? '1')) : 1));
 
                                 // Cálculos
                                 $qtdTotal = $qtdCx * $qtunitcx;
@@ -370,7 +357,8 @@ class EditRequest extends EditRecord
                 }),
 
             // --- AÇÃO INTACTA: DELETAR SOLICITAÇÃO ---
-            Actions\DeleteAction::make(),
+            Actions\DeleteAction::make()
+                ->hidden(fn() => $this->record->is_locked || ($this->record->settlement?->is_locked ?? false)),
         ];
     }
 
