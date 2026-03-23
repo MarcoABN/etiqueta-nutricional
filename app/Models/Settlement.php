@@ -26,4 +26,13 @@ class Settlement extends Model
     {
         return $this->hasMany(SettlementItem::class);
     }
+
+    protected $fillable = [
+        // ... seus campos atuais
+        'is_locked',
+    ];
+
+    protected $casts = [
+        'is_locked' => 'boolean',
+    ];
 }

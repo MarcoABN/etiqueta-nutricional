@@ -8,6 +8,10 @@ class SettlementObserver
 {
     public function saved(Settlement $settlement): void
     {
+
+        if ($settlement->is_locked) {
+            return;
+        }
         $factorDec = ($settlement->calculation_factor ?: 70) / 100;
         $totalValue = $settlement->total_value;
         $totalExpenses = $settlement->total_expenses;

@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\RequestResource\Pages;
 use App\Models\Request;
+use App\Models\Settlement;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Components\TextInput;
@@ -32,6 +33,7 @@ class RequestResource extends Resource
         return $form
             ->schema([
                 Grid::make(12)
+                    ->disabled(fn(?Request $record) => ($record?->is_locked ?? false) || ($record?->settlement?->is_locked ?? false))
                     ->schema([
                         TextInput::make('display_id')
                             ->label('Nº Pedido')
@@ -135,6 +137,9 @@ class RequestResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+
+                Tables\Actions\DeleteAction::make()
+                    ->hidden(fn(Request $record) => ($record->is_locked) || ($record->settlement?->is_locked ?? false)),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -157,5 +162,11 @@ class RequestResource extends Resource
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
+    }
+
+    // App\Models\Request.php
+    public function settlement()
+    {
+        return $this->hasOne(Settlement::class);
     }
 }

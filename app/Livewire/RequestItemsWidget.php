@@ -48,6 +48,12 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
     public $nf_weight;
     public $nf_total;
 
+    // Helper para verificar se está travado
+    protected function isLocked(): bool
+    {
+        return $this->record->is_locked || ($this->record->settlement?->is_locked ?? false);
+    }
+
     public function form(Form $form): Form
     {
         $calcNf = function (Forms\Get $get, Forms\Set $set) {
@@ -85,6 +91,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             ->schema([
                 Forms\Components\Section::make(fn() => $this->editingItemId ? 'Editar Item' : 'Adicionar Novo Item')
                     ->compact()
+                    ->disabled(fn() => $this->isLocked()) // <--- TRAVA DO FORMULÁRIO AQUI
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
@@ -200,6 +207,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                         ->action(fn() => $this->resetInput())
                                         ->visible(fn() => $this->editingItemId !== null),
                                 ])
+                                    ->hidden(fn() => $this->isLocked()) // <--- ESCONDE BOTÕES SE TRAVADO
                                     ->columnSpan(['default' => 12, 'md' => 4, 'lg' => 2])
                                     ->extraAttributes(['class' => 'mt-8 flex justify-end gap-2'])
                                     ->alignRight(),
@@ -264,6 +272,12 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
     public function saveItem()
     {
+        // --- GUARD CLAUSE BACKEND ---
+        if ($this->isLocked()) {
+            Notification::make()->title('Ação não permitida')->body('Esta solicitação está fechada ou bloqueada.')->warning()->send();
+            return;
+        }
+
         $data = $this->form->getState();
         $prodId = $data['product_id'] ?? null;
 
@@ -357,10 +371,6 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             )
             ->defaultSort('product_name', 'asc')
             ->heading('Itens Gravados')
-
-            // ==========================================
-            // NOVO: HEADER ACTIONS (FICA NO CANTO DIREITO)
-            // ==========================================
             ->headerActions([
                 Tables\Actions\Action::make('totals_display')
                     ->label(function () {
@@ -383,11 +393,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     })
                     ->color('gray')
                     ->extraAttributes([
-                        // Desativa o hover e cursor de clique para agir puramente como um display visual
                         'class' => 'cursor-default pointer-events-none shadow-none bg-gray-50 dark:bg-gray-800',
                     ]),
             ])
-
             ->columns([
                 Tables\Columns\TextColumn::make('winthor_code')
                     ->label('Código')
@@ -397,7 +405,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->sortable()
                     ->searchable()
                     ->alignCenter()
-                    ->width('6rem'), // Aumentamos um pouco para dar respiro aos 5 dígitos
+                    ->width('6rem'),
 
                 Tables\Columns\TextColumn::make('product_name')
                     ->label('Produto')
@@ -406,24 +414,24 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->tooltip(fn($record) => $record->product_name)
                     ->sortable()
                     ->searchable()
-                    ->width('35%'), // Ganhou mais espaço da observação (foi de 30% para 35%)
+                    ->width('35%'),
 
                 Tables\Columns\TextColumn::make('quantity')
                     ->label('Qtd')
                     ->alignCenter()
-                    ->width('5rem'), // Mais folga (era 4rem)
+                    ->width('5rem'),
 
                 Tables\Columns\TextColumn::make('packaging')
                     ->label('Emb')
                     ->alignCenter()
-                    ->width('5rem'), // Mais folga para alinhar perfeitamente com Qtd
+                    ->width('5rem'),
 
                 Tables\Columns\TextColumn::make('unit_price')
                     ->label('Valor UN')
                     ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 4, ',', '.') : null)
                     ->alignRight()
                     ->sortable()
-                    ->width('9rem'), // Mais respiro para os números e o "R$" (era 8rem)
+                    ->width('9rem'),
 
                 Tables\Columns\TextColumn::make('total_value')
                     ->label('Valor Total')
@@ -431,14 +439,14 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->formatStateUsing(fn($state) => $state !== null ? 'R$ ' . number_format((float) $state, 2, ',', '.') : null)
                     ->alignRight()
                     ->weight('bold')
-                    ->width('9rem'), // Acompanha o aumento do Valor UN
+                    ->width('9rem'),
 
                 Tables\Columns\TextColumn::make('observation')
                     ->label('Obs')
                     ->limit(50)
                     ->tooltip(fn($state) => $state)
                     ->wrap()
-                    ->width('20%'), // A MÁGICA AQUI: Removemos o ->grow() e travamos em 20%. Menor, mas ainda quebra linha se precisar!
+                    ->width('20%'),
             ])
             ->filters([
                 Filter::make('product_type')
@@ -473,17 +481,16 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     ->label('')
                     ->icon('heroicon-m-pencil-square')
                     ->color('warning')
+                    ->hidden(fn() => $this->isLocked()) // <--- ESCONDE EDIÇÃO
                     ->action(fn(RequestItem $record) => $this->editItem($record->id)),
 
                 Tables\Actions\Action::make('manage_expirations')
                     ->label('')
-                    // Ícone dinâmico: Alerta se for parcial, Preenchido se total, Contorno se vazio
                     ->icon(function (RequestItem $record) {
                         if ($record->expirations->isEmpty()) return 'heroicon-o-calendar-days';
                         $sum = round($record->expirations->sum('quantity'), 4);
                         return $sum < round($record->quantity, 4) ? 'heroicon-s-exclamation-triangle' : 'heroicon-s-calendar-days';
                     })
-                    // Cor dinâmica: Cinza (vazio), Laranja/Warning (parcial), Verde/Success (total)
                     ->color(function (RequestItem $record) {
                         if ($record->expirations->isEmpty()) return 'gray';
                         $sum = round($record->expirations->sum('quantity'), 4);
@@ -494,6 +501,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                         $sum = round($record->expirations->sum('quantity'), 4);
                         return $sum < round($record->quantity, 4) ? 'Validade Incompleta (Atenção)' : 'Validades Gravadas';
                     })
+                    ->hidden(fn() => $this->isLocked()) // <--- ESCONDE GERENCIAR VALIDADES
                     ->modalHeading(fn(RequestItem $record) => 'Validades: ' . $record->product_name)
                     ->modalDescription(fn(RequestItem $record) => "Quantidade solicitada do item: {$record->quantity}")
                     ->modalWidth('2xl')
@@ -505,7 +513,6 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                         'short_date_confirmed' => false,
                     ])
                     ->form([
-                        // ... (MANTENHA O MESMO FORMULÁRIO DE ANTES: Repeater, Hidden e o Botão de Atenção)
                         Forms\Components\Repeater::make('expirations')
                             ->label('Lotes e Validades')
                             ->addActionLabel('Adicionar Validade')
@@ -553,7 +560,6 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                             ->visible(fn(Forms\Get $get) => $get('short_date_confirmed')),
                     ])
                     ->action(function (RequestItem $record, array $data, \Filament\Tables\Actions\Action $action) {
-                        // 1. REGRA DE NEGÓCIO: Não permitir quantidade maior que a solicitada
                         $totalInformed = round(collect($data['expirations'])->sum('quantity'), 4);
                         $maxQuantity = round($record->quantity, 4);
 
@@ -564,10 +570,9 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                                 ->body("Você informou um total de {$totalInformed}, mas o item tem apenas {$maxQuantity} na solicitação. Corrija para salvar.")
                                 ->send();
 
-                            $action->halt(); // Interrompe o processo e mantém o modal aberto
+                            $action->halt();
                         }
 
-                        // 2. LÓGICA DE DATA CURTA
                         $hasShortDate = collect($data['expirations'])->contains(function ($exp) {
                             return !empty($exp['expiration_date']) &&
                                 \Illuminate\Support\Carbon::parse($exp['expiration_date'])->isBefore(\Illuminate\Support\Carbon::now()->addDays(90)->startOfDay());
@@ -583,7 +588,6 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                             $action->halt();
                         }
 
-                        // Sincroniza as validades no banco
                         $record->expirations()->delete();
                         if (!empty($data['expirations'])) {
                             foreach ($data['expirations'] as $expData) {
@@ -600,6 +604,7 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
                 Tables\Actions\DeleteAction::make()
                     ->label('')
+                    ->hidden(fn() => $this->isLocked()) // <--- ESCONDE EXCLUSÃO
                     ->before(function (RequestItem $record) {
                         if ($this->editingItemId === $record->id) $this->resetInput();
                     })
@@ -609,14 +614,12 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
 
                 Tables\Actions\Action::make('go_to_product')
                     ->label('')
-                    ->icon('heroicon-o-arrow-top-right-on-square') // Ícone de abrir nova aba
-                    ->color('info') // Coloquei azul (info) para diferenciar da lixeira, mas pode usar 'gray'
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->color('info')
                     ->tooltip('Ver Cadastro Nutricional')
-                    // Só exibe se for um produto do WinThor (esconde nos itens manuais)
                     ->visible(fn(\App\Models\RequestItem $record) => $record->product_id !== null)
-                    // Gera a URL dinâmica para o recurso de Produtos
+                    // MANTIDO: O usuário ainda pode visualizar o produto original mesmo com a solicitação travada
                     ->url(fn(\App\Models\RequestItem $record): string => \App\Filament\Resources\ProductResource::getUrl('edit', ['record' => $record->product_id]))
-                    // Abre em nova aba
                     ->openUrlInNewTab(),
             ])
             ->paginated(false);

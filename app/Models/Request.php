@@ -20,7 +20,7 @@ class Request extends Model
         static::creating(function ($model) {
             // Lógica para gerar ID objetivo: {ANO}{SEQUENCIA} (Ex: 2026001)
             $year = date('Y');
-            
+
             // Busca o último número deste ano
             $last = DB::table('requests')
                 ->where('display_id', 'like', "{$year}%")
@@ -47,4 +47,13 @@ class Request extends Model
     {
         return $this->hasOne(Settlement::class);
     }
+
+    protected $fillable = [
+        // ... seus campos atuais
+        'is_locked',
+    ];
+
+    protected $casts = [
+        'is_locked' => 'boolean',
+    ];
 }

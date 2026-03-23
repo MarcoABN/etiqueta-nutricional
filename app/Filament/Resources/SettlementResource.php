@@ -90,6 +90,7 @@ class SettlementResource extends Resource
                 Forms\Components\Hidden::make('overall_total'),
 
                 Forms\Components\Section::make('Dados e Totais do Fechamento')
+                    ->disabled(fn(?Settlement $record) => $record?->is_locked ?? false)
                     ->schema([
                         Forms\Components\Grid::make(['default' => 1, 'sm' => 2, 'lg' => 12])
                             ->schema([
@@ -263,6 +264,7 @@ class SettlementResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Despesas do Fechamento')
+                    ->disabled(fn(?Settlement $record) => $record?->is_locked ?? false)
                     ->schema([
                         TableRepeater::make('expenses')
                             ->relationship('expenses')

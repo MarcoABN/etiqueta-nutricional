@@ -27,6 +27,56 @@ class EditRequest extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+
+            // --- AÇÃO: CONSOLIDAR SOLICITAÇÃO ---
+            Actions\Action::make('consolidate_request')
+                ->label('Consolidar Solicitação')
+                ->icon('heroicon-o-lock-closed')
+                ->color('success') // Segue o mesmo padrão visual verde do fechamento
+                ->requiresConfirmation()
+                ->modalHeading('Consolidar Solicitação?')
+                ->modalDescription('Após consolidar, você não poderá alterar os dados gerais da solicitação nem gerenciar seus itens. Deseja continuar?')
+                ->hidden(fn() => $this->record->is_locked)
+                ->action(function () {
+                    $this->record->update(['is_locked' => true]);
+                    \Filament\Notifications\Notification::make()
+                        ->title('Solicitação consolidada com sucesso!')
+                        ->success()
+                        ->send();
+                }),
+
+            // --- AÇÃO: REABRIR SOLICITAÇÃO ---
+            Actions\Action::make('reopen_request')
+                ->label('Reabrir Solicitação')
+                ->icon('heroicon-o-lock-open')
+                // Se o fechamento estiver consolidado, fica cinza. Se não, fica laranja (warning)
+                ->color(fn() => ($this->record->settlement?->is_locked ?? false) ? 'gray' : 'warning')
+                ->tooltip(
+                    fn() => ($this->record->settlement?->is_locked ?? false)
+                        ? '⚠️ Bloqueado: Reabra o Fechamento primeiro.'
+                        : 'Clique para reabrir a solicitação'
+                )
+                ->requiresConfirmation()
+                ->modalHeading('Reabrir Solicitação?')
+                ->modalDescription(
+                    fn() => ($this->record->settlement?->is_locked ?? false)
+                        ? new \Illuminate\Support\HtmlString('<span class="text-danger-600 font-medium">Ação Bloqueada:</span> O fechamento financeiro associado a esta solicitação está consolidado. Você deve ir até o painel de <strong>Fechamentos</strong> e reabri-lo antes de reabrir a solicitação.')
+                        : 'Isso permitirá que os itens e dados da solicitação sejam editados novamente. Deseja continuar?'
+                )
+                ->modalSubmitAction(fn($action) => ($this->record->settlement?->is_locked ?? false) ? $action->hidden() : $action)
+                ->visible(fn() => $this->record->is_locked)
+                ->action(function () {
+                    if ($this->record->settlement?->is_locked ?? false) {
+                        return;
+                    }
+
+                    $this->record->update(['is_locked' => false]);
+                    \Filament\Notifications\Notification::make()
+                        ->title('Solicitação reaberta para edição!')
+                        ->warning()
+                        ->send();
+                }),
+
             // --- NOVA AÇÃO: CENTRAL DE EXPORTAÇÕES EXCEL (ActionGroup) ---
             Actions\ActionGroup::make([
 
@@ -327,5 +377,11 @@ class EditRequest extends EditRecord
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    protected function getSaveFormAction(): \Filament\Actions\Action
+    {
+        return parent::getSaveFormAction()
+            ->hidden(fn() => $this->record->is_locked || ($this->record->settlement?->is_locked ?? false));
     }
 }

@@ -14,18 +14,59 @@ class EditSettlement extends EditRecord
 {
     protected static string $resource = SettlementResource::class;
 
+    // Oculta o botão "Guardar" padrão se o fechamento estiver travado (is_locked)
+    protected function getSaveFormAction(): \Filament\Actions\Action
+    {
+        return parent::getSaveFormAction()
+            ->hidden(fn() => $this->record->is_locked);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
+            // --- AÇÃO: CONSOLIDAR FECHAMENTO ---
+            Actions\Action::make('consolidate_settlement')
+                ->label('Consolidar Fechamento')
+                ->icon('heroicon-o-lock-closed')
+                ->color('success') // Verde: indica que o processo foi concluído com êxito
+                ->requiresConfirmation()
+                ->modalHeading('Consolidar Fechamento?')
+                ->modalDescription('Após consolidar, os dados da solicitação, produtos e despesas se tornarão imutáveis (somente leitura). Deseja continuar?')
+                ->hidden(fn() => $this->record->is_locked)
+                ->action(function () {
+                    $this->record->update(['is_locked' => true]);
+                    \Filament\Notifications\Notification::make()
+                        ->title('Fechamento consolidado com sucesso!')
+                        ->success()
+                        ->send();
+                }),
 
+            // --- AÇÃO: REABRIR FECHAMENTO ---
+            Actions\Action::make('reopen_settlement')
+                ->label('Reabrir Fechamento')
+                ->icon('heroicon-o-lock-open')
+                ->color('warning') // Laranja/Amarelo: indica uma ação de exceção/atenção
+                ->requiresConfirmation()
+                ->modalHeading('Reabrir Fechamento?')
+                ->modalDescription('Atenção: Reabrir permitirá que os valores e despesas sejam editados novamente. Deseja continuar?')
+                ->visible(fn() => $this->record->is_locked)
+                ->action(function () {
+                    $this->record->update(['is_locked' => false]);
+                    \Filament\Notifications\Notification::make()
+                        ->title('Fechamento reaberto para edição!')
+                        ->warning()
+                        ->send();
+                }),
+
+            // --- AÇÃO EXISTENTE: IMPRIMIR RELATÓRIO ---
             Actions\Action::make('print_report')
                 ->label('Imprimir Relatório')
                 ->icon('heroicon-o-printer')
                 ->color('info')
                 ->url(fn(Settlement $record): string => route('settlement.print', $record))
-                ->openUrlInNewTab(), // Muito importante para não fechar o Filament
+                ->openUrlInNewTab(),
 
+            // --- AÇÃO EXISTENTE: EXPORTAR EXCEL ---
             Actions\Action::make('export_details')
                 ->label('Exportar')
                 ->icon('heroicon-o-document-arrow-down')
@@ -267,6 +308,10 @@ class EditSettlement extends EditRecord
                         'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                     ]);
                 }),
+
+            // --- AÇÃO EXISTENTE: APAGAR (Ocultada se estiver travado) ---
+            Actions\DeleteAction::make()
+                ->hidden(fn() => $this->record->is_locked),
         ];
     }
 }
