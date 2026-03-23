@@ -396,6 +396,16 @@ class SettlementResource extends Resource
 
                 Tables\Columns\TextColumn::make('total_expenses')->label('Despesas')->money('BRL')->sortable(),
                 Tables\Columns\TextColumn::make('expense_percentage')->label('% Despesa')->suffix('%')->sortable(),
+                // --- NOVA COLUNA: SINALIZADOR DE CONSOLIDAÇÃO ---
+                Tables\Columns\IconColumn::make('is_locked')
+                    ->label('Consolidado')
+                    ->boolean()
+                    ->trueIcon('heroicon-s-lock-closed')
+                    ->falseIcon('heroicon-o-lock-open')
+                    ->trueColor('success')
+                    ->falseColor('warning')
+                    ->tooltip(fn($state) => $state ? 'Fechamento Consolidado (Somente Leitura)' : 'Fechamento Aberto para Edição')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')->label('Data')->dateTime('d/m/Y H:i')->sortable(),
             ])
             ->filters([

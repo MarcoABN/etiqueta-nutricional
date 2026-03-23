@@ -130,6 +130,17 @@ class RequestResource extends Resource
                     ->limit(40)
                     ->searchable()
                     ->toggleable(), // Permite ocultar na engrenagem se a tela ficar cheia
+
+                // --- NOVA COLUNA: SINALIZADOR DE CONSOLIDAÇÃO ---
+                Tables\Columns\IconColumn::make('is_locked')
+                    ->label('Consolidado')
+                    ->boolean()
+                    ->trueIcon('heroicon-s-lock-closed') // Ícone quando is_locked = true
+                    ->falseIcon('heroicon-o-lock-open')  // Ícone quando is_locked = false
+                    ->trueColor('success')               // Cadeado verde (Consolidado)
+                    ->falseColor('warning')              // Cadeado laranja (Aberto)
+                    ->tooltip(fn($state) => $state ? 'Solicitação Consolidada (Somente Leitura)' : 'Solicitação Aberta para Edição')
+                    ->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
