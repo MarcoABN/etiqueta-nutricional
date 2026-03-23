@@ -9,7 +9,7 @@ class ExportSchedule extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
     protected static ?string $title = 'Cronograma de Exportação';
-    protected static ?string $navigationGroup = 'Operação';
+    protected static ?string $navigationGroup = 'Calendário';
     protected static ?int $navigationSort = 2;
     protected static string $view = 'filament.pages.export-schedule';
 

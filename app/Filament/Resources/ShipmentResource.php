@@ -15,7 +15,7 @@ class ShipmentResource extends Resource
     protected static ?string $model = Shipment::class;
     protected static ?string $navigationIcon = 'heroicon-o-truck';
     protected static ?string $modelLabel = 'Remessa';
-    protected static ?string $navigationGroup = 'Operação';
+    protected static ?string $navigationGroup = 'Cadastros';
     protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form

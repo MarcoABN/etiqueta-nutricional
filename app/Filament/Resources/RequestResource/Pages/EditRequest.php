@@ -150,16 +150,52 @@ class EditRequest extends EditRecord
                             $writer = new Writer();
                             $writer->openToFile('php://output');
 
-                            $writer->addRow(Row::fromValues(['Cód WinThor', 'Produto', 'Qtd', 'Emb', 'Valor UN', 'Valor Total', 'Observação']));
+                            // Cabeçalho atualizado com as novas colunas
+                            $writer->addRow(Row::fromValues([
+                                'Cód WinThor',
+                                'Produto',
+                                'Qtd CX',
+                                'Emb',
+                                'Unidade Master', // Nova
+                                'Peso Liq. Un',     // Nova
+                                'Total Un',    // Nova
+                                'Total em KG',              // Nova (Anterior)
+                                'Valor UN',
+                                'Valor Total',
+                                'Observação'
+                            ]));
+
+                            // Carrega a relação de produtos para performance
+                            $record->loadMissing('items.product');
 
                             foreach ($record->items as $item) {
+                                $qtdCx = (float) $item->quantity;
+
+                                // Valores padrão caso não haja produto atrelado (Produto Manual)
+                                $qtunitcx = 1;
+                                $pesoliq = 0;
+
+                                if ($item->product) {
+                                    // Prevenção de erros no PHP 8.2+ e tratamento de vírgulas
+                                    $pesoliq = (float) str_replace(',', '.', (string) ($item->product->pesoliq ?? '0'));
+                                    $qtunitcx = (float) str_replace(',', '.', (string) ($item->product->qtunitcx ?? '1'));
+                                }
+
+                                // Cálculos
+                                $qtdTotal = $qtdCx * $qtunitcx;
+                                $qtdKl = $qtdTotal * $pesoliq;
+
                                 $writer->addRow(Row::fromValues([
                                     $item->winthor_code ?? 'Manual',
                                     $item->product_name,
-                                    (float) $item->quantity,
+                                    $qtdCx,
                                     $item->packaging,
+                                    $qtunitcx, // Qtd. Unit. na Caixa
+                                    $pesoliq,  // Peso Líquido un
+                                    $qtdTotal, // Quantidade total
+                                    $qtdKl,    // Qtd Kl
                                     (float) ($item->unit_price ?? 0),
-                                    (float) ($item->quantity * ($item->unit_price ?? 0)),
+                                    (float) ($qtdCx * ($item->unit_price ?? 0)),
                                     $item->observation ?? '',
                                 ]));
                             }

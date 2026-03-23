@@ -23,8 +23,8 @@ class PrintLabels extends Page implements HasForms
     protected static ?string $title = 'Central de Impressão FDA';
     protected static string $view = 'filament.pages.print-labels';
 
-    protected static ?string $navigationGroup = 'Operação';
-    protected static ?int $navigationSort = 2;
+    protected static ?string $navigationGroup = 'Etiquetas';
+    protected static ?int $navigationSort = 1;
 
     // Propriedades do Formulário Principal
     public ?string $search_code = '';

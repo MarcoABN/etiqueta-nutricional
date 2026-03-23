@@ -33,8 +33,8 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
     protected static ?string $title = 'Impressão em Lote (Solicitação)';
     protected static string $view = 'filament.pages.print-request-labels';
 
-    protected static ?string $navigationGroup = 'Operação';
-    protected static ?int $navigationSort = 3;
+    protected static ?string $navigationGroup = 'Etiquetas';
+    protected static ?int $navigationSort = 2;
 
     public ?array $data = [];
 
