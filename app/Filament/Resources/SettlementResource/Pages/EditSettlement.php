@@ -72,7 +72,8 @@ class EditSettlement extends EditRecord
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('success')
                 ->action(function (Settlement $record) {
-                    $fileName = 'Fechamento_' . ($record->request->display_id ?? 'Avulso') . '.xlsx';
+                    $safeName = \Illuminate\Support\Str::slug($record->request->observation ?? 'Avulso');
+                    $fileName = 'Fechamento_' . $safeName . '.xlsx';
 
                     return response()->streamDownload(function () use ($record) {
                         $options = new Options();
@@ -109,7 +110,7 @@ class EditSettlement extends EditRecord
                         $writer->addRow(Row::fromValues(['Fechamento']));
                         $writer->addRow(Row::fromValues([
                             'Solicitação:',
-                            $record->request->display_id ?? '-',
+                            $record->request->observation ?? '-',
                             'Modalidade Envio:',
                             $record->request->shipping_type ?? 'Não Informado',
                             'Cotação USD Global:',

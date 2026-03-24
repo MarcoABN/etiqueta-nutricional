@@ -12,6 +12,7 @@ use Filament\Forms\Components\Select;
 use Livewire\Component;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
+use Illuminate\Support\Str;
 
 class EditRequest extends EditRecord
 {
@@ -181,7 +182,7 @@ class EditRequest extends EditRecord
                             $writer->addRow(Row::fromValues(['', '', 'TOTAIS', $sumNetWeight, '', $sumQtde]));
 
                             $writer->close();
-                        }, "invoice_{$record->display_id}.xlsx");
+                        }, "invoice_" . Str::slug($record->observation ?? 'avulso') . ".xlsx");
                     }),
 
                 // Exportação 2: Solicitação Completa
@@ -237,7 +238,7 @@ class EditRequest extends EditRecord
                                 ]));
                             }
                             $writer->close();
-                        }, "Solicitacao_{$record->display_id}.xlsx");
+                        }, "Solicitacao_" . Str::slug($record->observation ?? 'avulso') . ".xlsx");
                     }),
 
                 // Exportação 3: Validades
@@ -271,7 +272,7 @@ class EditRequest extends EditRecord
                                 }
                             }
                             $writer->close();
-                        }, "Validades_{$record->display_id}.xlsx");
+                        }, "Validades_" . Str::slug($record->observation ?? 'avulso') . ".xlsx");
                     }),
 
                 // Exportação 4: Pallets (Removido Importador, Adicionado Total)
@@ -310,7 +311,7 @@ class EditRequest extends EditRecord
                             ]));
 
                             $writer->close();
-                        }, "Pallets_{$record->display_id}.xlsx");
+                        }, "Pallets_" . Str::slug($record->observation ?? 'avulso') . ".xlsx");
                     }),
             ])
                 ->label('Exportar Excel')

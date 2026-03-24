@@ -35,13 +35,12 @@ class RequestResource extends Resource
                 Grid::make(12)
                     ->disabled(fn(?Request $record) => ($record?->is_locked ?? false) || ($record?->settlement?->is_locked ?? false))
                     ->schema([
-                        TextInput::make('display_id')
-                            ->label('Nº Pedido')
-                            ->disabled()
-                            ->dehydrated(false)
-                            ->prefix('#')
+                        TextInput::make('observation')
+                            ->label('Descrição da Solicitação')
+                            ->placeholder('Ex: Importação Cliente X, Lote Y...')
+                            ->required() // Tornei obrigatório, já que agora é o identificador principal
                             ->extraInputAttributes(['style' => 'font-weight: bold; font-size: 1.1em;'])
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
+                            ->columnSpan(['default' => 12, 'sm' => 12, 'lg' => 6]),
 
                         Select::make('status')
                             ->label('Status')
@@ -73,11 +72,6 @@ class RequestResource extends Resource
                             ->formatStateUsing(fn($record) => $record?->created_at?->format('d/m/Y H:i'))
                             ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
 
-                        // NOVO: A observação agora entra na mesma linha dos campos acima (ocupa as 4 colunas restantes)
-                        TextInput::make('observation')
-                            ->label('Observação da Solicitação')
-                            ->placeholder('Observação geral...')
-                            ->columnSpan(['default' => 12, 'sm' => 12, 'lg' => 4]),
                     ])
                     ->hidden(fn(string $operation) => $operation === 'create')
                     ->columnSpanFull(),
@@ -88,10 +82,12 @@ class RequestResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('display_id')
-                    ->label('ID')
+                Tables\Columns\TextColumn::make('observation')
+                    ->label('Descrição')
                     ->searchable()
                     ->sortable()
+                    ->limit(45)
+                    ->tooltip(fn($state) => $state)
                     ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('created_at')
@@ -126,7 +122,7 @@ class RequestResource extends Resource
 
                 // NOVO: Exibe a observação na listagem de pedidos
                 Tables\Columns\TextColumn::make('observation')
-                    ->label('Observação')
+                    ->label('Descrição')
                     ->limit(40)
                     ->searchable()
                     ->toggleable(), // Permite ocultar na engrenagem se a tela ficar cheia

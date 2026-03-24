@@ -96,7 +96,7 @@ class SettlementResource extends Resource
                             ->schema([
                                 Forms\Components\Select::make('request_id')
                                     ->label('Solicitação')
-                                    ->options(Request::where('status', 'fechado')->pluck('display_id', 'id'))
+                                    ->options(Request::where('status', 'fechado')->pluck('observation', 'id'))
                                     ->required()
                                     ->unique(ignoreRecord: true, modifyRuleUsing: fn(Unique $rule) => $rule->whereNull('deleted_at'))
                                     ->live()
@@ -382,7 +382,11 @@ class SettlementResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('request.display_id')->label('Solicitação')->sortable()->searchable(),
+                Tables\Columns\TextColumn::make('request.observation')
+                    ->label('Solicitação')
+                    ->limit(30)
+                    ->sortable()
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('usd_quote')
                     ->label('Cot. USD')
                     ->formatStateUsing(fn($state) => 'US$ ' . number_format((float) $state, 4, ',', '.'))
@@ -419,7 +423,8 @@ class SettlementResource extends Resource
                     ->icon('heroicon-o-document-arrow-down')
                     ->color('success')
                     ->action(function (Settlement $record) {
-                        $fileName = 'Fechamento_' . ($record->request->display_id ?? 'Avulso') . '.xlsx';
+                        $safeName = \Illuminate\Support\Str::slug($record->request->observation ?? 'Avulso');
+                        $fileName = 'Fechamento_' . $safeName . '.xlsx';
 
                         return response()->streamDownload(function () use ($record) {
                             $options = new Options();
@@ -450,7 +455,7 @@ class SettlementResource extends Resource
                             $writer->addRow(Row::fromValues(['Fechamento']));
                             $writer->addRow(Row::fromValues([
                                 'Solicitação:',
-                                $record->request->display_id ?? '-',
+                                $record->request->observation ?? '-',
                                 'Modalidade Envio:',
                                 $record->request->shipping_type ?? 'Não Informado',
                                 'Cotação USD:',

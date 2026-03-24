@@ -14,7 +14,7 @@ class SettlementExporter extends Exporter
     public static function getColumns(): array
     {
         return [
-            ExportColumn::make('request.display_id')->label('ID Solicitação'),
+            ExportColumn::make('request.observation')->label('Descrição da Solicitação'),
             ExportColumn::make('usd_quote')->label('Cotação USD'),
             ExportColumn::make('calculation_factor')->label('Fator de Cálculo'),
             ExportColumn::make('total_value')->label('Valor Total'),
