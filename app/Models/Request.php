@@ -48,11 +48,6 @@ class Request extends Model
         return $this->hasOne(Settlement::class);
     }
 
-    protected $fillable = [
-        // ... seus campos atuais
-        'is_locked',
-    ];
-
     protected $casts = [
         'is_locked' => 'boolean',
     ];
