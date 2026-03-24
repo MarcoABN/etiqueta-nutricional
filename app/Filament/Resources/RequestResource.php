@@ -125,6 +125,7 @@ class RequestResource extends Resource
                     ->label('Descrição')
                     ->limit(40)
                     ->searchable()
+                    ->sortable()
                     ->toggleable(), // Permite ocultar na engrenagem se a tela ficar cheia
 
                 // --- NOVA COLUNA: SINALIZADOR DE CONSOLIDAÇÃO ---
