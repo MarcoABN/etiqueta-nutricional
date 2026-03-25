@@ -366,21 +366,21 @@ class ProductResource extends Resource
 
                 Tables\Columns\TextColumn::make('qtunitcx')
                     ->label('Qtd Cx')
-                    ->copyable()
-                    ->copyMessage('Quantidade copiada!')
-                    ->copyMessageDuration(1500)
                     ->sortable()
                     ->formatStateUsing(function ($state) {
-                        // Se estiver vazio ou nulo, retorna um traço (opcional, para ficar mais limpo)
                         if (blank($state)) return '-';
-
-                        // 1. Formata garantindo 2 casas decimais no padrão BR (ex: 1.500,00 ou 15,50)
                         $formatado = number_format((float) $state, 2, ',', '.');
-
-                        // 2. Tira APENAS o ",00" do final da string. 
-                        // Se for "15,50", ele mantém intacto!
                         return str_replace(',00', '', $formatado);
-                    }),
+                    })
+                    ->copyable()
+                    ->copyableState(function ($state) {
+                        // Usa a mesma lógica para garantir que o valor copiado seja idêntico ao exibido
+                        if (blank($state)) return '';
+                        $formatado = number_format((float) $state, 2, ',', '.');
+                        return str_replace(',00', '', $formatado);
+                    })
+                    ->copyMessage('Quantidade copiada!')
+                    ->copyMessageDuration(1500),
 
                 Tables\Columns\TextColumn::make('import_status')
                     ->label('Status')
