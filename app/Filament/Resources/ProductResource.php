@@ -364,16 +364,11 @@ class ProductResource extends Resource
                     ->color('gray')
                     ->copyable(),
 
-                Tables\Columns\TextColumn::make('curve')
-                    ->label('Curva')
-                    ->badge()
-                    ->color(fn($state) => match ($state) {
-                        'A' => 'success',
-                        'B' => 'warning',
-                        'C' => 'danger',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn($state) => $state ?? '-')
+                Tables\Columns\TextColumn::make('qtunitcx')
+                    ->label('Qtd Cx')
+                    ->copyable()
+                    ->copyMessage('Quantidade copiada!')
+                    ->copyMessageDuration(1500)
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('import_status')
