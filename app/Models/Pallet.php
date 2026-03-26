@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Pallet extends Model
 {
@@ -17,8 +16,5 @@ class Pallet extends Model
         return $this->belongsTo(Request::class);
     }
 
-    public function pallets(): HasMany
-    {
-        return $this->hasMany(Pallet::class);
-    }
+    
 }

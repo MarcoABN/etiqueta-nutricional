@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
@@ -51,4 +52,9 @@ class Request extends Model
     protected $casts = [
         'is_locked' => 'boolean',
     ];
+
+    public function pallets(): HasMany
+    {
+        return $this->hasMany(Pallet::class);
+    }
 }
