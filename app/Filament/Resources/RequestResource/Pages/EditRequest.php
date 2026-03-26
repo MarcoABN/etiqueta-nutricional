@@ -107,7 +107,12 @@ class EditRequest extends EditRecord
                                 'TOTAL'
                             ]));
 
-                            $items = $record->items()->with('product')->get();
+                            $items = $record->items()
+                                ->with('product')
+                                ->get()
+                                ->sortBy(function ($item) {
+                                    return strtolower($item->product_name ?? '');
+                                });
 
                             $sequential = 1;
                             $sumQtde = 0;
@@ -210,7 +215,12 @@ class EditRequest extends EditRecord
                             ]));
 
                             // Carrega a relação de produtos para performance
-                            $record->loadMissing('items.product');
+                            $items = $record->items()
+                                ->with('product')
+                                ->get()
+                                ->sortBy(function ($item) {
+                                    return strtolower($item->product_name ?? '');
+                                });
 
                             foreach ($record->items as $item) {
                                 $qtdCx = (float) $item->quantity;
