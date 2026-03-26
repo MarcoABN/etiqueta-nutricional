@@ -515,12 +515,16 @@ class SettlementResource extends Resource
                                 $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
                                 $totalApportionment = $item->final_value - $item->partial_value;
 
+                                // Tratamento para a Qtd Caixa
+                                $qtdCaixaRaw = $product?->qtunitcx ?? '-';
+                                $qtdCaixaExibicao = is_numeric($qtdCaixaRaw) ? $qtdCaixaRaw + 0 : $qtdCaixaRaw;
+
                                 $writer->addRow(Row::fromValues([
                                     $reqItem?->winthor_code ?? $product?->codprod ?? '-',
                                     $reqItem?->product_name ?? '-',
                                     $product?->product_name_en ?? '-',
                                     $product?->barcode ?? $product?->ean ?? '-',
-                                    $product?->qtunitcx ?? '-',
+                                    $qtdCaixaExibicao, // <-- Variável tratada aplicada aqui
                                     round((float) ($reqItem?->quantity ?? 0), 2),
                                     round((float) ($reqItem?->unit_price ?? 0), 2),
                                     round((float) $item->initial_value, 2),
