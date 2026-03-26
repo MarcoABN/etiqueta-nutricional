@@ -109,10 +109,8 @@ class EditRequest extends EditRecord
 
                             $items = $record->items()
                                 ->with('product')
-                                ->get()
-                                ->sortBy(function ($item) {
-                                    return strtolower($item->product_name ?? '');
-                                });
+                                ->orderBy('product_name', 'asc')
+                                ->get();
 
                             $sequential = 1;
                             $sumQtde = 0;
@@ -217,12 +215,10 @@ class EditRequest extends EditRecord
                             // Carrega a relação de produtos para performance
                             $items = $record->items()
                                 ->with('product')
-                                ->get()
-                                ->sortBy(function ($item) {
-                                    return strtolower($item->product_name ?? '');
-                                });
+                                ->orderBy('product_name', 'asc')
+                                ->get();
 
-                            foreach ($record->items as $item) {
+                            foreach ($items as $item) {
                                 $qtdCx = (float) $item->quantity;
 
                                 // SEM O IF: Pega o Snapshot, faz Fallback para o Produto e, se tudo falhar, assume 0/1 (Produto Manual Exclusivo)
