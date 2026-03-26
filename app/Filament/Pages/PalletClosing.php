@@ -76,6 +76,19 @@ class PalletClosing extends Page implements HasForms, HasTable
         // Criamos a ação isolada para poder colocá-la tanto no cabeçalho quanto no centro da tela vazia
         $generatePalletsAction = TableAction::make('generate_pallets')
             ->label('Gerar Pallets')
+            ->visible(function () use ($reqId) {
+                if (!$reqId) return false;
+
+                // Verifica se já existem pallets
+                $hasNoPallets = Pallet::where('request_id', $reqId)->count() === 0;
+
+                // Busca a solicitação para checar a trava
+                $request = \App\Models\Request::find($reqId);
+                $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
+
+                // Só é visível se NÃO tiver pallets gerados E o pedido NÃO estiver trancado
+                return $hasNoPallets && !$isLocked;
+            })
             ->icon('heroicon-o-plus-circle')
             ->color('primary')
             ->visible(fn() => $reqId && Pallet::where('request_id', $reqId)->count() === 0)
@@ -151,6 +164,10 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->label('Preencher')
                     ->icon('heroicon-o-pencil')
                     ->color('warning')
+                    ->disabled(function ($record) {
+                        $request = $record->request; // Pega a solicitação vinculada ao pallet
+                        return ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
+                    })
                     ->modalHeading(fn($record) => "Dados do Pallet {$record->pallet_number}/{$record->total_pallets}")
                     ->form([
                         TextInput::make('gross_weight')
