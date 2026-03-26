@@ -379,7 +379,7 @@ class ProductResource extends Resource
                         $formatado = number_format((float) $state, 2, ',', '.');
                         return str_replace(',00', '', $formatado);
                     })
-                    ->copyMessage('Quantidade copiada!')
+                    ->copyMessage('Copiado!')
                     ->copyMessageDuration(1500),
 
                 Tables\Columns\TextColumn::make('import_status')
