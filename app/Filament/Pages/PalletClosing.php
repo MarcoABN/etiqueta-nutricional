@@ -50,7 +50,13 @@ class PalletClosing extends Page implements HasForms, HasTable
                 Select::make('request_id')
                     ->label('Selecionar Solicitação')
                     ->placeholder('Selecione pelo Nº do Pedido')
-                    ->options(Request::where('status', 'aberto')->orderByDesc('created_at')->pluck('display_id', 'id'))
+                    ->options(
+                        Request::query()
+                            ->where('status', 'aberto')
+                            ->orWhereHas('pallets') // Inclui pedidos de qualquer status que já possuam pallets
+                            ->orderByDesc('created_at')
+                            ->pluck('display_id', 'id')
+                    )
                     ->searchable()
                     ->live()
                     ->afterStateUpdated(function ($livewire) {
