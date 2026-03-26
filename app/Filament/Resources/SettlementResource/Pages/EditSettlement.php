@@ -172,12 +172,25 @@ class EditSettlement extends EditRecord
                             $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
                             $totalApportionment = $item->final_value - $item->partial_value;
 
+                            // Tratamento estrito de tipo para a Qtd Caixa
+                            $qtdCaixaRaw = $product?->qtunitcx;
+
+                            if (is_numeric($qtdCaixaRaw)) {
+                                $floatVal = (float) $qtdCaixaRaw;
+                                // Se o valor com decimais for matematicamente igual à sua versão inteira (25.00 == 25)
+                                // forçamos o tipo para (int). Caso contrário, mantemos como (float).
+                                $qtdCaixaExibicao = ($floatVal == (int) $floatVal) ? (int) $floatVal : $floatVal;
+                            } else {
+                                // Se for um texto ou fração exata da embalagem (ex: "2 1/2"), passa direto
+                                $qtdCaixaExibicao = $qtdCaixaRaw ?? '-';
+                            }
+
                             $writer->addRow(Row::fromValues([
                                 $reqItem?->winthor_code ?? $product?->codprod ?? '-',
                                 $reqItem?->product_name ?? '-',
                                 $product?->product_name_en ?? '-',
                                 $product?->barcode ?? $product?->ean ?? '-',
-                                $product?->qtunitcx ?? '-',
+                                $qtdCaixaExibicao,
                                 round((float) ($reqItem?->quantity ?? 0), 2),
                                 round((float) ($reqItem?->unit_price ?? 0), 2),
                                 round((float) $item->initial_value, 2),
@@ -288,12 +301,25 @@ class EditSettlement extends EditRecord
                             $apportionmentUsd = round($percentage * $totalExpensesUsd, 2);
                             $finalUsd = $partialUsd + $apportionmentUsd;
 
+                            // Tratamento estrito de tipo para a Qtd Caixa
+                            $qtdCaixaRaw = $product?->qtunitcx;
+
+                            if (is_numeric($qtdCaixaRaw)) {
+                                $floatVal = (float) $qtdCaixaRaw;
+                                // Se o valor com decimais for matematicamente igual à sua versão inteira (25.00 == 25)
+                                // forçamos o tipo para (int). Caso contrário, mantemos como (float).
+                                $qtdCaixaExibicao = ($floatVal == (int) $floatVal) ? (int) $floatVal : $floatVal;
+                            } else {
+                                // Se for um texto ou fração exata da embalagem (ex: "2 1/2"), passa direto
+                                $qtdCaixaExibicao = $qtdCaixaRaw ?? '-';
+                            }
+
                             $writer->addRow(Row::fromValues([
                                 $reqItem?->winthor_code ?? $product?->codprod ?? '-',
                                 $reqItem?->product_name ?? '-',
                                 $product?->product_name_en ?? '-',
                                 $product?->barcode ?? $product?->ean ?? '-',
-                                $product?->qtunitcx ?? '-',
+                                $qtdCaixaExibicao,
                                 round((float) ($reqItem?->quantity ?? 0), 2),
                                 $toUsd($reqItem?->unit_price ?? 0),
                                 $toUsd($item->initial_value),
