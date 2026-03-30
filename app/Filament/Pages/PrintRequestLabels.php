@@ -183,7 +183,9 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                 TextColumn::make('product_name')
                     ->label('Produto')
                     ->weight('bold')
-                    ->wrap(),
+                    ->wrap()
+                    ->searchable()
+                    ->sortable(),
 
                 TextColumn::make('quantity')
                     ->label('Qtd Cx')
