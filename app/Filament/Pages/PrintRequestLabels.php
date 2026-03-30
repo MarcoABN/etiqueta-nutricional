@@ -130,12 +130,16 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                         Grid::make(12)->schema([
                             Select::make('request_id')
                                 ->label('Pesquisar Solicitação')
-                                ->placeholder('Selecione pelo Nº do Pedido')
-                                // CORREÇÃO 1: Mostra apenas solicitações em aberto
-                                ->options(Request::where('status', 'aberto')->orderByDesc('created_at')->limit(100)->pluck('display_id', 'id'))
+                                ->placeholder('Selecione pela Observação') // Alterado o placeholder
+                                // Mostra apenas solicitações em aberto e carrega pela descrição (observation)
+                                ->options(
+                                    Request::where('status', 'aberto')
+                                        ->orderByDesc('created_at')
+                                        ->limit(100)
+                                        ->pluck('observation', 'id') // Modificado de display_id para observation
+                                )
                                 ->searchable()
                                 ->live()
-                                // CORREÇÃO 2: Limpa o cache da tabela e força o recarregamento ao selecionar
                                 ->afterStateUpdated(function ($livewire) {
                                     if (method_exists($livewire, 'resetTable')) {
                                         $livewire->resetTable();
@@ -178,7 +182,9 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                         return $query->whereRaw('1 = 0');
                     })
                     ->whereNotNull('product_id')
+                    ->orderBy('product_name', 'asc') // Garante ordenação alfabética na base de dados
             )
+            ->defaultSort('product_name', 'asc') // Reflete a ordenação na UI do Filament
             ->columns([
 
                 TextColumn::make('winthor_code')
