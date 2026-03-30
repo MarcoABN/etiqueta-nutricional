@@ -14,7 +14,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Actions\Action;
+use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -23,8 +23,10 @@ use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\ActionSize;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\HtmlString;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ProductResource extends Resource
@@ -41,6 +43,7 @@ class ProductResource extends Resource
     {
         return $form
             ->extraAttributes([
+                'class' => 'nx-compact-form',
                 'x-on:keydown.enter.prevent' => <<<'JS'
                     let inputs = [...$el.closest('form').querySelectorAll('input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])')];
                     let index = inputs.indexOf($event.target);
@@ -51,12 +54,35 @@ class ProductResource extends Resource
                 JS,
             ])
             ->schema([
+                Forms\Components\Placeholder::make('estilos_compactos')
+                    ->hiddenLabel()
+                    ->content(new HtmlString('
+                        <style>
+                            .nx-compact-form .grid { gap: 0.75rem !important; }
+                            .nx-compact-form .fi-fo-field-wrp { gap: 0.15rem !important; }
+                            .nx-compact-form .fi-fo-field-wrp-label span { font-size: 0.8rem !important; }
+                            .nx-compact-form .fi-input-wrp input,
+                            .nx-compact-form .fi-select-input {
+                                padding-top: 0.35rem !important;
+                                padding-bottom: 0.35rem !important;
+                                height: 2.1rem !important;
+                                min-height: 2.1rem !important;
+                                font-size: 0.85rem !important;
+                            }
+                            .nx-compact-form .fi-section-content { padding: 1rem !important; }
+                            .nx-compact-form .fi-input-sfx button {
+                                padding: 0.25rem !important;
+                                height: auto !important;
+                            }
+                        </style>
+                    '))
+                    ->columnSpanFull(),
+
                 Section::make('Dados Principais do Produto')
                     ->compact()
                     ->schema([
                         Forms\Components\Grid::make(12)
                             ->schema([
-                                // Linha 1
                                 TextInput::make('codprod')
                                     ->label('Cód. WinThor')
                                     ->required()
@@ -93,7 +119,6 @@ class ProductResource extends Resource
                                     ->selectablePlaceholder(false)
                                     ->columnSpan(['default' => 12, 'md' => 4]),
 
-                                // Linha 2
                                 TextInput::make('product_name')
                                     ->label('Nome do Produto')
                                     ->required()
@@ -103,7 +128,6 @@ class ProductResource extends Resource
                                     ->label('Nome (Inglês - Tradução)')
                                     ->columnSpan(['default' => 12, 'md' => 6]),
 
-                                // Linha 3
                                 TextInput::make('qtunitcx')
                                     ->label('Qtd. Unit. na Caixa')
                                     ->numeric()
@@ -129,6 +153,104 @@ class ProductResource extends Resource
 
                 Section::make('Tabela Nutricional (Macronutrientes)')
                     ->compact()
+                    ->headerActions([
+                        // NOVA FUNÇÃO: Botão de Clonar Tabela Nutricional
+                        FormAction::make('replicar_tabela')
+                            ->label('Copiar de Outro Produto')
+                            ->icon('heroicon-m-document-duplicate')
+                            ->color('gray')
+                            ->size(ActionSize::Small)
+                            ->form([
+                                TextInput::make('source_codprod')
+                                    ->label('Cód. WinThor de Origem')
+                                    ->required()
+                                    ->numeric()
+                                    ->autofocus()
+                                    ->placeholder('Ex: 12345'),
+                            ])
+                            ->action(function (array $data, Set $set) {
+                                $sourceProduct = Product::where('codprod', $data['source_codprod'])->first();
+
+                                if (!$sourceProduct) {
+                                    Notification::make()
+                                        ->title('Produto não encontrado')
+                                        ->body('Verifique se o Cód. WinThor está correto.')
+                                        ->danger()
+                                        ->send();
+                                    return;
+                                }
+
+                                // Lista de todos os campos que serão puxados
+                                $camposNutricionais = [
+                                    // Porções e Medidas
+                                    'servings_per_container',
+                                    'serving_weight',
+                                    'serving_size_quantity',
+                                    'serving_size_unit',
+                                    // Macronutrientes
+                                    'calories',
+                                    'total_carb',
+                                    'total_carb_dv',
+                                    'total_sugars',
+                                    'added_sugars',
+                                    'added_sugars_dv',
+                                    'protein',
+                                    'protein_dv',
+                                    'total_fat',
+                                    'total_fat_dv',
+                                    'sat_fat',
+                                    'sat_fat_dv',
+                                    'trans_fat',
+                                    'trans_fat_dv',
+                                    'fiber',
+                                    'fiber_dv',
+                                    'sodium',
+                                    'sodium_dv',
+                                    'cholesterol',
+                                    'cholesterol_dv',
+                                    // Rotulagem e Alergênicos
+                                    'ingredients',
+                                    'allergens_contains',
+                                    'allergens_may_contain',
+                                    // Micronutrientes
+                                    'vitamin_d',
+                                    'calcium',
+                                    'iron',
+                                    'potassium',
+                                    'vitamin_a',
+                                    'vitamin_c',
+                                    'vitamin_e',
+                                    'vitamin_k',
+                                    'thiamin',
+                                    'riboflavin',
+                                    'niacin',
+                                    'vitamin_b6',
+                                    'folate',
+                                    'vitamin_b12',
+                                    'biotin',
+                                    'pantothenic_acid',
+                                    'phosphorus',
+                                    'iodine',
+                                    'magnesium',
+                                    'zinc',
+                                    'selenium',
+                                    'copper',
+                                    'manganese',
+                                    'chromium',
+                                    'molybdenum',
+                                    'chloride'
+                                ];
+
+                                foreach ($camposNutricionais as $campo) {
+                                    $set($campo, $sourceProduct->{$campo});
+                                }
+
+                                Notification::make()
+                                    ->title('Dados copiados com sucesso!')
+                                    ->success()
+                                    ->send();
+                            })
+                    ])
                     ->schema([
                         Forms\Components\Grid::make(['default' => 2, 'sm' => 3, 'md' => 6])
                             ->schema([
@@ -190,7 +312,7 @@ class ProductResource extends Resource
                             Textarea::make('ingredients')
                                 ->label('Lista de Ingredientes (Original/EN)')
                                 ->placeholder('Ingredientes originais ou em inglês...')
-                                ->rows(3), // Reduzido para economizar espaço
+                                ->rows(3),
 
                             Forms\Components\Grid::make(2)->schema([
                                 TextInput::make('allergens_contains')
@@ -259,9 +381,9 @@ class ProductResource extends Resource
             ]);
     }
 
-    public static function getOpenFoodFactsAction(): Action
+    public static function getOpenFoodFactsAction(): FormAction
     {
-        return Action::make('searchApi')
+        return FormAction::make('searchApi')
             ->icon('heroicon-o-cloud-arrow-down')
             ->tooltip('Buscar dados na Open Food Facts')
             ->color('info')
@@ -306,12 +428,11 @@ class ProductResource extends Resource
                     ->sortable()
                     ->weight('bold'),
 
-                // EAN removido e Peso Líquido adicionado no lugar
                 Tables\Columns\TextColumn::make('pesoliq')
                     ->label('Peso Líquido')
                     ->sortable()
-                    ->numeric(2, ',', '.') // Formatação com vírgula para os decimais
-                    ->copyable(),
+                    ->numeric(2, ',', '.')
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('qtunitcx')
                     ->label('Qtd Cx')
