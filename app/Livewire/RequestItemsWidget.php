@@ -54,6 +54,66 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
         return $this->record->is_locked || ($this->record->settlement?->is_locked ?? false);
     }
 
+    /**
+     * Calcula divergências entre os itens da solicitação e o cadastro matriz
+     */
+    protected function getDiscrepancies(): array
+    {
+        $items = RequestItem::with('product')
+            ->where('request_id', $this->record->id)
+            ->whereNotNull('product_id')
+            ->get();
+
+        $discrepancies = [];
+
+        $parseNumber = function ($val) {
+            if ($val === null) return null;
+            $val = (string) $val;
+            if (str_contains($val, ',')) {
+                $val = str_replace('.', '', $val);
+                $val = str_replace(',', '.', $val);
+            }
+            return (float) $val;
+        };
+
+        foreach ($items as $item) {
+            if (!$item->product) continue;
+            $p = $item->product;
+
+            $changes = [];
+
+            if ($item->product_name !== $p->product_name) $changes[] = "Nome: {$item->product_name} ➔ {$p->product_name}";
+            if ($item->product_name_en !== $p->product_name_en) $changes[] = "Nome EN alterado";
+            if ((string)$item->winthor_code !== (string)$p->codprod) $changes[] = "Cód WinThor: {$item->winthor_code} ➔ {$p->codprod}";
+            if ($item->barcode !== ($p->barcode ?? $p->ean)) $changes[] = "EAN: {$item->barcode} ➔ " . ($p->barcode ?? $p->ean);
+            if ($item->ncm !== $p->ncm) $changes[] = "NCM: {$item->ncm} ➔ {$p->ncm}";
+            if ($item->unidade !== $p->unidade) $changes[] = "Un: {$item->unidade} ➔ {$p->unidade}";
+
+            $prodPesoliq = $parseNumber($p->pesoliq);
+            $itemPesoliq = (float) $item->pesoliq;
+            if (abs($prodPesoliq - $itemPesoliq) > 0.0001) {
+                $changes[] = "Peso: {$itemPesoliq} ➔ {$prodPesoliq}";
+            }
+
+            $prodQtunitcx = $parseNumber($p->qtunitcx ?? '1');
+            $itemQtunitcx = (float) $item->qtunitcx;
+            if (abs($prodQtunitcx - $itemQtunitcx) > 0.0001) {
+                $changes[] = "Qtd/CX: {$itemQtunitcx} ➔ {$prodQtunitcx}";
+            }
+
+            if (count($changes) > 0) {
+                $discrepancies[] = [
+                    'item_id' => $item->id,
+                    'product_name' => $item->product_name,
+                    'changes_text' => implode(' | ', $changes),
+                    'update' => true,
+                ];
+            }
+        }
+
+        return $discrepancies;
+    }
+
     public function form(Form $form): Form
     {
         $calcNf = function (Forms\Get $get, Forms\Set $set) {
@@ -294,8 +354,8 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             }
         }
 
-        // 2. DECLARAÇÃO GLOBAL DA VARIÁVEL (Corrige o erro do Intelephense)
-        $product = $prodId ? \App\Models\Product::find($prodId) : null;
+        // 2. DECLARAÇÃO GLOBAL DA VARIÁVEL
+        $product = $prodId ? Product::find($prodId) : null;
 
         // 3. Montagem dos dados com Snapshot (Fotografia)
         $itemData = [
@@ -386,6 +446,95 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
             ->defaultSort('product_name', 'asc')
             ->heading('Itens Gravados')
             ->headerActions([
+                Tables\Actions\Action::make('sync_products')
+                    ->label('')
+                    ->icon('heroicon-o-arrow-path-rounded-square')
+                    ->color('warning')
+                    ->hidden(fn() => $this->isLocked()) // Oculto se já estiver consolidado
+                    ->modalHeading('Sincronizar alterações de produtos')
+                    ->modalDescription('O sistema encontrou divergências entre os dados capturados e os atuais no cadastro de produtos. Selecione o que deseja atualizar.')
+                    ->modalSubmitActionLabel('Atualizar Selecionados')
+                    ->fillForm(fn() => ['discrepancies' => $this->getDiscrepancies()])
+                    ->form(function () {
+                        $discrepancies = $this->getDiscrepancies();
+
+                        if (empty($discrepancies)) {
+                            return [
+                                Forms\Components\Placeholder::make('no_changes')
+                                    ->hiddenLabel()
+                                    ->content(new HtmlString('<div class="p-4 bg-success-50 text-success-600 rounded-lg border border-success-200 text-center dark:bg-success-900/30 dark:border-success-800 dark:text-success-400">✅ Todos os itens listados já estão 100% atualizados com o cadastro!</div>'))
+                            ];
+                        }
+
+                        return [
+                            Forms\Components\Repeater::make('discrepancies')
+                                ->hiddenLabel()
+                                ->schema([
+                                    Forms\Components\Grid::make(12)->schema([
+                                        Forms\Components\Checkbox::make('update')
+                                            ->label('Sincronizar')
+                                            ->inline(false)
+                                            ->columnSpan(['default' => 2]),
+
+                                        Forms\Components\Placeholder::make('info')
+                                            ->hiddenLabel()
+                                            ->content(fn(Forms\Get $get) => new HtmlString('
+                                                <div class="flex flex-col">
+                                                    <span class="font-bold text-gray-900 dark:text-white">' . htmlspecialchars($get('product_name') ?? '') . '</span>
+                                                    <span class="text-sm font-medium text-warning-600 dark:text-warning-400 mt-1">' . htmlspecialchars($get('changes_text') ?? '') . '</span>
+                                                </div>
+                                            '))
+                                            ->columnSpan(['default' => 10])
+                                    ])
+                                ])
+                                ->addable(false)
+                                ->deletable(false)
+                                ->reorderable(false)
+                        ];
+                    })
+                    ->action(function (array $data) {
+                        if (empty($data['discrepancies'])) return;
+
+                        $count = 0;
+                        $parseNumber = function ($val) {
+                            if ($val === null) return null;
+                            $val = (string) $val;
+                            if (str_contains($val, ',')) {
+                                $val = str_replace('.', '', $val);
+                                $val = str_replace(',', '.', $val);
+                            }
+                            return (float) $val;
+                        };
+
+                        foreach ($data['discrepancies'] as $row) {
+                            if (!empty($row['update'])) {
+                                $item = RequestItem::with('product')->find($row['item_id']);
+
+                                if ($item && $item->product) {
+                                    $p = $item->product;
+                                    $item->update([
+                                        'product_name' => $p->product_name,
+                                        'winthor_code' => $p->codprod,
+                                        'product_name_en' => $p->product_name_en,
+                                        'ncm' => $p->ncm,
+                                        'barcode' => $p->barcode ?? $p->ean,
+                                        'pesoliq' => $parseNumber($p->pesoliq ?? '0'),
+                                        'qtunitcx' => $parseNumber($p->qtunitcx ?? '1'),
+                                        'unidade' => $p->unidade,
+                                    ]);
+                                    $count++;
+                                }
+                            }
+                        }
+
+                        if ($count > 0) {
+                            Notification::make()
+                                ->title("{$count} produto(s) sincronizado(s) com sucesso!")
+                                ->success()
+                                ->send();
+                        }
+                    }),
+
                 Tables\Actions\Action::make('totals_display')
                     ->label(function () {
                         $items = RequestItem::where('request_id', $this->record->id)->get();
