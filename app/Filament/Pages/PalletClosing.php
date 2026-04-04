@@ -43,29 +43,6 @@ class PalletClosing extends Page implements HasForms, HasTable
         $this->form->fill();
     }
 
-    /**
-     * Métodos Auxiliares de Estado Real
-     */
-    protected function getRequestId(): ?string
-    {
-        return $this->data['request_id'] ?? null;
-    }
-
-    protected function hasPallets(): bool
-    {
-        $reqId = $this->getRequestId();
-        return $reqId ? Pallet::where('request_id', $reqId)->exists() : false;
-    }
-
-    protected function isRequestLocked(): bool
-    {
-        $reqId = $this->getRequestId();
-        if (!$reqId) return false;
-
-        $req = Request::find($reqId);
-        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
-    }
-
     public function form(Form $form): Form
     {
         return $form
@@ -89,10 +66,12 @@ class PalletClosing extends Page implements HasForms, HasTable
 
     public function table(Table $table): Table
     {
+        $reqId = $this->data['request_id'] ?? null;
+
         return $table
             ->query(
                 Pallet::query()
-                    ->when($this->getRequestId(), fn($q, $id) => $q->where('request_id', $id), fn($q) => $q->whereRaw('1 = 0'))
+                    ->when($reqId, fn($q, $id) => $q->where('request_id', $id), fn($q) => $q->whereRaw('1 = 0'))
                     ->orderBy('pallet_number', 'asc')
             )
             ->columns([
@@ -123,46 +102,26 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->alignCenter(),
             ])
             ->headerActions([
-                // Botão de Adição Rápida (Exibido apenas se já houver pallets)
-                TableAction::make('add_extra_pallet')
-                    ->label('Adicionar Pallet (+1)')
-                    ->icon('heroicon-o-plus')
-                    ->color('success')
-                    ->visible(fn() => $this->getRequestId() && $this->hasPallets())
-                    ->disabled(fn() => $this->isRequestLocked())
-                    ->action(function () {
-                        $reqId = $this->getRequestId();
-                        
-                        $existingPallets = Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
-                        $newNumber = $existingPallets->count() + 1;
-                        
-                        // Herda o texto do importador do primeiro pallet
-                        $importerText = $existingPallets->first()->importer_text 
-                            ?? "IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063";
-
-                        // Cria o novo pallet
-                        Pallet::create([
-                            'request_id'    => $reqId,
-                            'pallet_number' => $newNumber,
-                            'total_pallets' => $newNumber,
-                            'importer_text' => $importerText,
-                        ]);
-
-                        // Atualiza dinamicamente o total_pallets em toda a carga
-                        Pallet::where('request_id', $reqId)->update(['total_pallets' => $newNumber]);
-
-                        Notification::make()->title("Pallet {$newNumber} adicionado!")->success()->send();
-                        $this->resetTable();
-                    }),
-            ])
-            ->emptyStateActions([
-                // Botão de Início (Exibido apenas quando a tabela está vazia)
+                // -------------------------------------------------------------------------
+                // BOTÃO 1: INICIAR (Aparece apenas quando tem solicitação selecionada e 0 pallets)
+                // -------------------------------------------------------------------------
                 TableAction::make('create_first_pallet')
                     ->label('Iniciar Fechamento (1º Pallet)')
                     ->icon('heroicon-o-play')
                     ->color('primary')
-                    ->visible(fn() => (bool) $this->getRequestId() && !$this->hasPallets())
-                    ->disabled(fn() => $this->isRequestLocked())
+                    ->hidden(function (PalletClosing $livewire) {
+                        $reqId = $livewire->data['request_id'] ?? null;
+                        if (!$reqId) return true; // Oculta se não houver solicitação
+                        
+                        // Oculta se JÁ existirem pallets no banco
+                        return Pallet::where('request_id', $reqId)->exists();
+                    })
+                    ->disabled(function (PalletClosing $livewire) {
+                        $reqId = $livewire->data['request_id'] ?? null;
+                        if (!$reqId) return false;
+                        $req = Request::find($reqId);
+                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
+                    })
                     ->form([
                         Textarea::make('importer_text')
                             ->label('Dados do Importador')
@@ -170,16 +129,66 @@ class PalletClosing extends Page implements HasForms, HasTable
                             ->required()
                             ->rows(3),
                     ])
-                    ->action(function (array $data) {
+                    ->action(function (array $data, PalletClosing $livewire) {
+                        $reqId = $livewire->data['request_id'];
+                        
                         Pallet::create([
-                            'request_id'    => $this->getRequestId(),
+                            'request_id'    => $reqId,
                             'pallet_number' => 1,
                             'total_pallets' => 1,
                             'importer_text' => $data['importer_text'],
                         ]);
 
-                        Notification::make()->title('Primeiro pallet iniciado!')->success()->send();
-                        $this->resetTable();
+                        Notification::make()->title('Primeiro pallet gerado com sucesso!')->success()->send();
+                        
+                        // Força a atualização da tabela e do componente Livewire
+                        $livewire->resetTable();
+                        $livewire->dispatch('$refresh');
+                    }),
+
+                // -------------------------------------------------------------------------
+                // BOTÃO 2: ADICIONAR EXTRA (Aparece apenas quando JÁ existem pallets)
+                // -------------------------------------------------------------------------
+                TableAction::make('add_extra_pallet')
+                    ->label('Adicionar Pallet (+1)')
+                    ->icon('heroicon-o-plus')
+                    ->color('success')
+                    ->hidden(function (PalletClosing $livewire) {
+                        $reqId = $livewire->data['request_id'] ?? null;
+                        if (!$reqId) return true; // Oculta se não houver solicitação
+                        
+                        // Oculta se NÃO existirem pallets
+                        return !Pallet::where('request_id', $reqId)->exists();
+                    })
+                    ->disabled(function (PalletClosing $livewire) {
+                        $reqId = $livewire->data['request_id'] ?? null;
+                        if (!$reqId) return false;
+                        $req = Request::find($reqId);
+                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
+                    })
+                    ->action(function (PalletClosing $livewire) {
+                        $reqId = $livewire->data['request_id'];
+                        
+                        $existingPallets = Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
+                        $newNumber = $existingPallets->count() + 1;
+                        
+                        $importerText = $existingPallets->first()->importer_text 
+                            ?? "IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063";
+
+                        Pallet::create([
+                            'request_id'    => $reqId,
+                            'pallet_number' => $newNumber,
+                            'total_pallets' => $newNumber,
+                            'importer_text' => $importerText,
+                        ]);
+
+                        Pallet::where('request_id', $reqId)->update(['total_pallets' => $newNumber]);
+
+                        Notification::make()->title("Pallet {$newNumber} adicionado!")->success()->send();
+                        
+                        // Força a atualização da tabela e do componente Livewire
+                        $livewire->resetTable();
+                        $livewire->dispatch('$refresh');
                     }),
             ])
             ->actions([
@@ -187,7 +196,10 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->label('Preencher')
                     ->icon('heroicon-o-pencil')
                     ->color('warning')
-                    ->disabled(fn() => $this->isRequestLocked())
+                    ->disabled(function (Pallet $record) {
+                        $req = $record->request;
+                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
+                    })
                     ->modalHeading(fn($record) => "Dados do Pallet {$record->pallet_number}/{$record->total_pallets}")
                     ->form([
                         TextInput::make('gross_weight')
@@ -232,19 +244,25 @@ class PalletClosing extends Page implements HasForms, HasTable
 
                 DeleteAction::make()
                     ->label('Excluir Último')
-                    // Validação imediata: se o número dele for menor que o total da carga, oculta.
-                    ->hidden(fn(Pallet $record) => $record->pallet_number < $record->total_pallets)
-                    ->disabled(fn() => $this->isRequestLocked())
-                    ->after(function (Pallet $record) {
-                        // Recalcula para os que ficaram e atualiza em massa
+                    ->hidden(function (Pallet $record) {
+                        // Compara com o número máximo real no banco para garantir que é o último
+                        $max = Pallet::where('request_id', $record->request_id)->max('pallet_number');
+                        return $record->pallet_number < $max;
+                    })
+                    ->disabled(function (Pallet $record) {
+                        $req = $record->request;
+                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
+                    })
+                    ->after(function (Pallet $record, PalletClosing $livewire) {
                         $remainingCount = Pallet::where('request_id', $record->request_id)->count();
                         Pallet::where('request_id', $record->request_id)->update(['total_pallets' => $remainingCount]);
                         
-                        $this->resetTable();
+                        $livewire->resetTable();
+                        $livewire->dispatch('$refresh');
                     }),
             ])
             ->emptyStateHeading('Nenhum pallet gerado')
-            ->emptyStateDescription('Selecione uma solicitação e clique no botão acima para iniciar o processo.')
+            ->emptyStateDescription('Selecione uma solicitação e utilize o botão no cabeçalho da tabela para iniciar.')
             ->paginated(false);
     }
 }
