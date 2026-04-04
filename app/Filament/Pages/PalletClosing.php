@@ -82,7 +82,7 @@ class PalletClosing extends Page implements HasForms, HasTable
                     )
                     ->searchable()
                     ->live()
-                    ->afterStateUpdated(fn ($livewire) => $livewire->resetTable())
+                    ->afterStateUpdated(fn($livewire) => $livewire->resetTable())
             ])
             ->statePath('data');
     }
@@ -95,8 +95,7 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->when($this->getRequestId(), fn($q, $id) => $q->where('request_id', $id), fn($q) => $q->whereRaw('1 = 0'))
                     ->orderBy('pallet_number', 'asc')
             )
-            // O heading força o HTML do cabeçalho a sempre existir, resolvendo o bug da interface sumir
-            ->heading('Gestão da Carga') 
+            ->heading('Gestão da Carga')
             ->description('Controle a quantidade de pallets gerados para esta solicitação.')
             ->columns([
                 TextColumn::make('pallet_number')
@@ -126,13 +125,15 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->alignCenter(),
             ])
             ->headerActions([
-                // AÇÃO 1: Fica ativa se NÃO existirem pallets
+                // AÇÃO 1: Iniciar (Aparece SOMENTE quando a carga está zerada)
                 TableAction::make('create_first_pallet')
                     ->label('Iniciar (1º Pallet)')
                     ->icon('heroicon-o-play')
                     ->color('primary')
-                    // Desabilitado se: Não tiver pedido, ou se já tiver pallets, ou estiver trancado
-                    ->disabled(fn() => !$this->getRequestId() || $this->hasPallets() || $this->isRequestLocked())
+                    // Oculta completamente se não tiver pedido ou se já tiver pallets gerados
+                    ->hidden(fn() => !$this->getRequestId() || $this->hasPallets())
+                    // Fica cinza caso a solicitação esteja trancada
+                    ->disabled(fn() => $this->isRequestLocked())
                     ->form([
                         Textarea::make('importer_text')
                             ->label('Dados do Importador')
@@ -152,20 +153,22 @@ class PalletClosing extends Page implements HasForms, HasTable
                         $this->resetTable();
                     }),
 
-                // AÇÃO 2: Fica ativa se JÁ existirem pallets
+                // AÇÃO 2: Adicionar Extra (Aparece SOMENTE após o 1º pallet ser gerado)
                 TableAction::make('add_extra_pallet')
                     ->label('Adicionar (+1)')
                     ->icon('heroicon-o-plus')
                     ->color('success')
-                    // Desabilitado se: Não tiver pedido, ou se NÃO tiver pallets, ou estiver trancado
-                    ->disabled(fn() => !$this->getRequestId() || !$this->hasPallets() || $this->isRequestLocked())
+                    // Oculta completamente se não tiver pedido ou se a carga estiver zerada
+                    ->hidden(fn() => !$this->getRequestId() || !$this->hasPallets())
+                    // Fica cinza caso a solicitação esteja trancada
+                    ->disabled(fn() => $this->isRequestLocked())
                     ->action(function () {
                         $reqId = $this->getRequestId();
-                        
+
                         $existingPallets = Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
                         $newNumber = $existingPallets->count() + 1;
-                        
-                        $importerText = $existingPallets->first()->importer_text 
+
+                        $importerText = $existingPallets->first()->importer_text
                             ?? "IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063";
 
                         Pallet::create([
@@ -175,7 +178,6 @@ class PalletClosing extends Page implements HasForms, HasTable
                             'importer_text' => $importerText,
                         ]);
 
-                        // Atualiza as frações de todos os pallets na carga
                         Pallet::where('request_id', $reqId)->update(['total_pallets' => $newNumber]);
 
                         Notification::make()->title("Pallet {$newNumber} adicionado!")->success()->send();
@@ -231,13 +233,15 @@ class PalletClosing extends Page implements HasForms, HasTable
                     }),
 
                 DeleteAction::make()
-                    ->label('Excluir Último')
-                    // Modificamos hidden para disabled. Assim o botão sempre existe, mas só é clicável na última linha.
-                    ->disabled(fn(Pallet $record) => $record->pallet_number < $record->total_pallets || $this->isRequestLocked())
+                    ->label('Excluir')
+                    // Oculta completamente o botão de excluir de todos os pallets, exceto do último
+                    ->hidden(fn(Pallet $record) => $record->pallet_number < $record->total_pallets)
+                    // Se for o último, exibe o botão. Mas se estiver trancado, deixa ele cinza e inativo.
+                    ->disabled(fn() => $this->isRequestLocked())
                     ->after(function (Pallet $record) {
                         $remainingCount = Pallet::where('request_id', $record->request_id)->count();
                         Pallet::where('request_id', $record->request_id)->update(['total_pallets' => $remainingCount]);
-                        
+
                         $this->resetTable();
                     }),
             ])
