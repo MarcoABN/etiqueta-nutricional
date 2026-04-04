@@ -49,13 +49,14 @@ class PalletClosing extends Page implements HasForms, HasTable
             ->schema([
                 Select::make('request_id')
                     ->label('Selecionar Solicitação')
-                    ->placeholder('Selecione pelo Nº do Pedido')
+                    ->placeholder('Selecione pela Descrição do Pedido')
                     ->options(
                         Request::query()
                             ->where('status', 'aberto')
                             ->orWhereHas('pallets')
                             ->orderByDesc('created_at')
-                            ->pluck('display_id', 'id')
+                            // Substitua 'description' pelo nome exato da coluna da sua descrição
+                            ->pluck('description', 'id')
                     )
                     ->searchable()
                     ->live()
@@ -72,86 +73,124 @@ class PalletClosing extends Page implements HasForms, HasTable
     {
         $reqId = $this->data['request_id'] ?? null;
 
-        // Ação para gerar o lote inicial de pallets
-        $generatePalletsAction = TableAction::make('generate_pallets')
-            ->label('Gerar Pallets')
-            ->icon('heroicon-o-plus-circle')
-            ->color('primary')
-            ->visible(function () use ($reqId) {
-                if (!$reqId) return false;
+        return $table
+            ->query(
+                Pallet::query()
+                    ->when($reqId, fn($q, $id) => $q->where('request_id', $id), fn($q) => $q->whereRaw('1 = 0'))
+                    ->orderBy('pallet_number', 'asc')
+            )
+            ->columns([
+                TextColumn::make('pallet_number')
+                    ->label('Número')
+                    ->formatStateUsing(fn($record) => "{$record->pallet_number} / {$record->total_pallets}")
+                    ->badge()
+                    ->color('gray')
+                    ->alignCenter(),
 
-                $hasNoPallets = Pallet::where('request_id', $reqId)->count() === 0;
-                $request = \App\Models\Request::find($reqId);
-                $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
-
-                return $hasNoPallets && !$isLocked;
-            })
-            ->form([
-                Textarea::make('importer_text')
-                    ->label('Dados do Importador')
-                    ->default("IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063")
-                    ->required()
-                    ->rows(3),
-
-                TextInput::make('total_pallets')
-                    ->label('Total de Pallets')
+                TextColumn::make('gross_weight')
+                    ->label('Peso Total (KG)')
                     ->numeric()
-                    ->minValue(1)
-                    ->maxValue(200)
-                    ->required(),
+                    ->default('Pendente')
+                    ->alignCenter(),
+
+                TextColumn::make('height')
+                    ->label('Altura (m)')
+                    ->numeric()
+                    ->default('Pendente')
+                    ->alignCenter(),
+
+                TextColumn::make('status')
+                    ->label('Status')
+                    ->state(fn($record) => $record->gross_weight && $record->height ? 'Pronto' : 'Pendente')
+                    ->badge()
+                    ->color(fn($state) => $state === 'Pronto' ? 'success' : 'warning')
+                    ->alignCenter(),
             ])
-            ->action(function (array $data) use ($reqId) {
-                for ($i = 1; $i <= $data['total_pallets']; $i++) {
-                    Pallet::create([
-                        'request_id' => $reqId,
-                        'pallet_number' => $i,
-                        'total_pallets' => $data['total_pallets'],
-                        'importer_text' => $data['importer_text'],
-                    ]);
-                }
-                Notification::make()->title('Pallets gerados com sucesso!')->success()->send();
-            });
+            ->headerActions([
+                // AÇÃO 1: GERAR LOTE INICIAL
+                TableAction::make('generate_pallets')
+                    ->label('Gerar Pallets')
+                    ->icon('heroicon-o-plus-circle')
+                    ->color('primary')
+                    ->visible(function () {
+                        $reqId = $this->data['request_id'] ?? null;
+                        if (!$reqId) return false;
 
-        // NOVO: Ação para adicionar um pallet extra individualmente
-        // NOVO: Ação para adicionar um pallet extra individualmente
-        $addPalletAction = TableAction::make('add_pallet')
-            ->label('Adicionar Pallet Extra')
-            ->icon('heroicon-o-plus')
-            ->color('success')
-            // Injetamos a instância do Livewire na closure para ler o estado atual em tempo real
-            ->visible(function ($livewire) {
-                $reqId = $livewire->data['request_id'] ?? null;
-                if (!$reqId) return false;
+                        $hasNoPallets = Pallet::where('request_id', $reqId)->count() === 0;
+                        $request = \App\Models\Request::find($reqId);
+                        $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
 
-                $hasPallets = \App\Models\Pallet::where('request_id', $reqId)->count() > 0;
-                $request = \App\Models\Request::find($reqId);
-                $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
+                        return $hasNoPallets && !$isLocked;
+                    })
+                    ->form([
+                        Textarea::make('importer_text')
+                            ->label('Dados do Importador')
+                            ->default("IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063")
+                            ->required()
+                            ->rows(3),
 
-                return $hasPallets && !$isLocked;
-            })
-            ->action(function ($livewire) {
-                $reqId = $livewire->data['request_id'] ?? null;
-                if (!$reqId) return;
+                        TextInput::make('total_pallets')
+                            ->label('Total de Pallets')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(200)
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
+                        $reqId = $this->data['request_id'] ?? null;
+                        for ($i = 1; $i <= $data['total_pallets']; $i++) {
+                            Pallet::create([
+                                'request_id' => $reqId,
+                                'pallet_number' => $i,
+                                'total_pallets' => $data['total_pallets'],
+                                'importer_text' => $data['importer_text'],
+                            ]);
+                        }
+                        Notification::make()->title('Pallets gerados com sucesso!')->success()->send();
+                    }),
 
-                $existingPallets = \App\Models\Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
+                // AÇÃO 2: ADICIONAR PALLET EXTRA
+                TableAction::make('add_pallet')
+                    ->label('Adicionar Pallet Extra')
+                    ->icon('heroicon-o-plus')
+                    ->color('success')
+                    ->visible(function () {
+                        $reqId = $this->data['request_id'] ?? null;
+                        if (!$reqId) return false;
 
-                if ($existingPallets->isEmpty()) return;
+                        // Avalia dinamicamente a cada renderização da tabela
+                        $hasPallets = \App\Models\Pallet::where('request_id', $reqId)->exists();
+                        $request = \App\Models\Request::find($reqId);
 
-                $importerText = $existingPallets->first()->importer_text; // Herda o texto do importador
-                $newTotal = $existingPallets->count() + 1;
+                        // Nota: Se a solicitação antiga estiver trancada, o botão não aparecerá por segurança.
+                        $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
 
-                \App\Models\Pallet::create([
-                    'request_id' => $reqId,
-                    'pallet_number' => $newTotal, // Entra como o último da fila
-                    'total_pallets' => $newTotal,
-                    'importer_text' => $importerText,
-                ]);
+                        return $hasPallets && !$isLocked;
+                    })
+                    ->action(function () {
+                        $reqId = $this->data['request_id'] ?? null;
+                        $existingPallets = \App\Models\Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
 
-                // Atualiza o total dos pallets anteriores no banco PostgreSQL
-                \App\Models\Pallet::where('request_id', $reqId)->update(['total_pallets' => $newTotal]);
+                        if ($existingPallets->isEmpty()) return;
 
-                Notification::make()->title('Pallet extra adicionado com sucesso!')->success()->send();
-            });
+                        // Fallback: Se o pallet for antigo e não tiver 'importer_text', aplica um texto padrão para não quebrar a inserção
+                        $importerText = $existingPallets->first()->importer_text
+                            ?? "IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063";
+
+                        $newTotal = $existingPallets->count() + 1;
+
+                        \App\Models\Pallet::create([
+                            'request_id' => $reqId,
+                            'pallet_number' => $newTotal,
+                            'total_pallets' => $newTotal,
+                            'importer_text' => $importerText,
+                        ]);
+
+                        \App\Models\Pallet::where('request_id', $reqId)->update(['total_pallets' => $newTotal]);
+
+                        Notification::make()->title('Pallet extra adicionado com sucesso!')->success()->send();
+                    })
+            ]);
 
         return $table
             ->query(
