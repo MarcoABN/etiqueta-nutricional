@@ -43,6 +43,29 @@ class PalletClosing extends Page implements HasForms, HasTable
         $this->form->fill();
     }
 
+    /**
+     * Métodos Auxiliares de Estado Real
+     */
+    protected function getRequestId(): ?string
+    {
+        return $this->data['request_id'] ?? null;
+    }
+
+    protected function hasPallets(): bool
+    {
+        $reqId = $this->getRequestId();
+        return $reqId ? Pallet::where('request_id', $reqId)->exists() : false;
+    }
+
+    protected function isRequestLocked(): bool
+    {
+        $reqId = $this->getRequestId();
+        if (!$reqId) return false;
+
+        $req = Request::find($reqId);
+        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
+    }
+
     public function form(Form $form): Form
     {
         return $form
@@ -66,14 +89,15 @@ class PalletClosing extends Page implements HasForms, HasTable
 
     public function table(Table $table): Table
     {
-        $reqId = $this->data['request_id'] ?? null;
-
         return $table
             ->query(
                 Pallet::query()
-                    ->when($reqId, fn($q, $id) => $q->where('request_id', $id), fn($q) => $q->whereRaw('1 = 0'))
+                    ->when($this->getRequestId(), fn($q, $id) => $q->where('request_id', $id), fn($q) => $q->whereRaw('1 = 0'))
                     ->orderBy('pallet_number', 'asc')
             )
+            // O heading força o HTML do cabeçalho a sempre existir, resolvendo o bug da interface sumir
+            ->heading('Gestão da Carga') 
+            ->description('Controle a quantidade de pallets gerados para esta solicitação.')
             ->columns([
                 TextColumn::make('pallet_number')
                     ->label('Número')
@@ -102,26 +126,13 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->alignCenter(),
             ])
             ->headerActions([
-                // -------------------------------------------------------------------------
-                // BOTÃO 1: INICIAR (Aparece apenas quando tem solicitação selecionada e 0 pallets)
-                // -------------------------------------------------------------------------
+                // AÇÃO 1: Fica ativa se NÃO existirem pallets
                 TableAction::make('create_first_pallet')
-                    ->label('Iniciar Fechamento (1º Pallet)')
+                    ->label('Iniciar (1º Pallet)')
                     ->icon('heroicon-o-play')
                     ->color('primary')
-                    ->hidden(function (PalletClosing $livewire) {
-                        $reqId = $livewire->data['request_id'] ?? null;
-                        if (!$reqId) return true; // Oculta se não houver solicitação
-                        
-                        // Oculta se JÁ existirem pallets no banco
-                        return Pallet::where('request_id', $reqId)->exists();
-                    })
-                    ->disabled(function (PalletClosing $livewire) {
-                        $reqId = $livewire->data['request_id'] ?? null;
-                        if (!$reqId) return false;
-                        $req = Request::find($reqId);
-                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
-                    })
+                    // Desabilitado se: Não tiver pedido, ou se já tiver pallets, ou estiver trancado
+                    ->disabled(fn() => !$this->getRequestId() || $this->hasPallets() || $this->isRequestLocked())
                     ->form([
                         Textarea::make('importer_text')
                             ->label('Dados do Importador')
@@ -129,45 +140,27 @@ class PalletClosing extends Page implements HasForms, HasTable
                             ->required()
                             ->rows(3),
                     ])
-                    ->action(function (array $data, PalletClosing $livewire) {
-                        $reqId = $livewire->data['request_id'];
-                        
+                    ->action(function (array $data) {
                         Pallet::create([
-                            'request_id'    => $reqId,
+                            'request_id'    => $this->getRequestId(),
                             'pallet_number' => 1,
                             'total_pallets' => 1,
                             'importer_text' => $data['importer_text'],
                         ]);
 
-                        Notification::make()->title('Primeiro pallet gerado com sucesso!')->success()->send();
-                        
-                        // Força a atualização da tabela e do componente Livewire
-                        $livewire->resetTable();
-                        $livewire->dispatch('$refresh');
+                        Notification::make()->title('Primeiro pallet iniciado!')->success()->send();
+                        $this->resetTable();
                     }),
 
-                // -------------------------------------------------------------------------
-                // BOTÃO 2: ADICIONAR EXTRA (Aparece apenas quando JÁ existem pallets)
-                // -------------------------------------------------------------------------
+                // AÇÃO 2: Fica ativa se JÁ existirem pallets
                 TableAction::make('add_extra_pallet')
-                    ->label('Adicionar Pallet (+1)')
+                    ->label('Adicionar (+1)')
                     ->icon('heroicon-o-plus')
                     ->color('success')
-                    ->hidden(function (PalletClosing $livewire) {
-                        $reqId = $livewire->data['request_id'] ?? null;
-                        if (!$reqId) return true; // Oculta se não houver solicitação
-                        
-                        // Oculta se NÃO existirem pallets
-                        return !Pallet::where('request_id', $reqId)->exists();
-                    })
-                    ->disabled(function (PalletClosing $livewire) {
-                        $reqId = $livewire->data['request_id'] ?? null;
-                        if (!$reqId) return false;
-                        $req = Request::find($reqId);
-                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
-                    })
-                    ->action(function (PalletClosing $livewire) {
-                        $reqId = $livewire->data['request_id'];
+                    // Desabilitado se: Não tiver pedido, ou se NÃO tiver pallets, ou estiver trancado
+                    ->disabled(fn() => !$this->getRequestId() || !$this->hasPallets() || $this->isRequestLocked())
+                    ->action(function () {
+                        $reqId = $this->getRequestId();
                         
                         $existingPallets = Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
                         $newNumber = $existingPallets->count() + 1;
@@ -182,13 +175,11 @@ class PalletClosing extends Page implements HasForms, HasTable
                             'importer_text' => $importerText,
                         ]);
 
+                        // Atualiza as frações de todos os pallets na carga
                         Pallet::where('request_id', $reqId)->update(['total_pallets' => $newNumber]);
 
                         Notification::make()->title("Pallet {$newNumber} adicionado!")->success()->send();
-                        
-                        // Força a atualização da tabela e do componente Livewire
-                        $livewire->resetTable();
-                        $livewire->dispatch('$refresh');
+                        $this->resetTable();
                     }),
             ])
             ->actions([
@@ -196,10 +187,7 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->label('Preencher')
                     ->icon('heroicon-o-pencil')
                     ->color('warning')
-                    ->disabled(function (Pallet $record) {
-                        $req = $record->request;
-                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
-                    })
+                    ->disabled(fn() => $this->isRequestLocked())
                     ->modalHeading(fn($record) => "Dados do Pallet {$record->pallet_number}/{$record->total_pallets}")
                     ->form([
                         TextInput::make('gross_weight')
@@ -244,25 +232,17 @@ class PalletClosing extends Page implements HasForms, HasTable
 
                 DeleteAction::make()
                     ->label('Excluir Último')
-                    ->hidden(function (Pallet $record) {
-                        // Compara com o número máximo real no banco para garantir que é o último
-                        $max = Pallet::where('request_id', $record->request_id)->max('pallet_number');
-                        return $record->pallet_number < $max;
-                    })
-                    ->disabled(function (Pallet $record) {
-                        $req = $record->request;
-                        return $req && ($req->is_locked || optional($req->settlement)->is_locked);
-                    })
-                    ->after(function (Pallet $record, PalletClosing $livewire) {
+                    // Modificamos hidden para disabled. Assim o botão sempre existe, mas só é clicável na última linha.
+                    ->disabled(fn(Pallet $record) => $record->pallet_number < $record->total_pallets || $this->isRequestLocked())
+                    ->after(function (Pallet $record) {
                         $remainingCount = Pallet::where('request_id', $record->request_id)->count();
                         Pallet::where('request_id', $record->request_id)->update(['total_pallets' => $remainingCount]);
                         
-                        $livewire->resetTable();
-                        $livewire->dispatch('$refresh');
+                        $this->resetTable();
                     }),
             ])
-            ->emptyStateHeading('Nenhum pallet gerado')
-            ->emptyStateDescription('Selecione uma solicitação e utilize o botão no cabeçalho da tabela para iniciar.')
+            ->emptyStateHeading('Carga Vazia')
+            ->emptyStateDescription('Clique em "Iniciar (1º Pallet)" no cabeçalho acima para começar.')
             ->paginated(false);
     }
 }
