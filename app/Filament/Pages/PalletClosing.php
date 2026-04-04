@@ -77,16 +77,20 @@ class PalletClosing extends Page implements HasForms, HasTable
             ->label('Gerar Pallets')
             ->icon('heroicon-o-plus-circle')
             ->color('primary')
-            ->visible(function () {
-                // Lemos dinamicamente o estado atual do select
+            ->hidden(function () {
+                $currentReqId = $this->data['request_id'] ?? null;
+                if (!$currentReqId) return true; // Oculta se não houver pedido selecionado
+
+                // Oculta se JÁ existirem pallets (pois usaremos o botão de Adicionar Extra)
+                return Pallet::where('request_id', $currentReqId)->count() > 0;
+            })
+            ->disabled(function () {
                 $currentReqId = $this->data['request_id'] ?? null;
                 if (!$currentReqId) return false;
 
-                $hasNoPallets = Pallet::where('request_id', $currentReqId)->count() === 0;
+                // Desativa se estiver trancado
                 $request = Request::find($currentReqId);
-                $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
-
-                return $hasNoPallets && !$isLocked;
+                return ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
             })
             ->form([
                 Textarea::make('importer_text')
@@ -120,16 +124,20 @@ class PalletClosing extends Page implements HasForms, HasTable
             ->label('Adicionar Pallet Extra')
             ->icon('heroicon-o-plus')
             ->color('success')
-            ->visible(function () {
-                // Lemos dinamicamente o estado atual do select
+            ->hidden(function () {
+                $currentReqId = $this->data['request_id'] ?? null;
+                if (!$currentReqId) return true; // Oculta se não houver pedido
+
+                // Oculta se NÃO existirem pallets (pois usaremos o botão de Gerar)
+                return Pallet::where('request_id', $currentReqId)->count() === 0;
+            })
+            ->disabled(function () {
                 $currentReqId = $this->data['request_id'] ?? null;
                 if (!$currentReqId) return false;
 
-                $hasPallets = Pallet::where('request_id', $currentReqId)->exists();
+                // Desativa se a solicitação estiver trancada
                 $request = Request::find($currentReqId);
-                $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
-
-                return $hasPallets && !$isLocked;
+                return ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
             })
             ->action(function () {
                 $currentReqId = $this->data['request_id'] ?? null;
@@ -149,13 +157,12 @@ class PalletClosing extends Page implements HasForms, HasTable
                     'importer_text' => $importerText,
                 ]);
 
-                // Atualiza o total para todos os pallets da solicitação
+                // Atualiza o total de todos no Postgres
                 Pallet::where('request_id', $currentReqId)->update(['total_pallets' => $newTotal]);
 
                 Notification::make()->title('Pallet extra adicionado com sucesso!')->success()->send();
             });
 
-        // 3. Retorno da montagem da Tabela
         return $table
             ->query(
                 Pallet::query()
@@ -249,20 +256,18 @@ class PalletClosing extends Page implements HasForms, HasTable
 
                 DeleteAction::make()
                     ->label('Excluir')
-                    ->visible(function ($record) {
-                        // Verifica se é o último pallet da sequência
-                        $isLast = ! Pallet::where('request_id', $record->request_id)
-                            ->where('pallet_number', '>', $record->pallet_number)
-                            ->exists();
+                    ->hidden(function (Pallet $record) {
+                        // Verifica no banco qual é o maior pallet_number desta carga.
+                        $maxNumber = Pallet::where('request_id', $record->request_id)->max('pallet_number');
 
-                        return $isLast;
+                        // Oculta o botão se a linha atual NÃO for o último número (maior número)
+                        return $record->pallet_number != $maxNumber;
                     })
-                    ->disabled(function ($record) {
+                    ->disabled(function (Pallet $record) {
                         $request = $record->request;
                         return ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
                     })
-                    ->after(function ($record) {
-                        // Recalcula o total_pallets após a exclusão e atualiza em massa
+                    ->after(function (Pallet $record) {
                         $remainingCount = Pallet::where('request_id', $record->request_id)->count();
 
                         Pallet::where('request_id', $record->request_id)
