@@ -56,7 +56,7 @@ class PalletClosing extends Page implements HasForms, HasTable
                             ->orWhereHas('pallets')
                             ->orderByDesc('created_at')
                             // Substitua 'description' pelo nome exato da coluna da sua descrição
-                            ->pluck('description', 'id')
+                            ->pluck('observation', 'id')
                     )
                     ->searchable()
                     ->live()
