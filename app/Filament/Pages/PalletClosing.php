@@ -239,25 +239,27 @@ class PalletClosing extends Page implements HasForms, HasTable
                 // NOVO: Ação de exclusão com reordenação subsequente
                 DeleteAction::make()
                     ->label('Excluir')
+                    ->visible(function ($record) {
+                        // Regra de Integridade: Só exibe o botão se NÃO existir nenhum pallet 
+                        // com número superior ao atual para esta mesma solicitação.
+                        $isLast = ! \App\Models\Pallet::where('request_id', $record->request_id)
+                            ->where('pallet_number', '>', $record->pallet_number)
+                            ->exists();
+
+                        return $isLast;
+                    })
                     ->disabled(function ($record) {
+                        // Mantém a trava de segurança caso o pedido já esteja consolidado/trancado
                         $request = $record->request;
                         return ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
                     })
                     ->after(function ($record) {
-                        // Após excluir, busca os pallets restantes para a mesma solicitação e os reordena
-                        $remainingPallets = Pallet::where('request_id', $record->request_id)
-                            ->orderBy('pallet_number', 'asc')
-                            ->get();
+                        // Após excluir o último, precisamos atualizar o 'total_pallets' dos que ficaram
+                        $remainingCount = \App\Models\Pallet::where('request_id', $record->request_id)->count();
 
-                        $total = $remainingPallets->count();
-
-                        // Atualiza a numeração de 1 até o novo total
-                        foreach ($remainingPallets as $index => $pallet) {
-                            $pallet->update([
-                                'pallet_number' => $index + 1,
-                                'total_pallets' => $total,
-                            ]);
-                        }
+                        // Atualiza o campo total_pallets em massa para os registros restantes
+                        \App\Models\Pallet::where('request_id', $record->request_id)
+                            ->update(['total_pallets' => $remainingCount]);
                     })
             ])
             ->emptyStateHeading('Nenhum pallet gerado')
