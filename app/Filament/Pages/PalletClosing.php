@@ -113,26 +113,34 @@ class PalletClosing extends Page implements HasForms, HasTable
             });
 
         // NOVO: Ação para adicionar um pallet extra individualmente
+        // NOVO: Ação para adicionar um pallet extra individualmente
         $addPalletAction = TableAction::make('add_pallet')
             ->label('Adicionar Pallet Extra')
             ->icon('heroicon-o-plus')
             ->color('success')
-            ->visible(function () use ($reqId) {
+            // Injetamos a instância do Livewire na closure para ler o estado atual em tempo real
+            ->visible(function ($livewire) {
+                $reqId = $livewire->data['request_id'] ?? null;
                 if (!$reqId) return false;
 
-                $hasPallets = Pallet::where('request_id', $reqId)->count() > 0;
+                $hasPallets = \App\Models\Pallet::where('request_id', $reqId)->count() > 0;
                 $request = \App\Models\Request::find($reqId);
                 $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
 
-                // Só exibe se já houver pallets e não estiver bloqueado
                 return $hasPallets && !$isLocked;
             })
-            ->action(function () use ($reqId) {
-                $existingPallets = Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
+            ->action(function ($livewire) {
+                $reqId = $livewire->data['request_id'] ?? null;
+                if (!$reqId) return;
+
+                $existingPallets = \App\Models\Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
+
+                if ($existingPallets->isEmpty()) return;
+
                 $importerText = $existingPallets->first()->importer_text; // Herda o texto do importador
                 $newTotal = $existingPallets->count() + 1;
 
-                Pallet::create([
+                \App\Models\Pallet::create([
                     'request_id' => $reqId,
                     'pallet_number' => $newTotal, // Entra como o último da fila
                     'total_pallets' => $newTotal,
@@ -140,7 +148,7 @@ class PalletClosing extends Page implements HasForms, HasTable
                 ]);
 
                 // Atualiza o total dos pallets anteriores no banco PostgreSQL
-                Pallet::where('request_id', $reqId)->update(['total_pallets' => $newTotal]);
+                \App\Models\Pallet::where('request_id', $reqId)->update(['total_pallets' => $newTotal]);
 
                 Notification::make()->title('Pallet extra adicionado com sucesso!')->success()->send();
             });
@@ -180,7 +188,7 @@ class PalletClosing extends Page implements HasForms, HasTable
             ])
             ->headerActions([
                 $generatePalletsAction,
-                $addPalletAction // NOVO: Botão de adição no cabeçalho
+                $addPalletAction // <-- Deve estar aqui para aparecer no topo da tabela
             ])
             ->emptyStateActions([
                 $generatePalletsAction
