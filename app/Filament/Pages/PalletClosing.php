@@ -20,7 +20,7 @@ use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Actions\Action as TableAction;
 use Filament\Tables\Actions\EditAction;
-use Filament\Tables\Actions\DeleteAction; // NOVO: Importação do DeleteAction
+use Filament\Tables\Actions\DeleteAction;
 use Filament\Notifications\Notification;
 use Illuminate\Support\HtmlString;
 
@@ -55,7 +55,6 @@ class PalletClosing extends Page implements HasForms, HasTable
                             ->where('status', 'aberto')
                             ->orWhereHas('pallets')
                             ->orderByDesc('created_at')
-                            // Substitua 'description' pelo nome exato da coluna da sua descrição
                             ->pluck('observation', 'id')
                     )
                     ->searchable()
@@ -73,125 +72,90 @@ class PalletClosing extends Page implements HasForms, HasTable
     {
         $reqId = $this->data['request_id'] ?? null;
 
-        return $table
-            ->query(
-                Pallet::query()
-                    ->when($reqId, fn($q, $id) => $q->where('request_id', $id), fn($q) => $q->whereRaw('1 = 0'))
-                    ->orderBy('pallet_number', 'asc')
-            )
-            ->columns([
-                TextColumn::make('pallet_number')
-                    ->label('Número')
-                    ->formatStateUsing(fn($record) => "{$record->pallet_number} / {$record->total_pallets}")
-                    ->badge()
-                    ->color('gray')
-                    ->alignCenter(),
+        // 1. Ação para gerar o lote inicial
+        $generatePalletsAction = TableAction::make('generate_pallets')
+            ->label('Gerar Pallets')
+            ->icon('heroicon-o-plus-circle')
+            ->color('primary')
+            ->visible(function () {
+                // Lemos dinamicamente o estado atual do select
+                $currentReqId = $this->data['request_id'] ?? null;
+                if (!$currentReqId) return false;
 
-                TextColumn::make('gross_weight')
-                    ->label('Peso Total (KG)')
+                $hasNoPallets = Pallet::where('request_id', $currentReqId)->count() === 0;
+                $request = Request::find($currentReqId);
+                $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
+
+                return $hasNoPallets && !$isLocked;
+            })
+            ->form([
+                Textarea::make('importer_text')
+                    ->label('Dados do Importador')
+                    ->default("IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063")
+                    ->required()
+                    ->rows(3),
+
+                TextInput::make('total_pallets')
+                    ->label('Total de Pallets')
                     ->numeric()
-                    ->default('Pendente')
-                    ->alignCenter(),
-
-                TextColumn::make('height')
-                    ->label('Altura (m)')
-                    ->numeric()
-                    ->default('Pendente')
-                    ->alignCenter(),
-
-                TextColumn::make('status')
-                    ->label('Status')
-                    ->state(fn($record) => $record->gross_weight && $record->height ? 'Pronto' : 'Pendente')
-                    ->badge()
-                    ->color(fn($state) => $state === 'Pronto' ? 'success' : 'warning')
-                    ->alignCenter(),
+                    ->minValue(1)
+                    ->maxValue(200)
+                    ->required(),
             ])
-            ->headerActions([
-                // AÇÃO 1: GERAR LOTE INICIAL
-                TableAction::make('generate_pallets')
-                    ->label('Gerar Pallets')
-                    ->icon('heroicon-o-plus-circle')
-                    ->color('primary')
-                    ->visible(function () {
-                        $reqId = $this->data['request_id'] ?? null;
-                        if (!$reqId) return false;
+            ->action(function (array $data) {
+                $currentReqId = $this->data['request_id'] ?? null;
+                for ($i = 1; $i <= $data['total_pallets']; $i++) {
+                    Pallet::create([
+                        'request_id' => $currentReqId,
+                        'pallet_number' => $i,
+                        'total_pallets' => $data['total_pallets'],
+                        'importer_text' => $data['importer_text'],
+                    ]);
+                }
+                Notification::make()->title('Pallets gerados com sucesso!')->success()->send();
+            });
 
-                        $hasNoPallets = Pallet::where('request_id', $reqId)->count() === 0;
-                        $request = \App\Models\Request::find($reqId);
-                        $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
+        // 2. Ação para adicionar pallet extra
+        $addPalletAction = TableAction::make('add_pallet')
+            ->label('Adicionar Pallet Extra')
+            ->icon('heroicon-o-plus')
+            ->color('success')
+            ->visible(function () {
+                // Lemos dinamicamente o estado atual do select
+                $currentReqId = $this->data['request_id'] ?? null;
+                if (!$currentReqId) return false;
 
-                        return $hasNoPallets && !$isLocked;
-                    })
-                    ->form([
-                        Textarea::make('importer_text')
-                            ->label('Dados do Importador')
-                            ->default("IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063")
-                            ->required()
-                            ->rows(3),
+                $hasPallets = Pallet::where('request_id', $currentReqId)->exists();
+                $request = Request::find($currentReqId);
+                $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
 
-                        TextInput::make('total_pallets')
-                            ->label('Total de Pallets')
-                            ->numeric()
-                            ->minValue(1)
-                            ->maxValue(200)
-                            ->required(),
-                    ])
-                    ->action(function (array $data) {
-                        $reqId = $this->data['request_id'] ?? null;
-                        for ($i = 1; $i <= $data['total_pallets']; $i++) {
-                            Pallet::create([
-                                'request_id' => $reqId,
-                                'pallet_number' => $i,
-                                'total_pallets' => $data['total_pallets'],
-                                'importer_text' => $data['importer_text'],
-                            ]);
-                        }
-                        Notification::make()->title('Pallets gerados com sucesso!')->success()->send();
-                    }),
+                return $hasPallets && !$isLocked;
+            })
+            ->action(function () {
+                $currentReqId = $this->data['request_id'] ?? null;
+                $existingPallets = Pallet::where('request_id', $currentReqId)->orderBy('pallet_number')->get();
 
-                // AÇÃO 2: ADICIONAR PALLET EXTRA
-                TableAction::make('add_pallet')
-                    ->label('Adicionar Pallet Extra')
-                    ->icon('heroicon-o-plus')
-                    ->color('success')
-                    ->visible(function () {
-                        $reqId = $this->data['request_id'] ?? null;
-                        if (!$reqId) return false;
+                if ($existingPallets->isEmpty()) return;
 
-                        // Avalia dinamicamente a cada renderização da tabela
-                        $hasPallets = \App\Models\Pallet::where('request_id', $reqId)->exists();
-                        $request = \App\Models\Request::find($reqId);
+                $importerText = $existingPallets->first()->importer_text
+                    ?? "IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063";
 
-                        // Nota: Se a solicitação antiga estiver trancada, o botão não aparecerá por segurança.
-                        $isLocked = ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
+                $newTotal = $existingPallets->count() + 1;
 
-                        return $hasPallets && !$isLocked;
-                    })
-                    ->action(function () {
-                        $reqId = $this->data['request_id'] ?? null;
-                        $existingPallets = \App\Models\Pallet::where('request_id', $reqId)->orderBy('pallet_number')->get();
+                Pallet::create([
+                    'request_id' => $currentReqId,
+                    'pallet_number' => $newTotal,
+                    'total_pallets' => $newTotal,
+                    'importer_text' => $importerText,
+                ]);
 
-                        if ($existingPallets->isEmpty()) return;
+                // Atualiza o total para todos os pallets da solicitação
+                Pallet::where('request_id', $currentReqId)->update(['total_pallets' => $newTotal]);
 
-                        // Fallback: Se o pallet for antigo e não tiver 'importer_text', aplica um texto padrão para não quebrar a inserção
-                        $importerText = $existingPallets->first()->importer_text
-                            ?? "IMPORTED BY: GO MINAS DISTRIBUTION LLC\n2042 NW 55TH AVE, MARGATE, FL33063";
+                Notification::make()->title('Pallet extra adicionado com sucesso!')->success()->send();
+            });
 
-                        $newTotal = $existingPallets->count() + 1;
-
-                        \App\Models\Pallet::create([
-                            'request_id' => $reqId,
-                            'pallet_number' => $newTotal,
-                            'total_pallets' => $newTotal,
-                            'importer_text' => $importerText,
-                        ]);
-
-                        \App\Models\Pallet::where('request_id', $reqId)->update(['total_pallets' => $newTotal]);
-
-                        Notification::make()->title('Pallet extra adicionado com sucesso!')->success()->send();
-                    })
-            ]);
-
+        // 3. Retorno da montagem da Tabela
         return $table
             ->query(
                 Pallet::query()
@@ -227,7 +191,7 @@ class PalletClosing extends Page implements HasForms, HasTable
             ])
             ->headerActions([
                 $generatePalletsAction,
-                $addPalletAction // <-- Deve estar aqui para aparecer no topo da tabela
+                $addPalletAction
             ])
             ->emptyStateActions([
                 $generatePalletsAction
@@ -283,29 +247,25 @@ class PalletClosing extends Page implements HasForms, HasTable
                         $this->dispatch('print-pallet-event', url: $url);
                     }),
 
-                // NOVO: Ação de exclusão com reordenação subsequente
                 DeleteAction::make()
                     ->label('Excluir')
                     ->visible(function ($record) {
-                        // Regra de Integridade: Só exibe o botão se NÃO existir nenhum pallet 
-                        // com número superior ao atual para esta mesma solicitação.
-                        $isLast = ! \App\Models\Pallet::where('request_id', $record->request_id)
+                        // Verifica se é o último pallet da sequência
+                        $isLast = ! Pallet::where('request_id', $record->request_id)
                             ->where('pallet_number', '>', $record->pallet_number)
                             ->exists();
 
                         return $isLast;
                     })
                     ->disabled(function ($record) {
-                        // Mantém a trava de segurança caso o pedido já esteja consolidado/trancado
                         $request = $record->request;
                         return ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
                     })
                     ->after(function ($record) {
-                        // Após excluir o último, precisamos atualizar o 'total_pallets' dos que ficaram
-                        $remainingCount = \App\Models\Pallet::where('request_id', $record->request_id)->count();
+                        // Recalcula o total_pallets após a exclusão e atualiza em massa
+                        $remainingCount = Pallet::where('request_id', $record->request_id)->count();
 
-                        // Atualiza o campo total_pallets em massa para os registros restantes
-                        \App\Models\Pallet::where('request_id', $record->request_id)
+                        Pallet::where('request_id', $record->request_id)
                             ->update(['total_pallets' => $remainingCount]);
                     })
             ])
