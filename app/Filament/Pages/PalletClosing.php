@@ -77,11 +77,6 @@ class PalletClosing extends Page implements HasForms, HasTable
                         // ANTES: possuía where('status', 'aberto') e orWhereHas('pallets')
                         // DEPOIS: Busca limpa, ordenada pela mais recente
                         Request::query()
-<<<<<<< HEAD
-=======
-                            ->where('status', 'aberto')
-                            ->orWhereHas('pallets')
->>>>>>> d087695fb8cd4f49eddf9ba81bbb3f783cc079bc
                             ->orderByDesc('created_at')
                             ->pluck('observation', 'id')
                     )
@@ -94,7 +89,6 @@ class PalletClosing extends Page implements HasForms, HasTable
 
     public function table(Table $table): Table
     {
-<<<<<<< HEAD
         // Recuperamos o ID de dentro do array data
         $reqId = $this->data['request_id'] ?? null;
 
@@ -136,8 +130,6 @@ class PalletClosing extends Page implements HasForms, HasTable
             });
 
 
-=======
->>>>>>> d087695fb8cd4f49eddf9ba81bbb3f783cc079bc
         return $table
             ->query(
                 Pallet::query()
@@ -238,15 +230,11 @@ class PalletClosing extends Page implements HasForms, HasTable
                     ->label('Preencher')
                     ->icon('heroicon-o-pencil')
                     ->color('warning')
-<<<<<<< HEAD
                     // REMOVA ESTE BLOCO INTEIRO:
                     // ->disabled(function ($record) {
                     //     $request = $record->request;
                     //     return ($request?->is_locked ?? false) || ($request?->settlement?->is_locked ?? false);
                     // })
-=======
-                    ->disabled(fn() => $this->isRequestLocked())
->>>>>>> d087695fb8cd4f49eddf9ba81bbb3f783cc079bc
                     ->modalHeading(fn($record) => "Dados do Pallet {$record->pallet_number}/{$record->total_pallets}")
                     ->form([
                         TextInput::make('gross_weight')
