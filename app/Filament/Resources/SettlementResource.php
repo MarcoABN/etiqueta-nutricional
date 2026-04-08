@@ -32,10 +32,12 @@ class SettlementResource extends Resource
     public static function updateTotals(Get $get, Set $set): void
     {
         $requestId = $get('request_id') ?? $get('../../request_id');
-        if (!$requestId) return;
+        if (!$requestId)
+            return;
 
         $request = Request::with('items')->find($requestId);
-        if (!$request) return;
+        if (!$request)
+            return;
 
         $factorRaw = $get('calculation_factor') ?? $get('../../calculation_factor');
         $factor = (float) ($factorRaw ?: 70);
@@ -96,7 +98,9 @@ class SettlementResource extends Resource
                             ->schema([
                                 Forms\Components\Select::make('request_id')
                                     ->label('Solicitação')
-                                    ->options(Request::where('status', 'fechado')->pluck('observation', 'id'))
+                                    // ANTES: ->options(Request::where('status', 'fechado')->pluck('observation', 'id'))
+                                    // DEPOIS:
+                                    ->options(Request::pluck('observation', 'id'))
                                     ->required()
                                     ->unique(ignoreRecord: true, modifyRuleUsing: fn(Unique $rule) => $rule->whereNull('deleted_at'))
                                     ->live()
@@ -159,7 +163,8 @@ class SettlementResource extends Resource
                                     ->prefix('R$')
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
-                                        if (!$isUsd) return '';
+                                        if (!$isUsd)
+                                            return '';
 
                                         $expenses = $get('expenses') ?? [];
                                         $globalQuote = (float) $get('usd_quote');
@@ -275,8 +280,8 @@ class SettlementResource extends Resource
                             ->reorderableWithDragAndDrop(false)
                             ->reorderable(true)
                             ->colStyles([
-                                'description'      => 'width: 100%; vertical-align: middle;', // Funciona como uma mola, empurrando tudo para a direita
-                                'amount'           => 'width: 280px; min-width: 280px; vertical-align: middle;', // Tamanho fixo e seguro
+                                'description' => 'width: 100%; vertical-align: middle;', // Funciona como uma mola, empurrando tudo para a direita
+                                'amount' => 'width: 280px; min-width: 280px; vertical-align: middle;', // Tamanho fixo e seguro
                                 'custom_usd_quote' => 'width: 120px; min-width: 120px; vertical-align: middle;', // Tamanho fixo e seguro
                                 'use_custom_quote' => 'width: 35px; min-width: 35px; vertical-align: middle; text-align: center;', // Largura exata para o texto "Personalizar" e o checkbox
                             ])
@@ -440,8 +445,8 @@ class SettlementResource extends Resource
                                 ->with('requestItem.product')
                                 ->get()
                                 ->sortBy(function ($item) {
-                                    return strtolower($item->requestItem?->product_name ?? '');
-                                });
+                                return strtolower($item->requestItem?->product_name ?? '');
+                            });
 
                             $totalVal = (float) $record->total_value;
 

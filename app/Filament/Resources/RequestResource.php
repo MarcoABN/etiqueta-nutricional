@@ -38,21 +38,11 @@ class RequestResource extends Resource
                         TextInput::make('observation')
                             ->label('Descrição da Solicitação')
                             ->placeholder('Ex: Importação Cliente X, Lote Y...')
-                            ->required() // Tornei obrigatório, já que agora é o identificador principal
+                            ->required()
                             ->extraInputAttributes(['style' => 'font-weight: bold; font-size: 1.1em;'])
                             ->columnSpan(['default' => 12, 'sm' => 12, 'lg' => 6]),
 
-                        Select::make('status')
-                            ->label('Status')
-                            ->options([
-                                'aberto' => 'Em Aberto',
-                                'fechado' => 'Finalizado',
-                            ])
-                            ->default('aberto')
-                            ->required()
-                            ->native(false)
-                            ->selectablePlaceholder(false)
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
+                        // REMOVIDO: Select::make('status')
 
                         Select::make('shipping_type')
                             ->label('Tipo de Envio')
@@ -64,14 +54,15 @@ class RequestResource extends Resource
                             ->default('Maritimo')
                             ->required()
                             ->native(false)
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
+                            // AUMENTADO para 3 para cobrir o espaço deixado pelo status
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
 
                         TextInput::make('created_at')
                             ->label('Data Criação')
                             ->disabled()
                             ->formatStateUsing(fn($record) => $record?->created_at?->format('d/m/Y H:i'))
-                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 2]), // Reduzido de 3 para 2
-
+                            // AUMENTADO para 3 para cobrir o espaço deixado pelo status
+                            ->columnSpan(['default' => 12, 'sm' => 6, 'lg' => 3]),
                     ])
                     ->hidden(fn(string $operation) => $operation === 'create')
                     ->columnSpanFull(),
@@ -110,15 +101,6 @@ class RequestResource extends Resource
                         default => 'gray',
                     })
                     ->sortable(),
-
-                Tables\Columns\TextColumn::make('status')
-                    ->label('Status')
-                    ->badge()
-                    ->color(fn(string $state): string => match ($state) {
-                        'aberto' => 'success',
-                        'fechado' => 'gray',
-                        default => 'gray',
-                    }),
 
                 // NOVO: Exibe a observação na listagem de pedidos
                 Tables\Columns\TextColumn::make('observation')

@@ -117,6 +117,8 @@ class Product extends Model
         'ingredients_pt',
         'allergens_contains_pt',
         'allergens_may_contain_pt',
+
+        'mirror_code',
     ];
 
     /**

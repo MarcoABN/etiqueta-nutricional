@@ -88,7 +88,11 @@ class ProductResource extends Resource
                                     ->required()
                                     ->numeric()
                                     ->unique(ignoreRecord: true)
-                                    ->columnSpan(['default' => 12, 'md' => 3]),
+                                    ->columnSpan(['default' => 12, 'md' => 2]),
+
+                                TextInput::make('mirror_code')
+                                    ->label('Cód. Espelho')
+                                    ->columnSpan(['default' => 12, 'md' => 2]),
 
                                 TextInput::make('barcode')
                                     ->label('Cód. Barras')
@@ -117,7 +121,7 @@ class ProductResource extends Resource
                                     ->default('Bloqueado')
                                     ->required()
                                     ->selectablePlaceholder(false)
-                                    ->columnSpan(['default' => 12, 'md' => 4]),
+                                    ->columnSpan(['default' => 12, 'md' => 3]),
 
                                 TextInput::make('product_name')
                                     ->label('Nome do Produto')
@@ -438,13 +442,15 @@ class ProductResource extends Resource
                     ->label('Qtd Cx')
                     ->sortable()
                     ->formatStateUsing(function ($state) {
-                        if (blank($state)) return '-';
+                        if (blank($state))
+                            return '-';
                         $formatado = number_format((float) $state, 2, ',', '.');
                         return str_replace(',00', '', $formatado);
                     })
                     ->copyable()
                     ->copyableState(function ($state) {
-                        if (blank($state)) return '';
+                        if (blank($state))
+                            return '';
                         $formatado = number_format((float) $state, 2, ',', '.');
                         return str_replace(',00', '', $formatado);
                     })

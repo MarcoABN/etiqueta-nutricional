@@ -200,6 +200,7 @@ class EditRequest extends EditRecord
                             // Cabeçalho atualizado com as novas colunas
                             $writer->addRow(Row::fromValues([
                                 'Cód WinThor',
+                                'Cód. Espelho',
                                 'Produto',
                                 'Qtd CX',
                                 'Emb',
@@ -231,6 +232,7 @@ class EditRequest extends EditRecord
 
                                 $writer->addRow(Row::fromValues([
                                     $item->winthor_code ?? 'Manual',
+                                    $item->product?->mirror_code ?? '-',
                                     $item->product_name,
                                     $qtdCx,
                                     $item->packaging,
