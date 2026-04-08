@@ -147,15 +147,4 @@ class DemandResource extends Resource
             'edit' => Pages\EditDemand::route('/{record}/edit'),
         ];
     }
-
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->where(function (Builder $query) {
-                // Filtra para mostrar apenas se o usuário logado for o responsável
-                $query->where('user_id', auth()->id())
-                    // (Recomendado) Permite que ele também veja as demandas que ele mesmo criou
-                    ->orWhere('created_by', auth()->id());
-            });
-    }
 }
