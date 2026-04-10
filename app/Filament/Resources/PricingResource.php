@@ -123,7 +123,6 @@ class PricingResource extends Resource
                                     $reqItem = $sItem->requestItem;
                                     $product = $reqItem?->product;
 
-                                    // CORREÇÃO: Força o arredondamento na raiz de 2 casas decimais no momento de criar
                                     $totalCostUsd = round($sItem->final_value / $usdQuote, 2);
 
                                     $itemRaw = [
@@ -139,15 +138,9 @@ class PricingResource extends Resource
                                     $items[] = self::calculateItem($itemRaw, $margin, null);
                                 }
 
-                                $sortBy = $get('sort_by') ?? 'product_name';
-                                $items = collect($items)->sortBy(function ($item) use ($sortBy) {
-                                    if (in_array($sortBy, ['suggested_price', 'profit_margin'])) {
-                                        return (float) self::parseNumber($item[$sortBy] ?? 0);
-                                    }
-                                    if ($sortBy === 'winthor_code') {
-                                        return is_numeric($item[$sortBy] ?? '') ? (int) $item[$sortBy] : (string) ($item[$sortBy] ?? '');
-                                    }
-                                    return strtolower((string) ($item[$sortBy] ?? ''));
+                                // Ordenação Padrão Inicial (Alfabética)
+                                $items = collect($items)->sortBy(function ($item) {
+                                    return strtolower((string) ($item['product_name'] ?? ''));
                                 })->values()->toArray();
 
                                 $set('items', $items);
@@ -198,43 +191,14 @@ class PricingResource extends Resource
 
                 Forms\Components\Section::make('Precificação dos Produtos (Valores em US$)')
                     ->schema([
-                        Forms\Components\Grid::make(12)->schema([
-                            Forms\Components\Select::make('sort_by')
-                                ->label('Ordenar Itens Por:')
-                                ->options([
-                                    'product_name' => 'Descrição (A-Z)',
-                                    'winthor_code' => 'Cód. WinThor',
-                                    'suggested_price' => 'Preço Venda',
-                                    'profit_margin' => 'Margem Lucro (%)',
-                                ])
-                                ->default('product_name')
-                                ->dehydrated(false)
-                                ->live()
-                                ->afterStateUpdated(function (Set $set, Get $get, $state) {
-                                    $items = $get('items') ?? [];
-                                    if (empty($items)) return;
-
-                                    $sortedItems = collect($items)->sortBy(function ($item) use ($state) {
-                                        if (in_array($state, ['suggested_price', 'profit_margin'])) {
-                                            return (float) self::parseNumber($item[$state] ?? 0);
-                                        }
-                                        if ($state === 'winthor_code') {
-                                            return is_numeric($item[$state] ?? '') ? (int) $item[$state] : (string) ($item[$state] ?? '');
-                                        }
-                                        return strtolower((string) ($item[$state] ?? ''));
-                                    })->toArray();
-
-                                    $set('items', $sortedItems);
-                                })
-                                ->columnSpan(['default' => 12, 'md' => 3]),
-                        ]),
-
                         TableRepeater::make('items')
                             ->relationship('items')
                             ->hiddenLabel()
                             ->addable(false)
                             ->deletable(false)
-                            ->reorderable(false)
+                            // AQUI: Ativamos a ordenação manual nativa (Drag & Drop e Botões)
+                            ->reorderable(true)
+                            ->reorderableWithButtons()
                             ->afterStateHydrated(function (Forms\Components\Component $component, ?Pricing $record, $state) {
                                 if (!$record || empty($state)) return;
 
@@ -251,10 +215,7 @@ class PricingResource extends Resource
 
                                         $state[$uuid]['winthor_code'] = $req->winthor_code ?? $req->product?->codprod ?? '-';
                                         $state[$uuid]['product_name'] = $req->product_name ?? '-';
-                                        
-                                        // CORREÇÃO: Força o arredondamento na raiz ao abrir a tela no modo de edição
                                         $state[$uuid]['total_cost'] = round($sItem->final_value / $usdQuote, 2);
-                                        
                                         $state[$uuid]['quantity_sent'] = $req->quantity ?? 1;
                                         $state[$uuid]['box_factor'] = $req->qtunitcx ?? $req->product?->qtunitcx ?? 1;
                                         
@@ -264,6 +225,7 @@ class PricingResource extends Resource
                                     }
                                 }
 
+                                // Mantém a ordem alfabética por defeito ao carregar
                                 $sortedState = collect($state)->sortBy(function ($item) {
                                     return strtolower($item['product_name'] ?? '');
                                 })->toArray();
@@ -526,7 +488,7 @@ class PricingResource extends Resource
                                 $writer->addRow(Row::fromValues([
                                     $winthorCode,
                                     $productName,
-                                    round((float) $totalCost, 2), // Excel também formatado em 2 casas
+                                    round((float) $totalCost, 2),
                                     round((float) $displayQty, 2),
                                     round((float) $boxFactor, 2),
                                     $item->is_fractional ? 'Sim' : 'Não',
