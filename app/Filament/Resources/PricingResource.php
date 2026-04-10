@@ -302,6 +302,7 @@ class PricingResource extends Resource
                                     ->label('Preço Venda')
                                     // ->prefix('US$') // REMOVIDO PARA ECONOMIZAR ESPAÇO
                                     ->live(debounce: 800)
+                                    ->dehydrateStateUsing(fn($state) => self::parseNumber($state))
                                     ->extraInputAttributes([
                                         'inputmode' => 'decimal',
                                         'class' => 'text-sm alvo-preco',
