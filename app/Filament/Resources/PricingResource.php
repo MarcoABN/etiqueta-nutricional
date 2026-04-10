@@ -60,8 +60,10 @@ class PricingResource extends Resource
         $boxFactor = self::parseNumber($itemData['box_factor'] ?? 1);
         $isFractional = (bool) ($itemData['is_fractional'] ?? false);
 
-        if ($qtySent <= 0) $qtySent = 1;
-        if ($boxFactor <= 0) $boxFactor = 1;
+        if ($qtySent <= 0)
+            $qtySent = 1;
+        if ($boxFactor <= 0)
+            $boxFactor = 1;
 
         // Calcula a QTD que será exibida (se fracionado, multiplica caixas x fator)
         $itemData['display_quantity'] = $isFractional ? ($qtySent * $boxFactor) : $qtySent;
@@ -83,7 +85,8 @@ class PricingResource extends Resource
             }
         } else {
             $marginDec = $globalMargin / 100;
-            if ($marginDec >= 1) $marginDec = 0.99;
+            if ($marginDec >= 1)
+                $marginDec = 0.99;
 
             $suggestedPrice = $unitCost / (1 - $marginDec);
             $itemData['suggested_price'] = round($suggestedPrice, 2);
@@ -117,7 +120,8 @@ class PricingResource extends Resource
                                 $settlement = Settlement::with(['items.requestItem.product'])->find($state);
 
                                 $usdQuote = $settlement?->usd_quote ?? 1;
-                                if ($usdQuote <= 0) $usdQuote = 1;
+                                if ($usdQuote <= 0)
+                                    $usdQuote = 1;
 
                                 $set('usd_quote', $usdQuote);
 
@@ -197,12 +201,14 @@ class PricingResource extends Resource
                             ->deletable(false)
                             ->reorderable(false)
                             ->afterStateHydrated(function (Forms\Components\Component $component, ?Pricing $record, $state) {
-                                if (!$record || empty($state)) return;
+                                if (!$record || empty($state))
+                                    return;
 
                                 $record->loadMissing('items.settlementItem.requestItem.product', 'settlement');
 
                                 $usdQuote = $record->settlement?->usd_quote ?? 1;
-                                if ($usdQuote <= 0) $usdQuote = 1;
+                                if ($usdQuote <= 0)
+                                    $usdQuote = 1;
 
                                 foreach ($state as $uuid => $itemData) {
                                     $dbItem = $record->items->firstWhere('id', $itemData['id'] ?? null);
@@ -215,7 +221,7 @@ class PricingResource extends Resource
                                         $state[$uuid]['total_cost'] = $sItem->final_value / $usdQuote;
                                         $state[$uuid]['quantity_sent'] = $req->quantity ?? 1;
                                         $state[$uuid]['box_factor'] = $req->qtunitcx ?? $req->product?->qtunitcx ?? 1;
-                                        
+
                                         // Refaz o cálculo da QTD exibida baseada no estado salvo da VF
                                         $qty = $req->quantity ?? 1;
                                         $bf = $state[$uuid]['box_factor'];
@@ -225,20 +231,21 @@ class PricingResource extends Resource
                                 $component->state($state);
                             })
                             ->colStyles([
-                                'winthor_code'    => 'width: 120px;',
-                                'product_name'    => 'width: 600px; white-space: normal;',
-                                'total_cost'      => 'width: 200px;',
-                                'display_quantity'=> 'width: 150px;', // Novo campo Visual
-                                'box_factor'      => 'width: 110px;',
-                                'unit_cost'       => 'width: 150px;',
+                                'winthor_code' => 'width: 120px;',
+                                'product_name' => 'width: 600px; white-space: normal;',
+                                'total_cost' => 'width: 200px;',
+                                'display_quantity' => 'width: 150px;', // Novo campo Visual
+                                'box_factor' => 'width: 110px;',
+                                'unit_cost' => 'width: 150px;',
                                 'suggested_price' => 'width: 180px;',
-                                'profit_margin'   => 'width: 180px;',
-                                'is_fractional'   => 'width: 70px; text-align: center; vertical-align: middle;',
+                                'profit_margin' => 'width: 180px;',
+                                'is_fractional' => 'width: 70px; text-align: center; vertical-align: middle;',
                             ])
                             ->schema([
                                 Forms\Components\Hidden::make('settlement_item_id'),
                                 // Ocultamos o campo original para usar na matemática
-                                Forms\Components\Hidden::make('quantity_sent'), 
+                                Forms\Components\Hidden::make('quantity_sent')
+                                    ->dehydrated(false),
 
                                 Forms\Components\TextInput::make('winthor_code')
                                     ->label('Cód.')
@@ -267,8 +274,8 @@ class PricingResource extends Resource
                                     ->dehydrated(false)
                                     ->formatStateUsing(fn($state) => number_format((float) $state, 2, ',', ''))
                                     ->extraInputAttributes(fn(Get $get) => [
-                                        'class' => ($get('is_fractional') 
-                                            ? 'bg-warning-50 text-warning-700 font-bold border-warning-200 text-center text-sm' 
+                                        'class' => ($get('is_fractional')
+                                            ? 'bg-warning-50 text-warning-700 font-bold border-warning-200 text-center text-sm'
                                             : 'bg-green-50 text-green-700 font-bold border-green-200 text-center text-sm')
                                     ]),
 
@@ -430,7 +437,7 @@ class PricingResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                
+
                 // --- NOVA AÇÃO DE EXPORTAÇÃO EXCEL ---
                 Tables\Actions\Action::make('export_excel')
                     ->label('Exportar Excel')
@@ -462,7 +469,8 @@ class PricingResource extends Resource
                             $items = $record->items()->with('settlementItem.requestItem.product')->get();
 
                             $usdQuote = $record->settlement?->usd_quote ?? 1;
-                            if ($usdQuote <= 0) $usdQuote = 1;
+                            if ($usdQuote <= 0)
+                                $usdQuote = 1;
 
                             foreach ($items as $item) {
                                 $sItem = $item->settlementItem;
@@ -472,7 +480,7 @@ class PricingResource extends Resource
                                 $winthorCode = $req?->winthor_code ?? $prod?->codprod ?? '-';
                                 $productName = $req?->product_name ?? '-';
                                 $totalCost = $sItem ? ($sItem->final_value / $usdQuote) : 0;
-                                
+
                                 $qty = $req?->quantity ?? 1;
                                 $boxFactor = $req?->qtunitcx ?? $prod?->qtunitcx ?? 1;
                                 $displayQty = $item->is_fractional ? ($qty * $boxFactor) : $qty;
