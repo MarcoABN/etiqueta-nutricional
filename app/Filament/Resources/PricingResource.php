@@ -138,7 +138,7 @@ class PricingResource extends Resource
                                     $items[] = self::calculateItem($itemRaw, $margin, null);
                                 }
 
-                                // Ordenação Padrão Inicial (Alfabética)
+                                // ORDENAÇÃO ALFABÉTICA FIXA
                                 $items = collect($items)->sortBy(function ($item) {
                                     return strtolower((string) ($item['product_name'] ?? ''));
                                 })->values()->toArray();
@@ -196,9 +196,7 @@ class PricingResource extends Resource
                             ->hiddenLabel()
                             ->addable(false)
                             ->deletable(false)
-                            // AQUI: Ativamos a ordenação manual nativa (Drag & Drop e Botões)
-                            ->reorderable(true)
-                            ->reorderableWithButtons()
+                            ->reorderable(false) // Desativado para forçar a ordem alfabética limpa
                             ->afterStateHydrated(function (Forms\Components\Component $component, ?Pricing $record, $state) {
                                 if (!$record || empty($state)) return;
 
@@ -215,7 +213,9 @@ class PricingResource extends Resource
 
                                         $state[$uuid]['winthor_code'] = $req->winthor_code ?? $req->product?->codprod ?? '-';
                                         $state[$uuid]['product_name'] = $req->product_name ?? '-';
+                                        
                                         $state[$uuid]['total_cost'] = round($sItem->final_value / $usdQuote, 2);
+                                        
                                         $state[$uuid]['quantity_sent'] = $req->quantity ?? 1;
                                         $state[$uuid]['box_factor'] = $req->qtunitcx ?? $req->product?->qtunitcx ?? 1;
                                         
@@ -225,7 +225,7 @@ class PricingResource extends Resource
                                     }
                                 }
 
-                                // Mantém a ordem alfabética por defeito ao carregar
+                                // ORDENAÇÃO ALFABÉTICA FIXA AO EDITAR
                                 $sortedState = collect($state)->sortBy(function ($item) {
                                     return strtolower($item['product_name'] ?? '');
                                 })->toArray();
