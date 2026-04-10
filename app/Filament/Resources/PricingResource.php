@@ -14,6 +14,10 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Icetalker\FilamentTableRepeater\Forms\Components\TableRepeater;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Options;
+use OpenSpout\Writer\XLSX\Writer;
+use Illuminate\Support\Str;
 
 class PricingResource extends Resource
 {
@@ -36,15 +40,11 @@ class PricingResource extends Resource
 
         $val = (string) $val;
 
-        // Se a string tem ponto E vírgula (Ex: 1.234,56), removemos o ponto de milhar primeiro
         if (strpos($val, '.') !== false && strpos($val, ',') !== false) {
             $val = str_replace('.', '', $val);
         }
 
-        // Agora trocamos a vírgula decimal pelo ponto (padrão do PHP)
         $val = str_replace(',', '.', $val);
-
-        // Limpa qualquer outra letra ou símbolo que não seja dígito, ponto ou sinal de menos
         $val = preg_replace('/[^0-9.-]/', '', $val);
 
         return (float) $val;
@@ -60,10 +60,11 @@ class PricingResource extends Resource
         $boxFactor = self::parseNumber($itemData['box_factor'] ?? 1);
         $isFractional = (bool) ($itemData['is_fractional'] ?? false);
 
-        if ($qtySent <= 0)
-            $qtySent = 1;
-        if ($boxFactor <= 0)
-            $boxFactor = 1;
+        if ($qtySent <= 0) $qtySent = 1;
+        if ($boxFactor <= 0) $boxFactor = 1;
+
+        // Calcula a QTD que será exibida (se fracionado, multiplica caixas x fator)
+        $itemData['display_quantity'] = $isFractional ? ($qtySent * $boxFactor) : $qtySent;
 
         // 1. Calcula o Custo Base (Caixa fechada) em USD
         $baseCost = $totalCostUsd / $qtySent;
@@ -76,15 +77,13 @@ class PricingResource extends Resource
         if ($manualPrice !== null) {
             $itemData['suggested_price'] = $manualPrice;
             if ($manualPrice > 0) {
-                // Cálculo de markup reverso
                 $itemData['profit_margin'] = round((($manualPrice - $unitCost) / $manualPrice) * 100, 2);
             } else {
                 $itemData['profit_margin'] = 0;
             }
         } else {
             $marginDec = $globalMargin / 100;
-            if ($marginDec >= 1)
-                $marginDec = 0.99;
+            if ($marginDec >= 1) $marginDec = 0.99;
 
             $suggestedPrice = $unitCost / (1 - $marginDec);
             $itemData['suggested_price'] = round($suggestedPrice, 2);
@@ -118,8 +117,7 @@ class PricingResource extends Resource
                                 $settlement = Settlement::with(['items.requestItem.product'])->find($state);
 
                                 $usdQuote = $settlement?->usd_quote ?? 1;
-                                if ($usdQuote <= 0)
-                                    $usdQuote = 1;
+                                if ($usdQuote <= 0) $usdQuote = 1;
 
                                 $set('usd_quote', $usdQuote);
 
@@ -199,14 +197,12 @@ class PricingResource extends Resource
                             ->deletable(false)
                             ->reorderable(false)
                             ->afterStateHydrated(function (Forms\Components\Component $component, ?Pricing $record, $state) {
-                                if (!$record || empty($state))
-                                    return;
+                                if (!$record || empty($state)) return;
 
                                 $record->loadMissing('items.settlementItem.requestItem.product', 'settlement');
 
                                 $usdQuote = $record->settlement?->usd_quote ?? 1;
-                                if ($usdQuote <= 0)
-                                    $usdQuote = 1;
+                                if ($usdQuote <= 0) $usdQuote = 1;
 
                                 foreach ($state as $uuid => $itemData) {
                                     $dbItem = $record->items->firstWhere('id', $itemData['id'] ?? null);
@@ -219,23 +215,30 @@ class PricingResource extends Resource
                                         $state[$uuid]['total_cost'] = $sItem->final_value / $usdQuote;
                                         $state[$uuid]['quantity_sent'] = $req->quantity ?? 1;
                                         $state[$uuid]['box_factor'] = $req->qtunitcx ?? $req->product?->qtunitcx ?? 1;
+                                        
+                                        // Refaz o cálculo da QTD exibida baseada no estado salvo da VF
+                                        $qty = $req->quantity ?? 1;
+                                        $bf = $state[$uuid]['box_factor'];
+                                        $state[$uuid]['display_quantity'] = ($state[$uuid]['is_fractional'] ?? false) ? ($qty * $bf) : $qty;
                                     }
                                 }
                                 $component->state($state);
                             })
                             ->colStyles([
-                                'winthor_code' => 'width: 120px;',
-                                'product_name' => 'width: 600px; white-space: normal;',
-                                'total_cost' => 'width: 200px;',
-                                'quantity_sent' => 'width: 150px;',
-                                'box_factor' => 'width: 110px;',
-                                'unit_cost' => 'width: 150px;',
+                                'winthor_code'    => 'width: 120px;',
+                                'product_name'    => 'width: 600px; white-space: normal;',
+                                'total_cost'      => 'width: 200px;',
+                                'display_quantity'=> 'width: 150px;', // Novo campo Visual
+                                'box_factor'      => 'width: 110px;',
+                                'unit_cost'       => 'width: 150px;',
                                 'suggested_price' => 'width: 180px;',
-                                'profit_margin' => 'width: 180px;',
-                                'is_fractional' => 'width: 70px; text-align: center; vertical-align: middle;',
+                                'profit_margin'   => 'width: 180px;',
+                                'is_fractional'   => 'width: 70px; text-align: center; vertical-align: middle;',
                             ])
                             ->schema([
                                 Forms\Components\Hidden::make('settlement_item_id'),
+                                // Ocultamos o campo original para usar na matemática
+                                Forms\Components\Hidden::make('quantity_sent'), 
 
                                 Forms\Components\TextInput::make('winthor_code')
                                     ->label('Cód.')
@@ -253,16 +256,21 @@ class PricingResource extends Resource
                                     ->label('Custo Total')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->prefix('US$')
+                                    ->prefix('US$') // Mantido apenas no primeiro
                                     ->formatStateUsing(fn($state) => number_format((float) $state, 4, ',', '.'))
                                     ->extraInputAttributes(['class' => 'text-sm']),
 
-                                Forms\Components\TextInput::make('quantity_sent')
+                                // Novo campo visual que reage a VF
+                                Forms\Components\TextInput::make('display_quantity')
                                     ->label('QTD')
                                     ->disabled()
                                     ->dehydrated(false)
                                     ->formatStateUsing(fn($state) => number_format((float) $state, 2, ',', ''))
-                                    ->extraInputAttributes(['class' => 'bg-green-50 text-green-700 font-bold border-green-200 text-center text-sm']),
+                                    ->extraInputAttributes(fn(Get $get) => [
+                                        'class' => ($get('is_fractional') 
+                                            ? 'bg-warning-50 text-warning-700 font-bold border-warning-200 text-center text-sm' 
+                                            : 'bg-green-50 text-green-700 font-bold border-green-200 text-center text-sm')
+                                    ]),
 
                                 Forms\Components\TextInput::make('box_factor')
                                     ->label('Fator CX')
@@ -274,7 +282,7 @@ class PricingResource extends Resource
                                 Forms\Components\TextInput::make('unit_cost')
                                     ->label('Custo Un')
                                     ->disabled()
-                                    ->prefix('US$')
+                                    // ->prefix('US$') // REMOVIDO PARA ECONOMIZAR ESPAÇO
                                     ->formatStateUsing(fn($state) => number_format((float) $state, 4, ',', '.'))
                                     ->dehydrateStateUsing(fn($state) => self::parseNumber($state))
                                     ->extraInputAttributes(fn(Get $get) => [
@@ -285,12 +293,11 @@ class PricingResource extends Resource
 
                                 Forms\Components\TextInput::make('suggested_price')
                                     ->label('Preço Venda')
-                                    ->prefix('US$')
+                                    // ->prefix('US$') // REMOVIDO PARA ECONOMIZAR ESPAÇO
                                     ->live(debounce: 800)
                                     ->extraInputAttributes([
                                         'inputmode' => 'decimal',
                                         'class' => 'text-sm alvo-preco',
-                                        // Pula para a Margem da mesma linha
                                         'x-on:keydown.enter.prevent' => '
                                             let row = $el.closest("tr");
                                             if (row) {
@@ -315,6 +322,7 @@ class PricingResource extends Resource
 
                                         $updatedData = self::calculateItem($data, $margin, $price);
                                         $set('profit_margin', $updatedData['profit_margin']);
+                                        $set('display_quantity', $updatedData['display_quantity']);
                                     }),
 
                                 Forms\Components\TextInput::make('profit_margin')
@@ -326,7 +334,6 @@ class PricingResource extends Resource
                                     ->extraInputAttributes([
                                         'inputmode' => 'decimal',
                                         'class' => 'bg-gray-50 font-bold text-gray-700 text-center text-sm alvo-margem',
-                                        // Pula para o Preço da linha de baixo
                                         'x-on:keydown.enter.prevent' => '
                                             let tbody = $el.closest("tbody");
                                             if (tbody) {
@@ -344,7 +351,6 @@ class PricingResource extends Resource
                                         '
                                     ])
                                     ->afterStateUpdated(function (Set $set, Get $get, $state) {
-                                        // AQUI OCORRE A MÁGICA INVERSA
                                         $manualMargin = self::parseNumber($state);
 
                                         $data = [
@@ -357,6 +363,7 @@ class PricingResource extends Resource
                                         $updatedData = self::calculateItem($data, $manualMargin, null);
                                         $set('suggested_price', $updatedData['suggested_price']);
                                         $set('profit_margin', $updatedData['profit_margin']);
+                                        $set('display_quantity', $updatedData['display_quantity']);
                                     }),
 
                                 Forms\Components\Checkbox::make('is_fractional')
@@ -364,7 +371,6 @@ class PricingResource extends Resource
                                     ->live()
                                     ->extraAttributes(['class' => 'flex justify-center items-center pt-2'])
                                     ->afterStateUpdated(function (Set $set, Get $get, $state) {
-                                        // Resgata a margem atual do campo para não resetar a edição manual do usuário
                                         $currentMargin = self::parseNumber($get('profit_margin'));
                                         if (!$currentMargin || $currentMargin <= 0) {
                                             $currentMargin = (float) ($get('../../ideal_margin') ?? 30);
@@ -372,7 +378,7 @@ class PricingResource extends Resource
 
                                         $data = [
                                             'total_cost' => $get('total_cost'),
-                                            'quantity_sent' => $get('quantity_sent'),
+                                            'quantity_sent' => $get('quantity_sent'), // Usa a qtd oculta base
                                             'box_factor' => $get('box_factor'),
                                             'is_fractional' => $state,
                                         ];
@@ -382,6 +388,7 @@ class PricingResource extends Resource
                                         $set('unit_cost', $updatedData['unit_cost']);
                                         $set('suggested_price', $updatedData['suggested_price']);
                                         $set('profit_margin', $updatedData['profit_margin']);
+                                        $set('display_quantity', $updatedData['display_quantity']); // Atualiza a qtd visual
                                     }),
                             ])
                             ->columnSpanFull()
@@ -423,6 +430,70 @@ class PricingResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                
+                // --- NOVA AÇÃO DE EXPORTAÇÃO EXCEL ---
+                Tables\Actions\Action::make('export_excel')
+                    ->label('Exportar Excel')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('success')
+                    ->action(function (Pricing $record) {
+                        return response()->streamDownload(function () use ($record) {
+                            $options = new Options();
+                            $writer = new Writer($options);
+                            $writer->openToFile('php://output');
+
+                            $sheet = $writer->getCurrentSheet();
+                            $sheet->setName('Precificação');
+
+                            // Cabeçalho da Planilha
+                            $writer->addRow(Row::fromValues([
+                                'Cód. Winthor',
+                                'Produto',
+                                'Custo Total (US$)',
+                                'QTD (Caixas ou Unidades)',
+                                'Fator CX',
+                                'Venda Fracionada?',
+                                'Custo Un (US$)',
+                                'Preço Venda Sugerido (US$)',
+                                'Lucro (%)'
+                            ]));
+
+                            // Carrega os itens com os relacionamentos necessários
+                            $items = $record->items()->with('settlementItem.requestItem.product')->get();
+
+                            $usdQuote = $record->settlement?->usd_quote ?? 1;
+                            if ($usdQuote <= 0) $usdQuote = 1;
+
+                            foreach ($items as $item) {
+                                $sItem = $item->settlementItem;
+                                $req = $sItem?->requestItem;
+                                $prod = $req?->product;
+
+                                $winthorCode = $req?->winthor_code ?? $prod?->codprod ?? '-';
+                                $productName = $req?->product_name ?? '-';
+                                $totalCost = $sItem ? ($sItem->final_value / $usdQuote) : 0;
+                                
+                                $qty = $req?->quantity ?? 1;
+                                $boxFactor = $req?->qtunitcx ?? $prod?->qtunitcx ?? 1;
+                                $displayQty = $item->is_fractional ? ($qty * $boxFactor) : $qty;
+
+                                $writer->addRow(Row::fromValues([
+                                    $winthorCode,
+                                    $productName,
+                                    round((float) $totalCost, 4),
+                                    round((float) $displayQty, 2),
+                                    round((float) $boxFactor, 2),
+                                    $item->is_fractional ? 'Sim' : 'Não',
+                                    round((float) $item->unit_cost, 4),
+                                    round((float) $item->suggested_price, 2),
+                                    round((float) $item->profit_margin, 2) . '%'
+                                ]));
+                            }
+
+                            $writer->close();
+                        }, "Precificacao_" . Str::slug($record->settlement->request->observation ?? 'avulso') . ".xlsx");
+                    }),
+
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
