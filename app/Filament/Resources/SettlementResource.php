@@ -26,7 +26,7 @@ class SettlementResource extends Resource
     protected static ?string $navigationLabel = 'Fechamentos';
     protected static ?string $modelLabel = 'Fechamento';
     protected static ?string $pluralModelLabel = 'Fechamentos';
-    protected static ?string $navigationGroup = 'Administração';
+    protected static ?string $navigationGroup = 'Comercial';
     protected static ?int $navigationSort = 1;
 
     public static function updateTotals(Get $get, Set $set): void
