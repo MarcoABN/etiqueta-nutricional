@@ -4,6 +4,7 @@ namespace App\Filament\Resources\RequestResource\Pages;
 
 use App\Filament\Resources\RequestResource;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Enums\MaxWidth;
 
 class CreateRequest extends CreateRecord
 {
@@ -20,5 +21,10 @@ class CreateRequest extends CreateRecord
 
         // Opção B: Fica na tela para conferir/imprimir
         // return $this->getResource()::getUrl('edit', ['record' => $this->record]);
+    }
+
+    public function getMaxContentWidth(): MaxWidth|string|null
+    {
+        return MaxWidth::Full;
     }
 }

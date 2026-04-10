@@ -9,6 +9,7 @@ use App\Models\Request;
 use App\Models\Pallet;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
+use Filament\Support\Enums\MaxWidth;
 use Livewire\Component;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
@@ -380,5 +381,10 @@ class EditRequest extends EditRecord
     {
         return parent::getSaveFormAction()
             ->hidden(fn() => $this->record->is_locked || ($this->record->settlement?->is_locked ?? false));
+    }
+
+    public function getMaxContentWidth(): MaxWidth|string|null
+    {
+        return MaxWidth::Full;
     }
 }

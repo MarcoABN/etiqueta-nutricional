@@ -1,15 +1,15 @@
 <?php
 
-namespace App\Filament\Resources\SettlementResource\Pages;
+namespace App\Filament\Resources\PricingResource\Pages;
 
-use App\Filament\Resources\SettlementResource;
+use App\Filament\Resources\PricingResource;
 use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\MaxWidth;
 
-class CreateSettlement extends CreateRecord
+class CreatePricing extends CreateRecord
 {
-    protected static string $resource = SettlementResource::class;
+    protected static string $resource = PricingResource::class;
 
     public function getMaxContentWidth(): MaxWidth|string|null
     {

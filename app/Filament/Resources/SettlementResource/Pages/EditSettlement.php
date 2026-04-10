@@ -6,6 +6,7 @@ use App\Filament\Resources\SettlementResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use App\Models\Settlement;
+use Filament\Support\Enums\MaxWidth;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Options;
 use OpenSpout\Writer\XLSX\Writer;
@@ -340,5 +341,10 @@ class EditSettlement extends EditRecord
             Actions\DeleteAction::make()
                 ->hidden(fn() => $this->record->is_locked),
         ];
+    }
+
+    public function getMaxContentWidth(): MaxWidth|string|null
+    {
+        return MaxWidth::Full;
     }
 }

@@ -6,6 +6,7 @@ use App\Filament\Resources\RequestResource;
 use App\Models\Request;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Enums\MaxWidth;
 
 class ListRequests extends ListRecords
 {
@@ -27,5 +28,10 @@ class ListRequests extends ListRecords
                     return redirect()->to(RequestResource::getUrl('edit', ['record' => $record]));
                 }),
         ];
+    }
+
+    public function getMaxContentWidth(): MaxWidth|string|null
+    {
+        return MaxWidth::Full;
     }
 }
