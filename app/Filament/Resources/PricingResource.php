@@ -326,6 +326,7 @@ class PricingResource extends Resource
                                 Forms\Components\TextInput::make('unit_cost')
                                     ->label('Custo Un')
                                     ->disabled()
+                                    ->dehydrated()
                                     ->formatStateUsing(fn($state) => number_format((float) $state, 4, ',', '.'))
                                     ->dehydrateStateUsing(fn($state) => self::parseNumber($state))
                                     ->extraInputAttributes(fn(Get $get) => [
