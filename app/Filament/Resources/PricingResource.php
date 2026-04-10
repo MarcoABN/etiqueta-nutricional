@@ -123,7 +123,8 @@ class PricingResource extends Resource
                                     $reqItem = $sItem->requestItem;
                                     $product = $reqItem?->product;
 
-                                    $totalCostUsd = $sItem->final_value / $usdQuote;
+                                    // CORREÇÃO: Força o arredondamento na raiz de 2 casas decimais no momento de criar
+                                    $totalCostUsd = round($sItem->final_value / $usdQuote, 2);
 
                                     $itemRaw = [
                                         'settlement_item_id' => $sItem->id,
@@ -138,7 +139,6 @@ class PricingResource extends Resource
                                     $items[] = self::calculateItem($itemRaw, $margin, null);
                                 }
 
-                                // Ordenação Padrão Inicial (Alfabética por Descrição)
                                 $sortBy = $get('sort_by') ?? 'product_name';
                                 $items = collect($items)->sortBy(function ($item) use ($sortBy) {
                                     if (in_array($sortBy, ['suggested_price', 'profit_margin'])) {
@@ -198,7 +198,6 @@ class PricingResource extends Resource
 
                 Forms\Components\Section::make('Precificação dos Produtos (Valores em US$)')
                     ->schema([
-                        // NOVO: Controle de ordenação dinâmico
                         Forms\Components\Grid::make(12)->schema([
                             Forms\Components\Select::make('sort_by')
                                 ->label('Ordenar Itens Por:')
@@ -209,7 +208,7 @@ class PricingResource extends Resource
                                     'profit_margin' => 'Margem Lucro (%)',
                                 ])
                                 ->default('product_name')
-                                ->dehydrated(false) // Não salva no banco
+                                ->dehydrated(false)
                                 ->live()
                                 ->afterStateUpdated(function (Set $set, Get $get, $state) {
                                     $items = $get('items') ?? [];
@@ -223,7 +222,7 @@ class PricingResource extends Resource
                                             return is_numeric($item[$state] ?? '') ? (int) $item[$state] : (string) ($item[$state] ?? '');
                                         }
                                         return strtolower((string) ($item[$state] ?? ''));
-                                    })->toArray(); // toArray() mantém as chaves originais (UUIDs) do Repeater
+                                    })->toArray();
 
                                     $set('items', $sortedItems);
                                 })
@@ -252,7 +251,10 @@ class PricingResource extends Resource
 
                                         $state[$uuid]['winthor_code'] = $req->winthor_code ?? $req->product?->codprod ?? '-';
                                         $state[$uuid]['product_name'] = $req->product_name ?? '-';
-                                        $state[$uuid]['total_cost'] = $sItem->final_value / $usdQuote;
+                                        
+                                        // CORREÇÃO: Força o arredondamento na raiz ao abrir a tela no modo de edição
+                                        $state[$uuid]['total_cost'] = round($sItem->final_value / $usdQuote, 2);
+                                        
                                         $state[$uuid]['quantity_sent'] = $req->quantity ?? 1;
                                         $state[$uuid]['box_factor'] = $req->qtunitcx ?? $req->product?->qtunitcx ?? 1;
                                         
@@ -262,7 +264,6 @@ class PricingResource extends Resource
                                     }
                                 }
 
-                                // Ordenação Padrão ao Abrir a Página (Modo Edição)
                                 $sortedState = collect($state)->sortBy(function ($item) {
                                     return strtolower($item['product_name'] ?? '');
                                 })->toArray();
@@ -296,7 +297,6 @@ class PricingResource extends Resource
                                     ->dehydrated(false)
                                     ->extraInputAttributes(['class' => 'text-sm leading-tight']),
 
-                                // ALTERAÇÃO: Arredondamento para exibir apenas 2 casas decimais
                                 Forms\Components\TextInput::make('total_cost')
                                     ->label('Custo Total')
                                     ->disabled()
@@ -504,6 +504,11 @@ class PricingResource extends Resource
                             $usdQuote = $record->settlement?->usd_quote ?? 1;
                             if ($usdQuote <= 0) $usdQuote = 1;
 
+                            // Ordenação alfabética também no Excel
+                            $items = $items->sortBy(function ($item) {
+                                return strtolower($item->settlementItem?->requestItem?->product_name ?? '');
+                            });
+
                             foreach ($items as $item) {
                                 $sItem = $item->settlementItem;
                                 $req = $sItem?->requestItem;
@@ -511,7 +516,7 @@ class PricingResource extends Resource
 
                                 $winthorCode = $req?->winthor_code ?? $prod?->codprod ?? '-';
                                 $productName = $req?->product_name ?? '-';
-                                $totalCost = $sItem ? ($sItem->final_value / $usdQuote) : 0;
+                                $totalCost = $sItem ? round($sItem->final_value / $usdQuote, 2) : 0;
                                 
                                 $qty = $req?->quantity ?? 1;
                                 $boxFactor = $req?->qtunitcx ?? $prod?->qtunitcx ?? 1;
@@ -520,7 +525,7 @@ class PricingResource extends Resource
                                 $writer->addRow(Row::fromValues([
                                     $winthorCode,
                                     $productName,
-                                    round((float) $totalCost, 4),
+                                    round((float) $totalCost, 2), // Excel também formatado em 2 casas
                                     round((float) $displayQty, 2),
                                     round((float) $boxFactor, 2),
                                     $item->is_fractional ? 'Sim' : 'Não',
