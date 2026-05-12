@@ -26,11 +26,10 @@ class PrintLabels extends Page implements HasForms
     protected static ?string $navigationGroup = 'Etiquetas';
     protected static ?int $navigationSort = 1;
 
-    // Propriedades do Formulário Principal
     public ?string $search_code = '';
     public string $labelLayout = 'standard';
+    public string $unit = 'oz';
     
-    // Propriedade para armazenar os ajustes de calibração
     public array $settingsData = [];
 
     public ?Product $product = null;
@@ -89,6 +88,7 @@ class PrintLabels extends Page implements HasForms
 
         return [
             'settings' => $previewSettings,
+            'selectedUnit' => $this->unit,
         ];
     }
 
@@ -108,7 +108,7 @@ class PrintLabels extends Page implements HasForms
                                 ->action(fn() => $this->searchProduct())
                         )
                         ->extraInputAttributes(['wire:keydown.enter' => 'searchProduct'])
-                        ->columnSpan(5), // Reduzido para dar espaço
+                        ->columnSpan(4),
 
                     Select::make('labelLayout')
                         ->label('Layout / Papel')
@@ -120,15 +120,26 @@ class PrintLabels extends Page implements HasForms
                         ->selectablePlaceholder(false)
                         ->live() 
                         ->required()
-                        ->columnSpan(5), // Reduzido para dar espaço
+                        ->columnSpan(4),
 
-                    // Botão de Calibração que abre um menu ocultável (Slide-over/Modal) ocupando o espaço da antiga "Qtd"
+                    Select::make('unit')
+                        ->label('Unidade')
+                        ->options([
+                            'oz' => 'Onça (oz)',
+                            'g' => 'Grama (g)',
+                        ])
+                        ->default('oz')
+                        ->selectablePlaceholder(false)
+                        ->live()
+                        ->required()
+                        ->columnSpan(2),
+
                     \Filament\Forms\Components\Actions::make([
                         Action::make('calibrate')
                             ->label('Calibração')
                             ->icon('heroicon-o-adjustments-horizontal')
                             ->color('gray')
-                            ->slideOver() // Abre como um painel lateral limpo
+                            ->slideOver()
                             ->modalHeading(fn() => 'Calibração: ' . ucfirst($this->labelLayout))
                             ->modalDescription('Ajustes finos salvos especificamente para o papel e impressora atuais.')
                             ->modalSubmitActionLabel('Salvar Ajustes')
@@ -148,7 +159,7 @@ class PrintLabels extends Page implements HasForms
                                 $this->saveSettings();
                             }),
                     ])
-                    ->columnSpan(2) // Ocupa o restante do grid
+                    ->columnSpan(2)
                     ->verticalAlignment('end'),
                 ]),
             ]);
@@ -160,7 +171,6 @@ class PrintLabels extends Page implements HasForms
         $search = trim($this->search_code);
         $maxInt = 2147483647;
 
-        // Com base no histórico, a base é Postgres, então a consulta Eloquent padrão lidará bem com isso.
         $query = Product::query();
 
         if (is_numeric($search) && $search > $maxInt) {

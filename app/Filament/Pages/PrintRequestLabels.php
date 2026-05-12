@@ -20,7 +20,8 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Actions\Action as TableAction;
+use Filament\Tables\Actions\TableAction;
+use Filament\Tables\Actions\ActionGroup;
 use Filament\Actions\Action as PageAction;
 use Filament\Notifications\Notification;
 
@@ -43,7 +44,6 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
         $this->form->fill();
     }
 
-    // --- AÇÃO NO CABEÇALHO: CALIBRAÇÃO UNIFICADA ---
     protected function getHeaderActions(): array
     {
         return [
@@ -55,7 +55,6 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                 ->modalHeading('Ajuste Global de Margens')
                 ->modalDescription('As alterações feitas aqui refletem em todo o sistema.')
                 ->fillForm(function () {
-                    // Carrega do banco as configurações atuais de ambos os papéis
                     $std = LabelSetting::firstOrCreate(['layout' => 'standard'], ['padding_top' => 2, 'padding_left' => 2, 'padding_right' => 2, 'padding_bottom' => 2, 'gap_width' => 6, 'font_scale' => 100]);
                     $tab = LabelSetting::firstOrCreate(['layout' => 'tabular'], ['padding_top' => 2, 'padding_left' => 2, 'padding_right' => 2, 'padding_bottom' => 2, 'gap_width' => 6, 'font_scale' => 100]);
 
@@ -120,7 +119,6 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
         ];
     }
 
-    // --- FORMULÁRIO SUPERIOR: SELEÇÃO DA SOLICITAÇÃO ---
     public function form(Form $form): Form
     {
         return $form
@@ -130,13 +128,12 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                         Grid::make(12)->schema([
                             Select::make('request_id')
                                 ->label('Pesquisar Solicitação')
-                                ->placeholder('Selecione pela Observação') // Alterado o placeholder
-                                // Mostra apenas solicitações em aberto e carrega pela descrição (observation)
+                                ->placeholder('Selecione pela Observação')
                                 ->options(
                                     Request::where('status', 'aberto')
                                         ->orderByDesc('created_at')
                                         ->limit(100)
-                                        ->pluck('observation', 'id') // Modificado de display_id para observation
+                                        ->pluck('observation', 'id')
                                 )
                                 ->searchable()
                                 ->live()
@@ -167,7 +164,6 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
             ->statePath('data');
     }
 
-    // --- TABELA INFERIOR: LISTAGEM E BOTÕES DE IMPRESSÃO ---
     public function table(Table $table): Table
     {
         $reqId = $this->data['request_id'] ?? null;
@@ -182,11 +178,10 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                         return $query->whereRaw('1 = 0');
                     })
                     ->whereNotNull('product_id')
-                    ->orderBy('product_name', 'asc') // Garante ordenação alfabética na base de dados
+                    ->orderBy('product_name', 'asc')
             )
-            ->defaultSort('product_name', 'asc') // Reflete a ordenação na UI do Filament
+            ->defaultSort('product_name', 'asc')
             ->columns([
-
                 TextColumn::make('winthor_code')
                     ->label('Codigo')
                     ->weight('bold')
@@ -216,13 +211,9 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                     ->label('Qtd Sugerida')
                     ->state(function (RequestItem $record) {
                         $qtunitcx = (int) ($record->product->qtunitcx ?? 0);
-
                         if ($qtunitcx === 0) return 0;
-
                         $adjusted_qtunitcx = ($qtunitcx % 2 !== 0) ? $qtunitcx + 1 : $qtunitcx;
-
                         $totalSugerido = ($record->quantity * $adjusted_qtunitcx) / 2;
-
                         return ceil($totalSugerido);
                     })
                     ->badge()
@@ -231,23 +222,49 @@ class PrintRequestLabels extends Page implements HasForms, HasTable
                     ->tooltip('Calculado: (Qtd Caixas * Unidades) / 2. Ímpares são arredondados para cima para fechar o par.'),
             ])
             ->actions([
-                TableAction::make('print_tabular')
-                    ->label('Interna (Produto)')
-                    ->icon('heroicon-o-document-duplicate')
-                    ->color('success')
-                    ->action(function (RequestItem $record) {
-                        $url = route('print.label', ['product' => $record->product_id]) . '?layout=tabular';
-                        $this->dispatch('print-label-event', url: $url);
-                    }),
+                ActionGroup::make([
+                    \Filament\Tables\Actions\Action::make('print_tabular_oz')
+                        ->label('Gerar em Onças (oz)')
+                        ->icon('heroicon-o-scale')
+                        ->action(function (RequestItem $record) {
+                            $url = route('print.label', ['product' => $record->product_id]) . '?layout=tabular&unit=oz';
+                            $this->dispatch('print-label-event', url: $url);
+                        }),
+                    
+                    \Filament\Tables\Actions\Action::make('print_tabular_g')
+                        ->label('Gerar em Gramas (g)')
+                        ->icon('heroicon-o-scale')
+                        ->action(function (RequestItem $record) {
+                            $url = route('print.label', ['product' => $record->product_id]) . '?layout=tabular&unit=g';
+                            $this->dispatch('print-label-event', url: $url);
+                        }),
+                ])
+                ->label('Interna (Produto)')
+                ->icon('heroicon-o-document-duplicate')
+                ->color('success')
+                ->button(),
 
-                TableAction::make('print_standard')
-                    ->label('Externa (Caixa)')
-                    ->icon('heroicon-o-document')
-                    ->color('primary')
-                    ->action(function (RequestItem $record) {
-                        $url = route('print.label', ['product' => $record->product_id]) . '?layout=standard';
-                        $this->dispatch('print-label-event', url: $url);
-                    }),
+                ActionGroup::make([
+                    \Filament\Tables\Actions\Action::make('print_standard_oz')
+                        ->label('Gerar em Onças (oz)')
+                        ->icon('heroicon-o-scale')
+                        ->action(function (RequestItem $record) {
+                            $url = route('print.label', ['product' => $record->product_id]) . '?layout=standard&unit=oz';
+                            $this->dispatch('print-label-event', url: $url);
+                        }),
+                    
+                    \Filament\Tables\Actions\Action::make('print_standard_g')
+                        ->label('Gerar em Gramas (g)')
+                        ->icon('heroicon-o-scale')
+                        ->action(function (RequestItem $record) {
+                            $url = route('print.label', ['product' => $record->product_id]) . '?layout=standard&unit=g';
+                            $this->dispatch('print-label-event', url: $url);
+                        }),
+                ])
+                ->label('Externa (Caixa)')
+                ->icon('heroicon-o-document')
+                ->color('primary')
+                ->button(),
             ])
             ->emptyStateHeading('Selecione uma Solicitação')
             ->emptyStateDescription('Utilize o campo acima para carregar os produtos.')

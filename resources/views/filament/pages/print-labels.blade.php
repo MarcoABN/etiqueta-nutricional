@@ -9,7 +9,6 @@
     @if($this->product)
         <div class="animate-fade-in-up mt-6">
             
-            {{-- Forçando 3 colunas verticais (lado a lado) --}}
             <div class="flex flex-row gap-6 items-stretch w-full overflow-x-auto">
                 
                 {{-- COLUNA 1: PREVIEW DA ETIQUETA --}}
@@ -23,12 +22,14 @@
                         @if($this->labelLayout === 'standard')
                             @include('components.fda-label-template', [
                                 'product' => $this->product,
-                                'settings' => $settings
+                                'settings' => $settings,
+                                'unit' => $selectedUnit
                             ])
                         @else
                             @include('components.fda-label-tabular', [
                                 'product' => $this->product, 
-                                'settings' => $settings
+                                'settings' => $settings,
+                                'unit' => $selectedUnit
                             ])
                         @endif
                     </div>
@@ -37,7 +38,6 @@
                 {{-- COLUNA 2: DADOS DO PRODUTO --}}
                 <div class="flex-1 min-w-[250px] flex flex-col space-y-5 bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
                     
-                    {{-- Bloco 1: Status --}}
                     <div>
                         <span class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Status da Integração</span>
                         @php
@@ -59,7 +59,6 @@
                     <hr class="border-gray-100 dark:border-gray-700">
                     <br>
                     
-                    {{-- Bloco 2: Produto (PT e EN agrupados) --}}
                     <div>
                         <span class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Produto</span>
                         
@@ -75,7 +74,6 @@
                     
                     <hr class="border-gray-100 dark:border-gray-700">
 
-                    {{-- Bloco 3: Quantidade --}}
                     <div>
                         <span class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Qtd Cx</span>
                         <div class="text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -92,14 +90,12 @@
                         size="xl"
                         class="w-full max-w-xs px-8 py-6 text-lg shadow-xl transition-transform hover:scale-105"
                         x-on:click="
-                            document.getElementById('printFrame').src = '{{ route('print.label', ['product' => $this->product?->id ?? '0']) }}?layout={{ $this->labelLayout }}';
+                            document.getElementById('printFrame').src = '{{ route('print.label', ['product' => $this->product?->id ?? '0']) }}?layout={{ $this->labelLayout }}&unit={{ $selectedUnit }}';
                             new FilamentNotification().title('Janela de impressão aberta').success().send();
                         "
                     >
                         IMPRIMIR ETIQUETAS
                     </x-filament::button>
-                    
-                    
                 </div>
 
             </div>

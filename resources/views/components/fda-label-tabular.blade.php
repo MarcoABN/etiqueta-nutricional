@@ -1,4 +1,4 @@
-@props(['product', 'settings'])
+@props(['product', 'settings', 'unit' => null])
 
 @if(!$product)
     <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: #fee2e2; color: #991b1b; font-weight: bold; border: 2px dashed #f87171;">
@@ -16,6 +16,28 @@
     $targetVisualHeight = min(48.0, $maxPhysicalWidth);
     $innerPad = 1.5; 
 
+    // LÓGICA DE CONVERSÃO (Onça vs Grama)
+    $requestUnit = $unit ?? request('unit', 'oz'); 
+
+    $convert = function($value, $fromUnit) use ($requestUnit) {
+        $val = floatval($value);
+        if ($val <= 0) return 0;
+        if ($requestUnit === 'g') return $val;
+
+        if ($fromUnit === 'g') return round($val * 0.035274, 2);
+        if ($fromUnit === 'mg') return round($val * 0.000035274, 4);
+        if ($fromUnit === 'mcg') return round($val * 0.000000035274, 6);
+        
+        return $val;
+    };
+
+    $getUnit = function($fromUnit) use ($requestUnit) {
+        return $requestUnit === 'g' ? $fromUnit : 'oz';
+    };
+
+    $rawServingWeight = preg_replace('/[^0-9.]/', '', $product->serving_weight ?? '0');
+    $displayServingWeight = $convert($rawServingWeight, 'g') . $getUnit('g');
+
     // Dados
     $microsText = collect([
         ['Vitamin D', $product->vitamin_d, 'mcg'],
@@ -23,25 +45,25 @@
         ['Iron', $product->iron, 'mg'],
         ['Potassium', $product->potassium, 'mg'],
     ])->filter(fn($m) => floatval($m[1]) > 0)
-      ->map(fn($m) => "{$m[0]} {$m[1]}{$m[2]}")->implode(' • ');
+      ->map(fn($m) => "{$m[0]} " . $convert($m[1], $m[2]) . $getUnit($m[2]))->implode(' • ');
 
     $col2_data = [
-        ['Total Fat', ($product->total_fat ?? '0').'g', $product->total_fat_dv, true],
-        ['Saturated Fat', ($product->sat_fat ?? '0').'g', $product->sat_fat_dv, false, true],
-        ['Trans Fat', ($product->trans_fat ?? '0').'g', '', false, true],
-        ['Cholesterol', ($product->cholesterol ?? '0').'mg', $product->cholesterol_dv, true],
-        ['Sodium', ($product->sodium ?? '0').'mg', $product->sodium_dv, true],
+        ['Total Fat', $convert($product->total_fat, 'g').$getUnit('g'), $product->total_fat_dv, true],
+        ['Saturated Fat', $convert($product->sat_fat, 'g').$getUnit('g'), $product->sat_fat_dv, false, true],
+        ['Trans Fat', $convert($product->trans_fat, 'g').$getUnit('g'), '', false, true],
+        ['Cholesterol', $convert($product->cholesterol, 'mg').$getUnit('mg'), $product->cholesterol_dv, true],
+        ['Sodium', $convert($product->sodium, 'mg').$getUnit('mg'), $product->sodium_dv, true],
     ];
 
     $col3_data = [
-        ['Total Carb.', ($product->total_carb ?? '0').'g', $product->total_carb_dv, true],
-        ['Dietary Fiber', ($product->fiber ?? '0').'g', $product->fiber_dv, false, true],
-        ['Total Sugars', ($product->total_sugars ?? '0').'g', '', false, true],
-        ['Incl. Added Sugars', ($product->added_sugars ?? '0').'g', $product->added_sugars_dv, false, true],
-        ['Protein', ($product->protein ?? '0').'g', $product->protein_dv, true],
+        ['Total Carb.', $convert($product->total_carb, 'g').$getUnit('g'), $product->total_carb_dv, true],
+        ['Dietary Fiber', $convert($product->fiber, 'g').$getUnit('g'), $product->fiber_dv, false, true],
+        ['Total Sugars', $convert($product->total_sugars, 'g').$getUnit('g'), '', false, true],
+        ['Incl. Added Sugars', $convert($product->added_sugars, 'g').$getUnit('g'), $product->added_sugars_dv, false, true],
+        ['Protein', $convert($product->protein, 'g').$getUnit('g'), $product->protein_dv, true],
     ];
 
-    $drawLabelContent = function() use ($product, $scale, $microsText, $col2_data, $col3_data, $innerPad, $targetVisualWidth, $targetVisualHeight) {
+    $drawLabelContent = function() use ($product, $scale, $microsText, $col2_data, $col3_data, $innerPad, $targetVisualWidth, $targetVisualHeight, $displayServingWeight) {
         ?>
         <div style="
             width: <?php echo $targetVisualWidth; ?>mm; 
@@ -68,7 +90,7 @@
                             </div>
                             <div style="font-size: <?php echo 5.5 * $scale; ?>pt; line-height: 1.1; font-weight: 900; color: black;">
                                 Serving size<br>
-                                <?php echo $product->serving_size_quantity ?? '0'; ?><?php echo $product->serving_size_unit; ?> (<?php echo $product->serving_weight; ?>)
+                                <?php echo $product->serving_size_quantity ?? '0'; ?><?php echo $product->serving_size_unit; ?> (<?php echo $displayServingWeight; ?>)
                             </div>
                         </div>
                         <div style="border-top: 1px solid black; padding: 2px 2px 2px 3px; margin-top: 2px;">
@@ -173,7 +195,6 @@
 
 <div style="position: relative; width: 100mm; height: 80mm; background: white; overflow: hidden;">
     
-    {{-- ETIQUETA 1 --}}
     <div style="
         position: absolute; 
         top: 0; left: 0; 
@@ -183,7 +204,6 @@
         <div style="transform: rotate(90deg);">{{ $drawLabelContent() }}</div>
     </div>
 
-    {{-- GAP --}}
     <div style="
         position: absolute;
         left: <?php echo 50 - ($gapWidth / 2); ?>mm;
@@ -191,7 +211,6 @@
         height: 80mm;
     "></div>
 
-    {{-- ETIQUETA 2 --}}
     <div style="
         position: absolute; 
         top: 0; left: <?php echo 50 + ($gapWidth / 2); ?>mm; 
