@@ -15,7 +15,6 @@ class EditSettlement extends EditRecord
 {
     protected static string $resource = SettlementResource::class;
 
-    // Oculta o botão "Guardar" padrão se o fechamento estiver travado (is_locked)
     protected function getSaveFormAction(): \Filament\Actions\Action
     {
         return parent::getSaveFormAction()
@@ -25,11 +24,10 @@ class EditSettlement extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            // --- AÇÃO: CONSOLIDAR FECHAMENTO ---
             Actions\Action::make('consolidate_settlement')
                 ->label('Consolidar Fechamento')
                 ->icon('heroicon-o-lock-closed')
-                ->color('success') // Verde: indica que o processo foi concluído com êxito
+                ->color('success')
                 ->requiresConfirmation()
                 ->modalHeading('Consolidar Fechamento?')
                 ->modalDescription('Após consolidar, os dados da solicitação, produtos e despesas se tornarão imutáveis (somente leitura). Deseja continuar?')
@@ -42,11 +40,10 @@ class EditSettlement extends EditRecord
                         ->send();
                 }),
 
-            // --- AÇÃO: REABRIR FECHAMENTO ---
             Actions\Action::make('reopen_settlement')
                 ->label('Reabrir Fechamento')
                 ->icon('heroicon-o-lock-open')
-                ->color('warning') // Laranja/Amarelo: indica uma ação de exceção/atenção
+                ->color('warning')
                 ->requiresConfirmation()
                 ->modalHeading('Reabrir Fechamento?')
                 ->modalDescription('Atenção: Reabrir permitirá que os valores e despesas sejam editados novamente. Deseja continuar?')
@@ -59,7 +56,6 @@ class EditSettlement extends EditRecord
                         ->send();
                 }),
 
-            // --- AÇÃO EXISTENTE: IMPRIMIR RELATÓRIO ---
             Actions\Action::make('print_report')
                 ->label('Imprimir Relatório')
                 ->icon('heroicon-o-printer')
@@ -67,7 +63,6 @@ class EditSettlement extends EditRecord
                 ->url(fn(Settlement $record): string => route('settlement.print', $record))
                 ->openUrlInNewTab(),
 
-            // --- AÇÃO EXISTENTE: EXPORTAR EXCEL ---
             Actions\Action::make('export_details')
                 ->label('Exportar')
                 ->icon('heroicon-o-document-arrow-down')
@@ -81,14 +76,14 @@ class EditSettlement extends EditRecord
                         $writer = new Writer($options);
                         $writer->openToFile('php://output');
 
-                        // ==========================================
-                        // PREPARAÇÃO DE DADOS E HELPER DE CONVERSÃO
-                        // ==========================================
                         $initialTotal = $record->items()->sum('initial_value');
                         $overallTotal = $record->overall_total;
                         $expenses = $record->expenses()->orderBy('expense_number')->get();
 
-                        // Itens ordenados alfabeticamente pelo nome do produto em Português
+                        // Separação dos valores em R$
+                        $internalTotalBrl = $expenses->where('is_external', false)->sum('amount');
+                        $externalTotalBrl = $expenses->where('is_external', true)->sum('amount');
+
                         $items = $record->items()
                             ->with('requestItem.product')
                             ->get()
@@ -97,13 +92,13 @@ class EditSettlement extends EditRecord
                             });
 
                         $totalVal = (float) $record->total_value;
-
-                        // Função helper para converter e arredondar para Dólar global de forma segura
                         $usdQuote = (float) $record->usd_quote;
                         $toUsd = fn($value) => $usdQuote > 0 ? round((float) $value / $usdQuote, 2) : 0;
 
+                        $isFactor100 = (float) $record->calculation_factor == 100;
+
                         // ==========================================
-                        // ABA 1: RESUMO E DESPESAS (BRL)
+                        // ABA 1: RESUMO E DESPESAS (R$)
                         // ==========================================
                         $sheet1 = $writer->getCurrentSheet();
                         $sheet1->setName('Resumo e Despesas (R$)');
@@ -120,33 +115,42 @@ class EditSettlement extends EditRecord
                             round((float) $record->calculation_factor, 2) . '%',
                         ]));
 
-                        $writer->addRow(Row::fromValues([
-                            'Total Inicial:',
-                            round((float) $initialTotal, 2),
-                            'Total Real:',
-                            round((float) $record->total_value, 2),
+                        $totaisRow1 = ['Total Inicial:', round((float) $initialTotal, 2)];
+                        if (!$isFactor100) {
+                            array_push($totaisRow1, 'Total Real:', round((float) $record->total_value, 2));
+                        }
+
+                        // R$ exibe separação
+                        array_push(
+                            $totaisRow1,
+                            'Desp. Internas:',
+                            round((float) $internalTotalBrl, 2),
+                            'Desp. Externas:',
+                            round((float) $externalTotalBrl, 2),
                             'Total Despesas:',
                             round((float) $record->total_expenses, 2),
                             '% Despesa:',
                             round((float) $record->expense_percentage, 2) . '%',
                             'Total Final:',
                             round((float) $overallTotal, 2)
-                        ]));
+                        );
+                        $writer->addRow(Row::fromValues($totaisRow1));
 
                         $writer->addRow(Row::fromValues([]));
                         $writer->addRow(Row::fromValues(['Despesas']));
-                        $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Valor (R$)']));
+                        $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Tipo', 'Valor (R$)']));
 
                         if ($expenses->isEmpty()) {
-                            $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', 0]));
+                            $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', '-', 0]));
                         } else {
                             foreach ($expenses as $exp) {
-                                $writer->addRow(Row::fromValues([$exp->description, round((float) $exp->amount, 2)]));
+                                $tipo = $exp->is_external ? 'Externa' : 'Interna';
+                                $writer->addRow(Row::fromValues([$exp->description, $tipo, round((float) $exp->amount, 2)]));
                             }
                         }
 
                         // ==========================================
-                        // ABA 2: DETALHAMENTO DE PRODUTOS (BRL)
+                        // ABA 2: DETALHAMENTO (R$)
                         // ==========================================
                         $sheet2 = $writer->addNewSheetAndMakeItCurrent();
                         $sheet2->setName('Detalhamento (R$)');
@@ -159,12 +163,12 @@ class EditSettlement extends EditRecord
                             'Qtd Caixa',
                             'QTD',
                             'V. UN (R$)',
-                            'Valor Inicial (R$)',
-                            'Valor Real (R$)',
-                            'Rateio Despesas (R$)',
-                            '% Participação rateio',
-                            'Valor Final (R$)'
+                            'Valor Inicial (R$)'
                         ];
+                        if (!$isFactor100) {
+                            $headersBrl[] = 'Valor Real (R$)';
+                        }
+                        array_push($headersBrl, 'Rateio Despesas (R$)', '% Participação rateio', 'Valor Final (R$)');
                         $writer->addRow(Row::fromValues($headersBrl));
 
                         foreach ($items as $item) {
@@ -173,20 +177,10 @@ class EditSettlement extends EditRecord
                             $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
                             $totalApportionment = $item->final_value - $item->partial_value;
 
-                            // Tratamento estrito de tipo para a Qtd Caixa
                             $qtdCaixaRaw = $product?->qtunitcx;
+                            $qtdCaixaExibicao = (is_numeric($qtdCaixaRaw)) ? ((float)$qtdCaixaRaw == (int)$qtdCaixaRaw ? (int)$qtdCaixaRaw : (float)$qtdCaixaRaw) : ($qtdCaixaRaw ?? '-');
 
-                            if (is_numeric($qtdCaixaRaw)) {
-                                $floatVal = (float) $qtdCaixaRaw;
-                                // Se o valor com decimais for matematicamente igual à sua versão inteira (25.00 == 25)
-                                // forçamos o tipo para (int). Caso contrário, mantemos como (float).
-                                $qtdCaixaExibicao = ($floatVal == (int) $floatVal) ? (int) $floatVal : $floatVal;
-                            } else {
-                                // Se for um texto ou fração exata da embalagem (ex: "2 1/2"), passa direto
-                                $qtdCaixaExibicao = $qtdCaixaRaw ?? '-';
-                            }
-
-                            $writer->addRow(Row::fromValues([
+                            $rowDataBrl = [
                                 $reqItem?->winthor_code ?? $product?->codprod ?? '-',
                                 $reqItem?->product_name ?? '-',
                                 $product?->product_name_en ?? '-',
@@ -195,20 +189,28 @@ class EditSettlement extends EditRecord
                                 round((float) ($reqItem?->quantity ?? 0), 2),
                                 round((float) ($reqItem?->unit_price ?? 0), 2),
                                 round((float) $item->initial_value, 2),
-                                round((float) $item->partial_value, 2),
+                            ];
+
+                            if (!$isFactor100) {
+                                $rowDataBrl[] = round((float) $item->partial_value, 2);
+                            }
+
+                            array_push(
+                                $rowDataBrl,
                                 round((float) $totalApportionment, 2),
                                 round((float) ($percentage * 100), 2),
-                                round((float) $item->final_value, 2),
-                            ]));
+                                round((float) $item->final_value, 2)
+                            );
+
+                            $writer->addRow(Row::fromValues($rowDataBrl));
                         }
 
                         // ==========================================
-                        // ABA 3: RESUMO E DESPESAS (USD)
+                        // ABA 3: RESUMO E DESPESAS (US$)
                         // ==========================================
                         $sheet3 = $writer->addNewSheetAndMakeItCurrent();
                         $sheet3->setName('Resumo e Despesas (US$)');
 
-                        // Recalcular o Total das Despesas em USD respeitando cotações personalizadas
                         $totalExpensesUsd = 0;
                         foreach ($expenses as $exp) {
                             $quoteToUse = ($exp->use_custom_quote && $exp->custom_usd_quote > 0) ? (float) $exp->custom_usd_quote : $usdQuote;
@@ -231,18 +233,21 @@ class EditSettlement extends EditRecord
                             round((float) $record->calculation_factor, 2) . '%',
                         ]));
 
-                        $writer->addRow(Row::fromValues([
-                            'Total Inicial:',
-                            $toUsd($initialTotal),
-                            'Total Real:',
-                            $toUsd($record->total_value),
+                        $totaisRow3 = ['Total Inicial:', $toUsd($initialTotal)];
+                        if (!$isFactor100) {
+                            array_push($totaisRow3, 'Total Real:', $toUsd($record->total_value));
+                        }
+                        // US$ Oculta a separação interna e externa
+                        array_push(
+                            $totaisRow3,
                             'Total Despesas:',
                             round($totalExpensesUsd, 2),
                             '% Despesa:',
                             round((float) $record->expense_percentage, 2) . '%',
                             'Total Final:',
                             round($totalGeralUsd, 2)
-                        ]));
+                        );
+                        $writer->addRow(Row::fromValues($totaisRow3));
 
                         $writer->addRow(Row::fromValues([]));
                         $writer->addRow(Row::fromValues(['Despesas']));
@@ -255,9 +260,7 @@ class EditSettlement extends EditRecord
                                 $useCustom = (bool) $exp->use_custom_quote;
                                 $customQuote = (float) $exp->custom_usd_quote;
                                 $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $usdQuote;
-
                                 $usdAmount = $quoteToUse > 0 ? round((float) $exp->amount / $quoteToUse, 2) : 0;
-
                                 $cotacaoStr = $useCustom ? 'Específica (' . round($customQuote, 4) . ')' : 'Global (' . round($usdQuote, 4) . ')';
 
                                 $writer->addRow(Row::fromValues([
@@ -269,7 +272,7 @@ class EditSettlement extends EditRecord
                         }
 
                         // ==========================================
-                        // ABA 4: DETALHAMENTO DE PRODUTOS (USD)
+                        // ABA 4: DETALHAMENTO (US$)
                         // ==========================================
                         $sheet4 = $writer->addNewSheetAndMakeItCurrent();
                         $sheet4->setName('Detalhamento (US$)');
@@ -282,40 +285,27 @@ class EditSettlement extends EditRecord
                             'Qtd Caixa',
                             'QTD',
                             'V. UN (US$)',
-                            'Valor Inicial (US$)',
-                            'Valor Real (US$)',
-                            'Rateio Despesas (US$)',
-                            '% Participação rateio',
-                            'Valor Final (US$)'
+                            'Valor Inicial (US$)'
                         ];
+                        if (!$isFactor100) {
+                            $headersUsd[] = 'Valor Real (US$)';
+                        }
+                        array_push($headersUsd, 'Rateio Despesas (US$)', '% Participação rateio', 'Valor Final (US$)');
                         $writer->addRow(Row::fromValues($headersUsd));
 
                         foreach ($items as $item) {
                             $reqItem = $item->requestItem;
                             $product = $reqItem?->product;
 
-                            // Calcula o percentual de participação do item
                             $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
-
-                            // Calcula os valores em USD baseados no percentual, e não na conversão direta do BRL final
                             $partialUsd = $toUsd($item->partial_value);
                             $apportionmentUsd = round($percentage * $totalExpensesUsd, 2);
                             $finalUsd = $partialUsd + $apportionmentUsd;
 
-                            // Tratamento estrito de tipo para a Qtd Caixa
                             $qtdCaixaRaw = $product?->qtunitcx;
+                            $qtdCaixaExibicao = (is_numeric($qtdCaixaRaw)) ? ((float)$qtdCaixaRaw == (int)$qtdCaixaRaw ? (int)$qtdCaixaRaw : (float)$qtdCaixaRaw) : ($qtdCaixaRaw ?? '-');
 
-                            if (is_numeric($qtdCaixaRaw)) {
-                                $floatVal = (float) $qtdCaixaRaw;
-                                // Se o valor com decimais for matematicamente igual à sua versão inteira (25.00 == 25)
-                                // forçamos o tipo para (int). Caso contrário, mantemos como (float).
-                                $qtdCaixaExibicao = ($floatVal == (int) $floatVal) ? (int) $floatVal : $floatVal;
-                            } else {
-                                // Se for um texto ou fração exata da embalagem (ex: "2 1/2"), passa direto
-                                $qtdCaixaExibicao = $qtdCaixaRaw ?? '-';
-                            }
-
-                            $writer->addRow(Row::fromValues([
+                            $rowDataUsd = [
                                 $reqItem?->winthor_code ?? $product?->codprod ?? '-',
                                 $reqItem?->product_name ?? '-',
                                 $product?->product_name_en ?? '-',
@@ -324,11 +314,20 @@ class EditSettlement extends EditRecord
                                 round((float) ($reqItem?->quantity ?? 0), 2),
                                 $toUsd($reqItem?->unit_price ?? 0),
                                 $toUsd($item->initial_value),
-                                $partialUsd,                              // V. Parcial calculado
-                                $apportionmentUsd,                        // Rateio proporcional em USD real
+                            ];
+
+                            if (!$isFactor100) {
+                                $rowDataUsd[] = $partialUsd;
+                            }
+
+                            array_push(
+                                $rowDataUsd,
+                                $apportionmentUsd,
                                 round((float) ($percentage * 100), 2),
-                                $finalUsd,                                // V. Final preciso
-                            ]));
+                                $finalUsd
+                            );
+
+                            $writer->addRow(Row::fromValues($rowDataUsd));
                         }
 
                         $writer->close();
@@ -337,7 +336,6 @@ class EditSettlement extends EditRecord
                     ]);
                 }),
 
-            // --- AÇÃO EXISTENTE: APAGAR (Ocultada se estiver travado) ---
             Actions\DeleteAction::make()
                 ->hidden(fn() => $this->record->is_locked),
         ];

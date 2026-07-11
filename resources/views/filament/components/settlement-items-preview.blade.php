@@ -1,6 +1,8 @@
 @php
     $request = \App\Models\Request::with('items.product')->find($requestId);
-    $factorDec = (floatval($factor) ?: 70) / 100;
+    $factorDec = (floatval($factor) ?: 100) / 100;
+    $isFactor100 = (floatval($factor) ?: 100) == 100;
+    
     $totalVal = floatval($totalValue);
     $totalExp = floatval($totalExpenses);
 
@@ -37,7 +39,6 @@
 
 @if(!empty($itemsData))
     <div 
-        {{-- O wire:key dinâmico força o Livewire a recriar a tabela quando o Dólar for ativado/desativado --}}
         wire:key="items-preview-{{ $requestId }}-{{ $isUsd ? 'usd' : 'brl' }}-{{ $usd }}"
         x-data="{
             sortCol: 'name',
@@ -90,9 +91,11 @@
                     <th @click="sortBy('initial')" class="px-4 py-2 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Qtd * Valor UN">
                         Valor Inicial <span x-show="sortCol === 'initial'" x-text="sortAsc ? '↑' : '↓'"></span>
                     </th>
+                    @if(!$isFactor100)
                     <th @click="sortBy('partial')" class="px-4 py-2 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Valor Inicial / Fator">
                         Valor Real <span x-show="sortCol === 'partial'" x-text="sortAsc ? '↑' : '↓'"></span>
                     </th>
+                    @endif
                     <th @click="sortBy('apportionment')" class="px-4 py-2 text-orange-600 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="Valor rateado + % de participação">
                         Rateio Despesas <span x-show="sortCol === 'apportionment'" x-text="sortAsc ? '↑' : '↓'"></span>
                     </th>
@@ -121,12 +124,14 @@
                             @endif
                         </td>
                         
+                        @if(!$isFactor100)
                         <td class="px-4 py-2 text-blue-600 align-top whitespace-nowrap">
                             R$ <span x-text="formatBRL(item.partial)"></span>
                             @if($isUsd)
                                 <br><span class="text-xs text-blue-400/80">≈ US$ <span x-text="formatBRL(item.partial / {{ $usd ?: 1 }})"></span></span>
                             @endif
                         </td>
+                        @endif
                         
                         <td class="px-4 py-2 text-orange-600 align-top whitespace-nowrap">
                             R$ <span x-text="formatBRL(item.apportionment)"></span>

@@ -35,24 +35,31 @@
         return $requestUnit === 'g' ? $fromUnit : 'oz';
     };
 
+    // Função para calcular %VD com regras de arredondamento oficiais da FDA
+    $calculateDV = function($amount, $dv) {
+        $val = floatval($amount);
+        if ($val <= 0 || $dv <= 0) return 0;
+        
+        $percent = ($val / $dv) * 100;
+        
+        if ($percent < 1) return 0;
+        if ($percent <= 10) return round($percent / 2) * 2;
+        if ($percent <= 50) return round($percent / 5) * 5;
+        return round($percent / 10) * 10;
+    };
+
     $rawServingWeight = preg_replace('/[^0-9.]/', '', $product->serving_weight ?? '0');
     $displayServingWeight = $convert($rawServingWeight, 'g') . $getUnit('g');
 
-    // Dados
-    $microsText = collect([
-        ['Vitamin D', $product->vitamin_d, 'mcg'],
-        ['Calcium', $product->calcium, 'mg'],
-        ['Iron', $product->iron, 'mg'],
-        ['Potassium', $product->potassium, 'mg'],
-    ])->filter(fn($m) => floatval($m[1]) > 0)
-      ->map(fn($m) => "{$m[0]} " . $convert($m[1], $m[2]) . $getUnit($m[2]))->implode(' • ');
-
+    // Dados das Colunas
     $col2_data = [
         ['Total Fat', $convert($product->total_fat, 'g').$getUnit('g'), $product->total_fat_dv, true],
         ['Saturated Fat', $convert($product->sat_fat, 'g').$getUnit('g'), $product->sat_fat_dv, false, true],
         ['Trans Fat', $convert($product->trans_fat, 'g').$getUnit('g'), '', false, true],
         ['Cholesterol', $convert($product->cholesterol, 'mg').$getUnit('mg'), $product->cholesterol_dv, true],
         ['Sodium', $convert($product->sodium, 'mg').$getUnit('mg'), $product->sodium_dv, true],
+        ['Vitamin D', $convert($product->vitamin_d ?? 0, 'mcg').$getUnit('mcg'), $calculateDV($product->vitamin_d ?? 0, 20), false],
+        ['Calcium', $convert($product->calcium ?? 0, 'mg').$getUnit('mg'), $calculateDV($product->calcium ?? 0, 1300), false],
     ];
 
     $col3_data = [
@@ -61,9 +68,11 @@
         ['Total Sugars', $convert($product->total_sugars, 'g').$getUnit('g'), '', false, true],
         ['Incl. Added Sugars', $convert($product->added_sugars, 'g').$getUnit('g'), $product->added_sugars_dv, false, true],
         ['Protein', $convert($product->protein, 'g').$getUnit('g'), $product->protein_dv, true],
+        ['Iron', $convert($product->iron ?? 0, 'mg').$getUnit('mg'), $calculateDV($product->iron ?? 0, 18), false],
+        ['Potassium', $convert($product->potassium ?? 0, 'mg').$getUnit('mg'), $calculateDV($product->potassium ?? 0, 4700), false],
     ];
 
-    $drawLabelContent = function() use ($product, $scale, $microsText, $col2_data, $col3_data, $innerPad, $targetVisualWidth, $targetVisualHeight, $displayServingWeight) {
+    $drawLabelContent = function() use ($product, $scale, $col2_data, $col3_data, $innerPad, $targetVisualWidth, $targetVisualHeight, $displayServingWeight) {
         ?>
         <div style="
             width: <?php echo $targetVisualWidth; ?>mm; 
@@ -112,12 +121,12 @@
                             <span>% DV</span>
                         </div>
                         <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: space-evenly;">
-                            <?php foreach($col2_data as $item): ?>
-                                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid black; font-size: <?php echo 5.5 * $scale; ?>pt; line-height: 1.1; padding-right: 2px;">
+                            <?php foreach($col2_data as $index => $item): ?>
+                                <div style="display: flex; justify-content: space-between; border-bottom: <?php echo ($index === count($col2_data) - 1) ? 'none' : '1px solid black'; ?>; font-size: <?php echo 5.5 * $scale; ?>pt; line-height: 1.1; padding-right: 2px;">
                                     <span style="white-space: nowrap; <?php echo isset($item[4]) ? 'padding-left: 4px;' : ''; ?>">
                                         <?php if($item[3]): ?><strong><?php echo $item[0]; ?></strong><?php else: echo $item[0]; endif; ?> <?php echo $item[1]; ?>
                                     </span>
-                                    <?php if($item[2] !== ''): ?><strong style="font-size: <?php echo 5.5 * $scale; ?>pt;"><?php echo $item[2]; ?>%</strong><?php endif; ?>
+                                    <?php if(isset($item[2]) && $item[2] !== ''): ?><strong style="font-size: <?php echo 5.5 * $scale; ?>pt;"><?php echo $item[2]; ?>%</strong><?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -129,12 +138,12 @@
                             <span>% DV</span>
                         </div>
                         <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: space-evenly;">
-                            <?php foreach($col3_data as $item): ?>
-                                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid black; font-size: <?php echo 5.5 * $scale; ?>pt; line-height: 1.1; padding-right: 2px;">
+                            <?php foreach($col3_data as $index => $item): ?>
+                                <div style="display: flex; justify-content: space-between; border-bottom: <?php echo ($index === count($col3_data) - 1) ? 'none' : '1px solid black'; ?>; font-size: <?php echo 5.5 * $scale; ?>pt; line-height: 1.1; padding-right: 2px;">
                                     <span style="white-space: nowrap; <?php echo isset($item[4]) ? 'padding-left: 4px;' : ''; ?>">
                                         <?php if($item[3]): ?><strong><?php echo $item[0]; ?></strong><?php else: echo $item[0]; endif; ?> <?php echo $item[1]; ?>
                                     </span>
-                                    <?php if($item[2] !== ''): ?><strong style="font-size: <?php echo 5.5 * $scale; ?>pt;"><?php echo $item[2]; ?>%</strong><?php endif; ?>
+                                    <?php if(isset($item[2]) && $item[2] !== ''): ?><strong style="font-size: <?php echo 5.5 * $scale; ?>pt;"><?php echo $item[2]; ?>%</strong><?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -145,10 +154,6 @@
                     
                     <div style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0;">
                         <div style="font-size: <?php echo 5 * $scale; ?>pt; line-height: 1.1; margin-bottom: 2px;">
-                            <?php if($microsText): ?>
-                                <div style="margin-bottom: 1px; border-bottom: 1px solid black; padding-bottom: 1px;"><?php echo $microsText; ?></div>
-                            <?php endif; ?>
-                            
                             <div style="font-weight: bold; text-transform: uppercase; margin-bottom: 2px;">
                                 <?php echo $product->product_name_en ?? $product->product_name; ?>
                             </div>
@@ -158,7 +163,7 @@
                             flex-grow: 1;
                             overflow: hidden; 
                             display: -webkit-box; 
-                            -webkit-line-clamp: 5;
+                            -webkit-line-clamp: 6;
                             -webkit-box-orient: vertical; 
                             text-overflow: ellipsis;
                             font-size: <?php echo 5 * $scale; ?>pt; 
@@ -180,8 +185,8 @@
                     </div>
 
                     <div style="font-size: <?php echo 4.5 * $scale; ?>pt; line-height: 1.0; border-top: 1px solid black; padding-top: 1px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0;">
-                        <div style="max-width: 65%;">
-                            <?php if(filled($product->imported_by)): ?> IMP: <?php echo nl2br(e($product->imported_by)); ?> <?php else: ?> IMPORTED BY:<br>GO MINAS DISTRIBUTION LLC<br>2042 NW 55TH AVE, MARGATE, FL33063 <?php endif; ?>
+                        <div style="max-width: 75%;">
+                            <?php if(filled($product->imported_by)): ?> IMP: <?php echo nl2br(e($product->imported_by)); ?> <?php else: ?> IMPORTED BY: GO MINAS DISTRIBUTION LLC<br>2042 NW 55TH AVE, MARGATE, FL 33063 <?php endif; ?>
                         </div>
                         <div style="font-weight: bold; text-align: right;">Product of <?php echo $product->origin_country ?? 'Brazil'; ?></div>
                     </div>

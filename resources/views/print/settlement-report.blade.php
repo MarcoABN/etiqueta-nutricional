@@ -49,7 +49,7 @@
         th {
             background-color: #f9fafb;
             font-weight: 600;
-            font-size: 9px;
+            font-size: 8px;
             text-transform: uppercase;
             color: #4b5563;
         }
@@ -82,6 +82,30 @@
         <button onclick="window.print()" class="px-4 py-2 bg-blue-600 rounded text-white font-medium hover:bg-blue-700 text-sm">Imprimir Novamente</button>
     </div>
 
+    @php
+        $isFactor100 = (float) $settlement->calculation_factor == 100;
+        
+        $internalBrl = $expenses->where('is_external', false)->sum('amount');
+        $externalBrl = $expenses->where('is_external', true)->sum('amount');
+
+        $internalUsd = 0;
+        $externalUsd = 0;
+        foreach ($expenses as $exp) {
+            $useCustom = (bool) $exp->use_custom_quote;
+            $customQuote = (float) $exp->custom_usd_quote;
+            $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $usdQuote;
+            
+            if ($quoteToUse > 0) {
+                $usdVal = (float) $exp->amount / $quoteToUse;
+                if ($exp->is_external) {
+                    $externalUsd += $usdVal;
+                } else {
+                    $internalUsd += $usdVal;
+                }
+            }
+        }
+    @endphp
+
     <div class="max-w-[210mm] mx-auto">
 
         <h1 class="text-xl font-bold text-center mb-4 text-gray-800 uppercase tracking-wide border-b pb-2">
@@ -91,12 +115,16 @@
         <h2 class="text-xs font-bold bg-gray-800 text-white p-1.5 mb-1 rounded-t-sm uppercase">Resumo Financeiro</h2>
         <table class="mb-4">
             <tr>
-                <th class="text-center w-[12%]">Cot. USD</th>
-                <th class="text-center w-[10%]">Fator</th>
-                <th class="text-right w-[18%]">Total Inicial</th>
-                <th class="text-right w-[20%]">Total Real (Produtos)</th>
-                <th class="text-right w-[20%]">Total Despesas</th>
-                <th class="text-right w-[20%] bg-highlight border-green-200">Total Final</th>
+                <th class="text-center w-[9%]">Cot. USD</th>
+                <th class="text-center w-[8%]">Fator</th>
+                <th class="text-right w-[14%]">Total Inicial</th>
+                @if(!$isFactor100)
+                    <th class="text-right w-[15%]">Total Real</th>
+                @endif
+                <th class="text-right w-[14%]">Desp. Internas</th>
+                <th class="text-right w-[14%]">Desp. Externas</th>
+                <th class="text-right w-[14%]">Soma Despesas</th>
+                <th class="text-right {{ $isFactor100 ? 'w-[27%]' : 'w-[12%]' }} bg-highlight border-green-200">Total Final</th>
             </tr>
             <tr>
                 <td class="text-center font-medium" style="vertical-align: middle;">R$ {{ number_format($usdQuote, 4, ',', '.') }}</td>
@@ -107,9 +135,21 @@
                     <span class="val-usd">≈ US$ {{ number_format($toUsd($initialTotal), 2, ',', '.') }}</span>
                 </td>
 
+                @if(!$isFactor100)
                 <td class="text-right">
                     <span class="val-brl text-blue-700">R$ {{ number_format((float) $settlement->total_value, 2, ',', '.') }}</span>
                     <span class="val-usd">≈ US$ {{ number_format($toUsd($settlement->total_value), 2, ',', '.') }}</span>
+                </td>
+                @endif
+
+                <td class="text-right">
+                    <span class="val-brl text-orange-700">R$ {{ number_format((float) $internalBrl, 2, ',', '.') }}</span>
+                    <span class="val-usd">≈ US$ {{ number_format($internalUsd, 2, ',', '.') }}</span>
+                </td>
+
+                <td class="text-right">
+                    <span class="val-brl text-orange-700">R$ {{ number_format((float) $externalBrl, 2, ',', '.') }}</span>
+                    <span class="val-usd">≈ US$ {{ number_format($externalUsd, 2, ',', '.') }}</span>
                 </td>
 
                 <td class="text-right">
@@ -128,8 +168,9 @@
         <h2 class="text-xs font-bold bg-gray-800 text-white p-1.5 mb-1 rounded-t-sm uppercase">Detalhamento de Despesas</h2>
         <table class="mb-4">
             <tr>
-                <th class="w-[60%]">Descrição da Despesa</th>
-                <th class="text-center w-[20%]">Cotação Utilizada</th>
+                <th class="w-[50%]">Descrição da Despesa</th>
+                <th class="text-center w-[15%]">Tipo</th>
+                <th class="text-center w-[15%]">Cotação Utilizada</th>
                 <th class="text-right w-[20%]">Valor da Despesa</th>
             </tr>
 
@@ -142,6 +183,9 @@
             @endphp
             <tr>
                 <td class="font-medium text-gray-800" style="vertical-align: middle;">{{ $exp->description }}</td>
+                <td class="text-center font-medium {{ $exp->is_external ? 'text-orange-600' : 'text-gray-600' }} text-[9px]" style="vertical-align: middle;">
+                    {{ $exp->is_external ? 'Externa' : 'Interna' }}
+                </td>
                 <td class="text-center text-gray-600 text-[9px]" style="vertical-align: middle;">
                     {{ $useCustom ? 'Específica (R$ ' . number_format($customQuote, 4, ',', '.') . ')' : 'Global' }}
                 </td>
@@ -158,11 +202,13 @@
         <table>
             <tr>
                 <th class="text-center w-[8%]">Cód.</th>
-                <th class="w-[28%]">Produto</th>
+                <th class="{{ $isFactor100 ? 'w-[41%]' : 'w-[28%]' }}">Produto</th>
                 <th class="text-center w-[6%]">Qtd</th>
                 <th class="text-center w-[8%]">% Rateio</th>
                 <th class="text-right w-[12%]">V. Unitário</th>
-                <th class="text-right w-[13%]">V. Real</th>
+                @if(!$isFactor100)
+                    <th class="text-right w-[13%]">V. Real</th>
+                @endif
                 <th class="text-right w-[12%]">Rateio Desp.</th>
                 <th class="text-right w-[13%] bg-gray-100">Valor Final</th>
             </tr>
@@ -188,10 +234,12 @@
                     <span class="val-usd">≈ {{ number_format($toUsd($reqItem?->unit_price ?? 0), 2, ',', '.') }}</span>
                 </td>
 
+                @if(!$isFactor100)
                 <td class="text-right">
                     <span class="val-brl">{{ number_format((float) $item->partial_value, 2, ',', '.') }}</span>
                     <span class="val-usd">≈ {{ number_format($partialUsd, 2, ',', '.') }}</span>
                 </td>
+                @endif
 
                 <td class="text-right">
                     <span class="val-brl text-red-700">+ {{ number_format((float) $apportionmentBrl, 2, ',', '.') }}</span>

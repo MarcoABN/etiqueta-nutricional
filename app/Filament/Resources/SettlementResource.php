@@ -14,9 +14,6 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Illuminate\Support\HtmlString;
 use Illuminate\Validation\Rules\Unique;
-use OpenSpout\Common\Entity\Row;
-use OpenSpout\Writer\XLSX\Options;
-use OpenSpout\Writer\XLSX\Writer;
 use Icetalker\FilamentTableRepeater\Forms\Components\TableRepeater;
 
 class SettlementResource extends Resource
@@ -40,8 +37,8 @@ class SettlementResource extends Resource
             return;
 
         $factorRaw = $get('calculation_factor') ?? $get('../../calculation_factor');
-        $factor = (float) ($factorRaw ?: 70);
-        $factorDec = $factor > 0 ? $factor / 100 : 0.70;
+        $factor = (float) ($factorRaw ?: 100);
+        $factorDec = $factor > 0 ? $factor / 100 : 1.00;
 
         $initialTotal = 0;
         $totalValue = 0;
@@ -55,7 +52,19 @@ class SettlementResource extends Resource
         }
 
         $expenses = $get('expenses') ?? $get('../../expenses') ?? [];
-        $totalExpenses = collect($expenses)->sum('amount');
+        $internalExpenses = 0;
+        $externalExpenses = 0;
+
+        foreach ($expenses as $exp) {
+            $val = (float) ($exp['amount'] ?? 0);
+            if (!empty($exp['is_external'])) {
+                $externalExpenses += $val;
+            } else {
+                $internalExpenses += $val;
+            }
+        }
+
+        $totalExpenses = $internalExpenses + $externalExpenses;
 
         $expensePercentage = $totalValue > 0 ? ($totalExpenses / $totalValue) * 100 : 0;
         $overallTotal = $totalValue + $totalExpenses;
@@ -63,17 +72,19 @@ class SettlementResource extends Resource
         $isRepeater = $get('request_id') === null;
         $prefix = $isRepeater ? '../../' : '';
 
-        // Campos reais salvos no banco (Matemática pura, sem formatação)
+        // Campos reais salvos no banco
         $set($prefix . 'initial_total', round($initialTotal, 2));
         $set($prefix . 'total_value', round($totalValue, 2));
         $set($prefix . 'total_expenses', round($totalExpenses, 2));
         $set($prefix . 'expense_percentage', round($expensePercentage, 3));
         $set($prefix . 'overall_total', round($overallTotal, 2));
 
-        // Campos de exibição visual com máscara no padrão Brasileiro (16.700,99)
+        // Campos de exibição visual com máscara no padrão Brasileiro
         $set($prefix . 'display_initial_total', number_format($initialTotal, 2, ',', '.'));
         $set($prefix . 'display_total_value', number_format($totalValue, 2, ',', '.'));
         $set($prefix . 'display_total_expenses', number_format($totalExpenses, 2, ',', '.'));
+        $set($prefix . 'display_internal_expenses', number_format($internalExpenses, 2, ',', '.'));
+        $set($prefix . 'display_external_expenses', number_format($externalExpenses, 2, ',', '.'));
         $set($prefix . 'display_overall_total', number_format($overallTotal, 2, ',', '.'));
         $set($prefix . 'display_expense_percentage', number_format($expensePercentage, 3, ',', '.'));
     }
@@ -82,9 +93,8 @@ class SettlementResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Hidden::make('show_in_usd')
-                    ->default(false)
-                    ->dehydrated(false),
+                Forms\Components\Hidden::make('show_in_usd')->default(false)->dehydrated(false),
+                Forms\Components\Hidden::make('is_factor_unlocked')->default(false)->dehydrated(false),
                 Forms\Components\Hidden::make('initial_total'),
                 Forms\Components\Hidden::make('total_value'),
                 Forms\Components\Hidden::make('total_expenses'),
@@ -94,12 +104,10 @@ class SettlementResource extends Resource
                 Forms\Components\Section::make('Dados e Totais do Fechamento')
                     ->disabled(fn(?Settlement $record) => $record?->is_locked ?? false)
                     ->schema([
-                        Forms\Components\Grid::make(['default' => 1, 'sm' => 2, 'lg' => 12])
+                        Forms\Components\Grid::make(['default' => 1, 'sm' => 2, 'lg' => 20])
                             ->schema([
                                 Forms\Components\Select::make('request_id')
                                     ->label('Solicitação')
-                                    // ANTES: ->options(Request::where('status', 'fechado')->pluck('observation', 'id'))
-                                    // DEPOIS:
                                     ->options(Request::pluck('observation', 'id'))
                                     ->required()
                                     ->unique(ignoreRecord: true, modifyRuleUsing: fn(Unique $rule) => $rule->whereNull('deleted_at'))
@@ -108,10 +116,10 @@ class SettlementResource extends Resource
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
                                     ->hintIconTooltip('Não é permitido criar mais de um fechamento por solicitação.')
-                                    ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 3]),
+                                    ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 5]),
 
                                 Forms\Components\TextInput::make('usd_quote')
-                                    ->label('Cotação USD Global')
+                                    ->label('Cotação USD')
                                     ->numeric()
                                     ->step(0.0001)
                                     ->minValue(0)
@@ -131,18 +139,29 @@ class SettlementResource extends Resource
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
                                     ->hintIconTooltip('Cotação padrão. Usada para itens e despesas sem cotação específica.')
-                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 2]),
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 3]),
 
                                 Forms\Components\TextInput::make('calculation_factor')
-                                    ->label('Fator (%)')
+                                    ->label('Fator(%)')
                                     ->numeric()
-                                    ->default(70)
+                                    ->default(100)
                                     ->live(debounce: 500)
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
+                                    ->disabled(fn(Get $get, ?Settlement $record) => ($record?->is_locked ?? false) || !$get('is_factor_unlocked'))
+                                    ->hintAction(
+                                        Forms\Components\Actions\Action::make('unlock_factor')
+                                            ->icon('heroicon-m-lock-open')
+                                            ->label('')
+                                            ->requiresConfirmation()
+                                            ->modalHeading('Alterar Fator de Cálculo?')
+                                            ->modalDescription('O fator padrão agora é 100%. Alterar este valor modificará o cálculo base de rateio, ativando a regra antiga (ex: a NF representa apenas X% do custo real). Deseja realmente alterar?')
+                                            ->hidden(fn(Get $get, ?Settlement $record) => ($record?->is_locked ?? false) || $get('is_factor_unlocked'))
+                                            ->action(fn(Set $set) => $set('is_factor_unlocked', true))
+                                    )
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
                                     ->hintIconTooltip('Porcentagem usada para retornar ao valor original.')
-                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 2]),
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 3]),
 
                                 Forms\Components\TextInput::make('display_expense_percentage')
                                     ->label('% Despesa')
@@ -153,44 +172,64 @@ class SettlementResource extends Resource
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
                                     ->hintIconTooltip('Representatividade das despesas sobre o Total Real.')
-                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 2]),
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 3]),
 
-                                Forms\Components\TextInput::make('display_total_expenses')
-                                    ->label('Despesas (Soma)')
+                                Forms\Components\TextInput::make('display_internal_expenses')
+                                    ->label('Desp. Internas')
                                     ->disabled()
                                     ->dehydrated(false)
-                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_expenses, 2, ',', '.') : '0,00'))
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->expenses()->where('is_external', false)->sum('amount'), 2, ',', '.') : '0,00'))
                                     ->prefix('R$')
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('show_in_usd');
-                                        if (!$isUsd)
-                                            return '';
-
+                                        if (!$isUsd) return '';
                                         $expenses = $get('expenses') ?? [];
                                         $globalQuote = (float) $get('usd_quote');
                                         $totalUsd = 0;
-
                                         foreach ($expenses as $exp) {
+                                            if (!empty($exp['is_external'])) continue;
                                             $val = (float) ($exp['amount'] ?? 0);
                                             $useCustom = (bool) ($exp['use_custom_quote'] ?? false);
                                             $customQuote = (float) ($exp['custom_usd_quote'] ?? 0);
-
                                             $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $globalQuote;
-
-                                            if ($quoteToUse > 0) {
-                                                $totalUsd += ($val / $quoteToUse);
-                                            }
+                                            if ($quoteToUse > 0) $totalUsd += ($val / $quoteToUse);
                                         }
-
                                         return $totalUsd > 0 ? '≈ US$ ' . number_format($totalUsd, 2, ',', '.') : '';
                                     })
                                     ->helperText(' ')
                                     ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Soma de todas as despesas listadas.')
-                                    ->columnSpan(['default' => 1, 'sm' => 2, 'lg' => 3]),
+                                    ->hintIconTooltip('Soma das despesas com flag Externa desmarcada.')
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 3]),
+
+                                Forms\Components\TextInput::make('display_external_expenses')
+                                    ->label('Desp. Externas')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->expenses()->where('is_external', true)->sum('amount'), 2, ',', '.') : '0,00'))
+                                    ->prefix('R$')
+                                    ->suffix(function (Get $get): string {
+                                        $isUsd = (bool) $get('show_in_usd');
+                                        if (!$isUsd) return '';
+                                        $expenses = $get('expenses') ?? [];
+                                        $globalQuote = (float) $get('usd_quote');
+                                        $totalUsd = 0;
+                                        foreach ($expenses as $exp) {
+                                            if (empty($exp['is_external'])) continue;
+                                            $val = (float) ($exp['amount'] ?? 0);
+                                            $useCustom = (bool) ($exp['use_custom_quote'] ?? false);
+                                            $customQuote = (float) ($exp['custom_usd_quote'] ?? 0);
+                                            $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $globalQuote;
+                                            if ($quoteToUse > 0) $totalUsd += ($val / $quoteToUse);
+                                        }
+                                        return $totalUsd > 0 ? '≈ US$ ' . number_format($totalUsd, 2, ',', '.') : '';
+                                    })
+                                    ->helperText(' ')
+                                    ->hintIcon('heroicon-m-question-mark-circle')
+                                    ->hintIconTooltip('Soma das despesas marcadas como Externa.')
+                                    ->columnSpan(['default' => 1, 'sm' => 1, 'lg' => 3]),
                             ]),
 
-                        Forms\Components\Grid::make(['default' => 1, 'sm' => 3, 'lg' => 3])
+                        Forms\Components\Grid::make(['default' => 1, 'sm' => 2, 'lg' => 4])
                             ->schema([
                                 Forms\Components\TextInput::make('display_initial_total')
                                     ->label('Total Inicial')
@@ -209,11 +248,11 @@ class SettlementResource extends Resource
                                     })
                                     ->extraInputAttributes(['class' => 'text-lg font-bold text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/30', 'style' => '-webkit-text-fill-color: currentcolor; opacity: 1;'])
                                     ->helperText(' ')
-                                    ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Soma dos Valores Iniciais. Reflete o valor da NF Emitida.'),
+                                    ->columnSpan(1),
 
                                 Forms\Components\TextInput::make('display_total_value')
                                     ->label('Total Real (Produtos)')
+                                    ->hidden(fn(Get $get) => (float) ($get('calculation_factor') ?: 100) == 100)
                                     ->disabled()
                                     ->dehydrated(false)
                                     ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_value, 2, ',', '.') : '0,00'))
@@ -229,8 +268,35 @@ class SettlementResource extends Resource
                                     })
                                     ->extraInputAttributes(['class' => 'text-lg font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/30', 'style' => '-webkit-text-fill-color: currentcolor; opacity: 1;'])
                                     ->helperText(' ')
-                                    ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Valor total do pedido com correção aplicada SEM despesas.'),
+                                    ->columnSpan(1),
+
+                                Forms\Components\TextInput::make('display_total_expenses')
+                                    ->label('Despesas (Soma Geral)')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->afterStateHydrated(fn($component, ?Settlement $record) => $component->state($record ? number_format($record->total_expenses, 2, ',', '.') : '0,00'))
+                                    ->prefix('R$')
+                                    ->suffix(function (Get $get): string {
+                                        $isUsd = (bool) $get('show_in_usd');
+                                        if (!$isUsd) return '';
+
+                                        $expenses = $get('expenses') ?? [];
+                                        $globalQuote = (float) $get('usd_quote');
+                                        $totalUsd = 0;
+                                        foreach ($expenses as $exp) {
+                                            $val = (float) ($exp['amount'] ?? 0);
+                                            $useCustom = (bool) ($exp['use_custom_quote'] ?? false);
+                                            $customQuote = (float) ($exp['custom_usd_quote'] ?? 0);
+                                            $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $globalQuote;
+                                            if ($quoteToUse > 0) {
+                                                $totalUsd += ($val / $quoteToUse);
+                                            }
+                                        }
+                                        return $totalUsd > 0 ? '≈ US$ ' . number_format($totalUsd, 2, ',', '.') : '';
+                                    })
+                                    ->extraInputAttributes(['class' => 'text-lg font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30', 'style' => '-webkit-text-fill-color: currentcolor; opacity: 1;'])
+                                    ->helperText(' ')
+                                    ->columnSpan(1),
 
                                 Forms\Components\TextInput::make('display_overall_total')
                                     ->label('Total Final (Produtos + Despesas)')
@@ -246,7 +312,6 @@ class SettlementResource extends Resource
                                         $totalUsd = 0;
                                         if ($isUsd && $quote > 0) {
                                             $totalUsd += ($valProd / $quote);
-
                                             $expenses = $get('expenses') ?? [];
                                             foreach ($expenses as $exp) {
                                                 $val = (float) ($exp['amount'] ?? 0);
@@ -263,8 +328,7 @@ class SettlementResource extends Resource
                                     })
                                     ->extraInputAttributes(['class' => 'text-2xl bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 font-extrabold', 'style' => '-webkit-text-fill-color: currentcolor; opacity: 1; padding-top: 1rem; padding-bottom: 1rem; height: auto;'])
                                     ->helperText(' ')
-                                    ->hintIcon('heroicon-m-question-mark-circle')
-                                    ->hintIconTooltip('Valor total final (Valor da Nota + Correção + Despesas).'),
+                                    ->columnSpan(1),
                             ])->extraAttributes(['class' => 'mt-2 border-t border-gray-200 dark:border-white/10 pt-4']),
                     ]),
 
@@ -280,15 +344,19 @@ class SettlementResource extends Resource
                             ->reorderableWithDragAndDrop(false)
                             ->reorderable(true)
                             ->colStyles([
-                                'description' => 'width: 100%; vertical-align: middle;', // Funciona como uma mola, empurrando tudo para a direita
-                                'amount' => 'width: 280px; min-width: 280px; vertical-align: middle;', // Tamanho fixo e seguro
-                                'custom_usd_quote' => 'width: 120px; min-width: 120px; vertical-align: middle;', // Tamanho fixo e seguro
-                                'use_custom_quote' => 'width: 35px; min-width: 35px; vertical-align: middle; text-align: center;', // Largura exata para o texto "Personalizar" e o checkbox
+                                'description' => 'width: 100%; vertical-align: middle;',
+                                'amount' => 'width: 250px; min-width: 250px; vertical-align: middle;',
+                                'custom_usd_quote' => 'width: 120px; min-width: 120px; vertical-align: middle;',
+                                'use_custom_quote' => 'width: 45px; min-width: 45px; vertical-align: middle; text-align: center;',
+                                'is_external' => 'width: 60px; min-width: 60px; vertical-align: middle; text-align: center;',
                             ])
                             ->schema([
                                 Forms\Components\TextInput::make('description')
                                     ->label('Descrição da Despesa')
                                     ->placeholder('Ex: Frete Marítimo, Pallets...')
+                                    ->extraInputAttributes(fn(Get $get) => [
+                                        'class' => $get('is_external') ? 'bg-orange-50 dark:bg-orange-900/20' : ''
+                                    ])
                                     ->required(),
 
                                 Forms\Components\TextInput::make('amount')
@@ -298,6 +366,9 @@ class SettlementResource extends Resource
                                     ->required()
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set))
+                                    ->extraInputAttributes(fn(Get $get) => [
+                                        'class' => $get('is_external') ? 'bg-orange-50 dark:bg-orange-900/20' : ''
+                                    ])
                                     ->suffix(function (Get $get): string {
                                         $isUsd = (bool) $get('../../show_in_usd');
                                         $val = (float) $get('amount');
@@ -329,9 +400,9 @@ class SettlementResource extends Resource
                                         }
                                         return $state;
                                     })
-                                    ->extraInputAttributes([
+                                    ->extraInputAttributes(fn(Get $get) => [
                                         'maxlength' => 7,
-                                        'class' => 'text-right px-1'
+                                        'class' => 'text-right px-1 ' . ($get('is_external') ? 'bg-orange-50 dark:bg-orange-900/20' : '')
                                     ])
                                     ->required(fn(Get $get) => (bool) $get('use_custom_quote'))
                                     ->live(debounce: 500)
@@ -349,6 +420,12 @@ class SettlementResource extends Resource
                                         }
                                         self::updateTotals($get, $set);
                                     }),
+
+                                Forms\Components\Toggle::make('is_external')
+                                    ->label('Externa?')
+                                    ->default(false)
+                                    ->live()
+                                    ->afterStateUpdated(fn(Get $get, Set $set) => self::updateTotals($get, $set)),
                             ])
                             ->deleteAction(
                                 fn(\Filament\Forms\Components\Actions\Action $action) => $action
@@ -405,7 +482,6 @@ class SettlementResource extends Resource
 
                 Tables\Columns\TextColumn::make('total_expenses')->label('Despesas')->money('BRL')->sortable(),
                 Tables\Columns\TextColumn::make('expense_percentage')->label('% Despesa')->suffix('%')->sortable(),
-                // --- NOVA COLUNA: SINALIZADOR DE CONSOLIDAÇÃO ---
                 Tables\Columns\IconColumn::make('is_locked')
                     ->label('Consolidado')
                     ->boolean()
@@ -417,272 +493,12 @@ class SettlementResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')->label('Data')->dateTime('d/m/Y H:i')->sortable(),
             ])
+            ->defaultSort('created_at', 'desc')
             ->filters([
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-
-                Tables\Actions\Action::make('export_details')
-                    ->label('Exportar')
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->color('success')
-                    ->action(function (Settlement $record) {
-                        $safeName = \Illuminate\Support\Str::slug($record->request->observation ?? 'Avulso');
-                        $fileName = 'Fechamento_' . $safeName . '.xlsx';
-
-                        return response()->streamDownload(function () use ($record) {
-                            $options = new Options();
-                            $writer = new Writer($options);
-                            $writer->openToFile('php://output');
-
-                            $initialTotal = $record->items()->sum('initial_value');
-                            $overallTotal = $record->overall_total;
-                            $expenses = $record->expenses()->orderBy('expense_number')->get();
-
-                            // Itens ordenados alfabeticamente pelo nome do produto em Português
-                            $items = $record->items()
-                                ->with('requestItem.product')
-                                ->get()
-                                ->sortBy(function ($item) {
-                                return strtolower($item->requestItem?->product_name ?? '');
-                            });
-
-                            $totalVal = (float) $record->total_value;
-
-                            $usdQuote = (float) $record->usd_quote;
-                            $toUsd = fn($value) => $usdQuote > 0 ? round((float) $value / $usdQuote, 2) : 0;
-
-                            // ABA 1
-                            $sheet1 = $writer->getCurrentSheet();
-                            $sheet1->setName('Resumo e Despesas (R$)');
-
-                            $writer->addRow(Row::fromValues(['Fechamento']));
-                            $writer->addRow(Row::fromValues([
-                                'Solicitação:',
-                                $record->request->observation ?? '-',
-                                'Modalidade Envio:',
-                                $record->request->shipping_type ?? 'Não Informado',
-                                'Cotação USD:',
-                                round($usdQuote, 4),
-                                'Fator de Cálculo:',
-                                round((float) $record->calculation_factor, 2) . '%',
-                            ]));
-
-                            $writer->addRow(Row::fromValues([
-                                'Total Inicial:',
-                                round((float) $initialTotal, 2),
-                                'Total Real:',
-                                round((float) $record->total_value, 2),
-                                'Total Despesas:',
-                                round((float) $record->total_expenses, 2),
-                                '% Despesa:',
-                                round((float) $record->expense_percentage, 2) . '%',
-                                'Total Final:',
-                                round((float) $overallTotal, 2)
-                            ]));
-
-                            $writer->addRow(Row::fromValues([]));
-                            $writer->addRow(Row::fromValues(['Despesas']));
-                            $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Valor (R$)']));
-
-                            if ($expenses->isEmpty()) {
-                                $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', 0]));
-                            } else {
-                                foreach ($expenses as $exp) {
-                                    $writer->addRow(Row::fromValues([$exp->description, round((float) $exp->amount, 2)]));
-                                }
-                            }
-
-                            // ABA 2
-                            $sheet2 = $writer->addNewSheetAndMakeItCurrent();
-                            $sheet2->setName('Detalhamento (R$)');
-
-                            $headersBrl = [
-                                'Cód. Winthor',
-                                'Nome PT',
-                                'Nome EN',
-                                'Cód. Barras',
-                                'Qtd Caixa',
-                                'QTD',
-                                'V. UN (R$)',
-                                'Valor Inicial (R$)',
-                                'Valor Real (R$)',
-                                'Rateio Despesas (R$)',
-                                '% Participação rateio',
-                                'Valor Final (R$)'
-                            ];
-                            $writer->addRow(Row::fromValues($headersBrl));
-
-                            foreach ($items as $item) {
-                                $reqItem = $item->requestItem;
-                                $product = $reqItem?->product;
-                                $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
-                                $totalApportionment = $item->final_value - $item->partial_value;
-
-                                // Tratamento estrito de tipo para a Qtd Caixa
-                                $qtdCaixaRaw = $product?->qtunitcx;
-
-                                if (is_numeric($qtdCaixaRaw)) {
-                                    $floatVal = (float) $qtdCaixaRaw;
-                                    // Se o valor com decimais for matematicamente igual à sua versão inteira (25.00 == 25)
-                                    // forçamos o tipo para (int). Caso contrário, mantemos como (float).
-                                    $qtdCaixaExibicao = ($floatVal == (int) $floatVal) ? (int) $floatVal : $floatVal;
-                                } else {
-                                    // Se for um texto ou fração exata da embalagem (ex: "2 1/2"), passa direto
-                                    $qtdCaixaExibicao = $qtdCaixaRaw ?? '-';
-                                }
-
-                                $writer->addRow(Row::fromValues([
-                                    $reqItem?->winthor_code ?? $product?->codprod ?? '-',
-                                    $reqItem?->product_name ?? '-',
-                                    $product?->product_name_en ?? '-',
-                                    $product?->barcode ?? $product?->ean ?? '-',
-                                    $qtdCaixaExibicao,
-                                    round((float) ($reqItem?->quantity ?? 0), 2),
-                                    round((float) ($reqItem?->unit_price ?? 0), 2),
-                                    round((float) $item->initial_value, 2),
-                                    round((float) $item->partial_value, 2),
-                                    round((float) $totalApportionment, 2),
-                                    round((float) ($percentage * 100), 2),
-                                    round((float) $item->final_value, 2),
-                                ]));
-                            }
-
-                            // ABA 3
-                            $sheet3 = $writer->addNewSheetAndMakeItCurrent();
-                            $sheet3->setName('Resumo e Despesas (US$)');
-
-                            // Recalcular Totais em USD respeitando cotações personalizadas das despesas
-                            $totalExpensesUsd = 0;
-                            foreach ($expenses as $exp) {
-                                $quoteToUse = ($exp->use_custom_quote && $exp->custom_usd_quote > 0) ? (float) $exp->custom_usd_quote : $usdQuote;
-                                if ($quoteToUse > 0) {
-                                    $totalExpensesUsd += ((float) $exp->amount / $quoteToUse);
-                                }
-                            }
-
-                            $totalGeralUsd = $toUsd($record->total_value) + $totalExpensesUsd;
-
-                            $writer->addRow(Row::fromValues(['Fechamento (Valores em Dólar)']));
-                            $writer->addRow(Row::fromValues([
-                                'Solicitação:',
-                                $record->request->display_id ?? '-',
-                                'Modalidade Envio:',
-                                $record->request->shipping_type ?? 'Não Informado',
-                                'Cotação USD:',
-                                round($usdQuote, 4),
-                                'Fator de Cálculo:',
-                                round((float) $record->calculation_factor, 2) . '%',
-                            ]));
-
-                            $writer->addRow(Row::fromValues([
-                                'Total Inicial:',
-                                $toUsd($initialTotal),
-                                'Total Real:',
-                                $toUsd($record->total_value),
-                                'Total Despesas:',
-                                round($totalExpensesUsd, 2),
-                                '% Despesa:',
-                                round((float) $record->expense_percentage, 2) . '%',
-                                'Total Final:',
-                                round($totalGeralUsd, 2)
-                            ]));
-
-                            $writer->addRow(Row::fromValues([]));
-                            $writer->addRow(Row::fromValues(['Despesas']));
-                            $writer->addRow(Row::fromValues(['Descrição da Despesa', 'Cotação Utilizada', 'Valor (US$)']));
-
-                            if ($expenses->isEmpty()) {
-                                $writer->addRow(Row::fromValues(['Nenhuma despesa lançada.', '-', 0]));
-                            } else {
-                                foreach ($expenses as $exp) {
-                                    $useCustom = (bool) $exp->use_custom_quote;
-                                    $customQuote = (float) $exp->custom_usd_quote;
-                                    $quoteToUse = ($useCustom && $customQuote > 0) ? $customQuote : $usdQuote;
-
-                                    $usdAmount = $quoteToUse > 0 ? round((float) $exp->amount / $quoteToUse, 2) : 0;
-                                    $cotacaoStr = $useCustom ? 'Específica (' . round($customQuote, 4) . ')' : 'Global (' . round($usdQuote, 4) . ')';
-
-                                    $writer->addRow(Row::fromValues([
-                                        $exp->description,
-                                        $cotacaoStr,
-                                        $usdAmount
-                                    ]));
-                                }
-                            }
-
-                            // ABA 4
-                            $sheet4 = $writer->addNewSheetAndMakeItCurrent();
-                            $sheet4->setName('Detalhamento (US$)');
-
-                            $headersUsd = [
-                                'Cód. Winthor',
-                                'Nome PT',
-                                'Nome EN',
-                                'Cód. Barras',
-                                'Qtd Caixa',
-                                'QTD',
-                                'V. UN (US$)',
-                                'Valor Inicial (US$)',
-                                'Valor Real (US$)',
-                                'Rateio Despesas (US$)',
-                                '% Participação rateio',
-                                'Valor Final (US$)'
-                            ];
-                            $writer->addRow(Row::fromValues($headersUsd));
-
-                            foreach ($items as $item) {
-                                $reqItem = $item->requestItem;
-                                $product = $reqItem?->product;
-
-                                // Calcula o percentual de participação do item
-                                $percentage = $totalVal > 0 ? ((float) $item->partial_value / $totalVal) : 0;
-
-                                // Calcula os valores em USD baseados no percentual, e não na conversão direta do BRL final
-                                $partialUsd = $toUsd($item->partial_value);
-                                $apportionmentUsd = round($percentage * $totalExpensesUsd, 2);
-                                $finalUsd = $partialUsd + $apportionmentUsd;
-
-                                // Tratamento estrito de tipo para a Qtd Caixa
-                                $qtdCaixaRaw = $product?->qtunitcx;
-
-                                if (is_numeric($qtdCaixaRaw)) {
-                                    $floatVal = (float) $qtdCaixaRaw;
-                                    // Se o valor com decimais for matematicamente igual à sua versão inteira (25.00 == 25)
-                                    // forçamos o tipo para (int). Caso contrário, mantemos como (float).
-                                    $qtdCaixaExibicao = ($floatVal == (int) $floatVal) ? (int) $floatVal : $floatVal;
-                                } else {
-                                    // Se for um texto ou fração exata da embalagem (ex: "2 1/2"), passa direto
-                                    $qtdCaixaExibicao = $qtdCaixaRaw ?? '-';
-                                }
-
-                                $writer->addRow(Row::fromValues([
-                                    $reqItem?->winthor_code ?? $product?->codprod ?? '-',
-                                    $reqItem?->product_name ?? '-',
-                                    $product?->product_name_en ?? '-',
-                                    $product?->barcode ?? $product?->ean ?? '-',
-                                    $qtdCaixaExibicao,
-                                    round((float) ($reqItem?->quantity ?? 0), 2),
-                                    $toUsd($reqItem?->unit_price ?? 0),
-                                    $toUsd($item->initial_value),
-                                    $partialUsd,                              // V. Parcial calculado
-                                    $apportionmentUsd,                        // Rateio proporcional em USD real
-                                    round((float) ($percentage * 100), 2),
-                                    $finalUsd,                                // V. Final preciso
-                                ]));
-                            }
-
-                            $writer->close();
-                        }, $fileName, [
-                            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        ]);
-                    }),
-            ])
-            ->headerActions([
-                Tables\Actions\ExportAction::make()
-                    ->exporter(\App\Filament\Exports\SettlementExporter::class)
-                    ->label('Exportar Resumo (Excel)'),
             ]);
     }
 

@@ -16,6 +16,7 @@ class SettlementExpense extends Model
     protected $casts = [
         'use_custom_quote' => 'boolean',
         'custom_usd_quote' => 'decimal:4',
+        'is_external' => 'boolean',
     ];
 
     public function settlement(): BelongsTo
