@@ -1,4 +1,4 @@
-# TableNutri 🥗🏷️
+# NXExport 🥗🏷️
 
 ![Status do Projeto](https://img.shields.io/badge/status-em_desenvolvimento-orange)
 ![Laravel](https://img.shields.io/badge/Laravel-11-FF2D20?logo=laravel&logoColor=white)
