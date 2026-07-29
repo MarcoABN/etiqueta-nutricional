@@ -8,7 +8,7 @@
 
 > **Solução inteligente para geração de tabelas nutricionais compatíveis com o padrão FDA para exportação.**
 
-O **TableNutri** é um sistema completo desenvolvido para simplificar e automatizar a criação de rótulos nutricionais. O diferencial do projeto reside na integração de tecnologias web modernas com **Inteligência Artificial Vision-Language (VLM)** para extração e processamento de dados nutricionais diretamente de embalagens via câmera móvel.
+O **TableNutri** é um sistema completo desenvolvido para simplificar e automatizar a criação de rótulos nutricionais, gestão de produtos e movimentações.
 
 ---
 
