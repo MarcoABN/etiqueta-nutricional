@@ -16,6 +16,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Filament\Widgets\Widget;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Carbon;
@@ -784,6 +785,42 @@ class RequestItemsWidget extends Widget implements HasForms, HasTable
                     // MANTIDO: O usuário ainda pode visualizar o produto original mesmo com a solicitação travada
                     ->url(fn(\App\Models\RequestItem $record): string => \App\Filament\Resources\ProductResource::getUrl('edit', ['record' => $record->product_id]))
                     ->openUrlInNewTab(),
+            ])
+            // Array vazio quando travado: sem ações em massa, o Filament não renderiza a coluna de seleção
+            ->bulkActions($this->isLocked() ? [] : [
+                Tables\Actions\BulkAction::make('delete_selected')
+                    ->label('Excluir Selecionados')
+                    ->icon('heroicon-m-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Excluir itens selecionados?')
+                    ->modalDescription('Os itens marcados (e as validades lançadas neles) serão removidos definitivamente da solicitação. Esta ação não pode ser desfeita.')
+                    ->modalSubmitActionLabel('Excluir')
+                    ->deselectRecordsAfterCompletion()
+                    ->action(function (Collection $records) {
+                        // --- GUARD CLAUSE BACKEND ---
+                        if ($this->isLocked()) {
+                            Notification::make()->title('Ação não permitida')->body('Esta solicitação está fechada ou bloqueada.')->warning()->send();
+                            return;
+                        }
+
+                        $count = 0;
+
+                        foreach ($records as $record) {
+                            // Se o item excluído estiver aberto no formulário, limpa a edição
+                            if ($this->editingItemId === $record->id) {
+                                $this->resetInput();
+                            }
+
+                            $record->forceDelete();
+                            $count++;
+                        }
+
+                        Notification::make()
+                            ->title("{$count} item(ns) excluído(s) com sucesso!")
+                            ->success()
+                            ->send();
+                    }),
             ])
             ->paginated(false);
     }
