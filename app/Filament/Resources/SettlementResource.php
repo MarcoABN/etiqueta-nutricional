@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Exports\SettlementsConsolidatedExport;
 use App\Filament\Resources\SettlementResource\Pages;
 use App\Models\Settlement;
 use App\Models\Request;
@@ -12,6 +13,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\HtmlString;
 use Illuminate\Validation\Rules\Unique;
 use Icetalker\FilamentTableRepeater\Forms\Components\TableRepeater;
@@ -499,6 +501,18 @@ class SettlementResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkAction::make('export_consolidated_selected')
+                    ->label('Exportar Consolidado (XLSX)')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('success')
+                    ->deselectRecordsAfterCompletion()
+                    ->action(fn(Collection $records) => SettlementsConsolidatedExport::download(
+                        Settlement::withTrashed()
+                            ->whereKey($records->modelKeys())
+                            ->orderByDesc('created_at')
+                    )),
             ]);
     }
 
