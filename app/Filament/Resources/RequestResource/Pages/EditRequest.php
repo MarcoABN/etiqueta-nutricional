@@ -201,6 +201,7 @@ class EditRequest extends EditRecord
                             // Cabeçalho atualizado com as novas colunas
                             $writer->addRow(Row::fromValues([
                                 'Cód WinThor',
+                                'Cód. Listaso',
                                 'Cód. Espelho',
                                 'Produto',
                                 'Qtd CX',
@@ -233,6 +234,7 @@ class EditRequest extends EditRecord
 
                                 $writer->addRow(Row::fromValues([
                                     $item->winthor_code ?? 'Manual',
+                                    $item->product?->listaso_code ?? '-',
                                     $item->product?->mirror_code ?? '-',
                                     $item->product_name,
                                     $qtdCx,
@@ -259,13 +261,14 @@ class EditRequest extends EditRecord
                             $writer = new Writer();
                             $writer->openToFile('php://output');
 
-                            $writer->addRow(Row::fromValues(['Cód WinThor', 'Produto', 'Data de Validade', 'Qtd Lote']));
+                            $writer->addRow(Row::fromValues(['Cód WinThor', 'Cód. Listaso', 'Produto', 'Data de Validade', 'Qtd Lote']));
 
-                            foreach ($record->items()->with('expirations')->get() as $item) {
+                            foreach ($record->items()->with(['expirations', 'product'])->get() as $item) {
                                 if ($item->expirations && $item->expirations->count() > 0) {
                                     foreach ($item->expirations as $exp) {
                                         $writer->addRow(Row::fromValues([
                                             $item->winthor_code ?? 'Manual',
+                                            $item->product?->listaso_code ?? '-',
                                             $item->product_name,
                                             $exp->expiration_date->format('d/m/Y'),
                                             (float) $exp->quantity,
@@ -274,6 +277,7 @@ class EditRequest extends EditRecord
                                 } else {
                                     $writer->addRow(Row::fromValues([
                                         $item->winthor_code ?? 'Manual',
+                                        $item->product?->listaso_code ?? '-',
                                         $item->product_name,
                                         'Sem validade informada',
                                         (float) $item->quantity,

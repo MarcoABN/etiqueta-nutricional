@@ -90,6 +90,11 @@ class ProductResource extends Resource
                                     ->unique(ignoreRecord: true)
                                     ->columnSpan(['default' => 12, 'md' => 2]),
 
+                                TextInput::make('listaso_code')
+                                    ->label('Cód. Listaso')
+                                    ->maxLength(50)
+                                    ->columnSpan(['default' => 12, 'md' => 2]),
+
                                 TextInput::make('mirror_code')
                                     ->label('Cód. Espelho')
                                     ->columnSpan(['default' => 12, 'md' => 2]),
@@ -97,7 +102,7 @@ class ProductResource extends Resource
                                 TextInput::make('barcode')
                                     ->label('Cód. Barras')
                                     ->unique(ignoreRecord: true)
-                                    ->columnSpan(['default' => 12, 'md' => 3])
+                                    ->columnSpan(['default' => 12, 'md' => 2])
                                     ->suffixAction(self::getOpenFoodFactsAction()),
 
                                 Select::make('curve')
@@ -121,7 +126,7 @@ class ProductResource extends Resource
                                     ->default('Bloqueado')
                                     ->required()
                                     ->selectablePlaceholder(false)
-                                    ->columnSpan(['default' => 12, 'md' => 3]),
+                                    ->columnSpan(['default' => 12, 'md' => 2]),
 
                                 TextInput::make('product_name')
                                     ->label('Nome do Produto')

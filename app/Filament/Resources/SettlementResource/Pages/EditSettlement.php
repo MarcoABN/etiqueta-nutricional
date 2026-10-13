@@ -157,6 +157,7 @@ class EditSettlement extends EditRecord
 
                         $headersBrl = [
                             'Cód. Winthor',
+                            'Cód. Listaso',
                             'Nome PT',
                             'Nome EN',
                             'Cód. Barras',
@@ -182,6 +183,7 @@ class EditSettlement extends EditRecord
 
                             $rowDataBrl = [
                                 $reqItem?->winthor_code ?? $product?->codprod ?? '-',
+                                $product?->listaso_code ?? '-',
                                 $reqItem?->product_name ?? '-',
                                 $product?->product_name_en ?? '-',
                                 $product?->barcode ?? $product?->ean ?? '-',
@@ -279,6 +281,7 @@ class EditSettlement extends EditRecord
 
                         $headersUsd = [
                             'Cód. Winthor',
+                            'Cód. Listaso',
                             'Nome PT',
                             'Nome EN',
                             'Cód. Barras',
@@ -307,6 +310,7 @@ class EditSettlement extends EditRecord
 
                             $rowDataUsd = [
                                 $reqItem?->winthor_code ?? $product?->codprod ?? '-',
+                                $product?->listaso_code ?? '-',
                                 $reqItem?->product_name ?? '-',
                                 $product?->product_name_en ?? '-',
                                 $product?->barcode ?? $product?->ean ?? '-',

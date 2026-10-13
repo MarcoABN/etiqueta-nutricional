@@ -119,6 +119,7 @@ class Product extends Model
         'allergens_may_contain_pt',
 
         'mirror_code',
+        'listaso_code',
     ];
 
     /**

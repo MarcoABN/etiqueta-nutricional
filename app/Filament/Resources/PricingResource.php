@@ -128,6 +128,7 @@ class PricingResource extends Resource
                                     $itemRaw = [
                                         'settlement_item_id' => $sItem->id,
                                         'winthor_code' => $reqItem?->winthor_code ?? $product?->codprod ?? '-',
+                                        'listaso_code' => $product?->listaso_code ?? '-',
                                         'product_name' => $reqItem?->product_name ?? '-',
                                         'total_cost' => $totalCostUsd,
                                         'quantity_sent' => $reqItem?->quantity ?? 1,
@@ -212,6 +213,7 @@ class PricingResource extends Resource
                                         $req = $sItem->requestItem;
 
                                         $state[$uuid]['winthor_code'] = $req->winthor_code ?? $req->product?->codprod ?? '-';
+                                        $state[$uuid]['listaso_code'] = $req->product?->listaso_code ?? '-';
                                         $state[$uuid]['product_name'] = $req->product_name ?? '-';
                                         
                                         $state[$uuid]['total_cost'] = round($sItem->final_value / $usdQuote, 2);
@@ -234,7 +236,8 @@ class PricingResource extends Resource
                             })
                             ->colStyles([
                                 'winthor_code'    => 'width: 120px;',
-                                'product_name'    => 'width: 600px; white-space: normal;',
+                                'listaso_code'    => 'width: 120px;',
+                                'product_name'    => 'width: 500px; white-space: normal;',
                                 'total_cost'      => 'width: 200px;',
                                 'display_quantity'=> 'width: 150px;',
                                 'box_factor'      => 'width: 110px;',
@@ -249,6 +252,12 @@ class PricingResource extends Resource
 
                                 Forms\Components\TextInput::make('winthor_code')
                                     ->label('Cód.')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->extraInputAttributes(['class' => 'text-sm']),
+
+                                Forms\Components\TextInput::make('listaso_code')
+                                    ->label('Cód. Listaso')
                                     ->disabled()
                                     ->dehydrated(false)
                                     ->extraInputAttributes(['class' => 'text-sm']),
@@ -452,6 +461,7 @@ class PricingResource extends Resource
 
                             $writer->addRow(Row::fromValues([
                                 'Cód. Winthor',
+                                'Cód. Listaso',
                                 'Produto',
                                 'Custo Total (US$)',
                                 'QTD (Caixas ou Unidades)',
@@ -487,6 +497,7 @@ class PricingResource extends Resource
 
                                 $writer->addRow(Row::fromValues([
                                     $winthorCode,
+                                    $prod?->listaso_code ?? '-',
                                     $productName,
                                     round((float) $totalCost, 2),
                                     round((float) $displayQty, 2),

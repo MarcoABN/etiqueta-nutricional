@@ -247,6 +247,7 @@ class SettlementsConsolidatedExport
             'Nº Solicitação',
             'Solicitação',
             'Cód. Winthor',
+            'Cód. Listaso',
             'Produto',
             'QTD',
             'V. UN (R$)',
@@ -259,14 +260,14 @@ class SettlementsConsolidatedExport
         ], $this->headerStyle));
 
         $formats = [
-            4 => self::MONEY,
             5 => self::MONEY,
             6 => self::MONEY,
             7 => self::MONEY,
             8 => self::MONEY,
-            9 => self::PERCENT,
-            10 => self::MONEY,
+            9 => self::MONEY,
+            10 => self::PERCENT,
             11 => self::MONEY,
+            12 => self::MONEY,
         ];
 
         $totals = array_fill_keys(['initial', 'real', 'apportionment', 'final', 'finalUsd'], 0.0);
@@ -297,6 +298,7 @@ class SettlementsConsolidatedExport
                     $settlement->request?->display_id ?? '-',
                     $settlement->request?->observation ?? '-',
                     $reqItem?->winthor_code ?? $reqItem?->product?->codprod ?? '-',
+                    $reqItem?->product?->listaso_code ?? '-',
                     $reqItem?->product_name ?? '-',
                     round((float) ($reqItem?->quantity ?? 0), 2),
                     round((float) ($reqItem?->unit_price ?? 0), 2),
@@ -312,6 +314,7 @@ class SettlementsConsolidatedExport
 
         $writer->addRow($this->row([
             'TOTAL',
+            '',
             '',
             '',
             '',
